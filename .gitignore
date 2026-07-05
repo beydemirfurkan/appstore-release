@@ -1,0 +1,18 @@
+# Secrets — never commit
+*.p8
+AuthKey_*.p8
+credentials.json
+*.p12
+*.mobileprovision
+dist.*
+secrets/
+.env
+
+# A user's filled config may contain personal contact info — keep the template only
+config.json
+
+# Node
+node_modules/
+
+# OS
+.DS_Store

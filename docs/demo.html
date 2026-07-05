@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><title>demo</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{width:1240px;height:772px;background:radial-gradient(circle at 30% 0%,#15233b,#0a0f1a 70%);
+       display:flex;align-items:center;justify-content:center;font-family:"SF Mono",Menlo,Consolas,monospace}
+  .term{width:1140px;background:#0d1117;border:1px solid #232a36;border-radius:14px;overflow:hidden;
+        box-shadow:0 40px 90px rgba(0,0,0,.55)}
+  .bar{height:44px;background:linear-gradient(#20262f,#1a1f27);display:flex;align-items:center;padding:0 18px;gap:9px;border-bottom:1px solid #232a36}
+  .dot{width:13px;height:13px;border-radius:50%}
+  .r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
+  .ttl{margin-left:14px;color:#7d8797;font-size:13px}
+  .body{padding:24px 30px 30px;font-size:16.5px;line-height:1.72;color:#c9d1d9}
+  .prompt .p{color:#58a6ff}.prompt .c{color:#e6edf3;font-weight:600}
+  .h{color:#e6edf3;font-weight:700;margin-top:18px}
+  .rule{color:#30363d;letter-spacing:-1px}
+  .ok{color:#3fb950}.warn{color:#d29922}.dim{color:#8b949e}.gold{color:#e3b341;font-weight:700}
+  .mt{margin-top:20px}
+</style></head>
+<body>
+<div class="term">
+  <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+    <span class="ttl">appstore-release — node cli.mjs release</span></div>
+  <div class="body">
+    <div class="prompt"><span class="p">~/my-app/scripts</span> <span class="c">$ node cli.mjs release</span></div>
+    <div class="h">App Store Release — listing pipeline</div>
+    <div class="rule">──────────────────────────────────────────────────────</div>
+    <div><span class="ok">✓</span> Build attach <span class="dim">— attached build 42</span></div>
+    <div><span class="ok">✓</span> Store metadata <span class="dim">— en-US: name, subtitle, description, keywords, URLs</span></div>
+    <div><span class="ok">✓</span> Pricing <span class="dim">— Free + copyright</span></div>
+    <div><span class="ok">✓</span> Content rights <span class="dim">— DOES_NOT_USE_THIRD_PARTY_CONTENT</span></div>
+    <div><span class="ok">✓</span> Age rating <span class="dim">— 4+</span></div>
+    <div><span class="ok">✓</span> Category <span class="dim">— LIFESTYLE</span></div>
+    <div><span class="ok">✓</span> Review info <span class="dim">— contact + notes</span></div>
+    <div><span class="ok">✓</span> App screenshots <span class="dim">— 6 uploaded (APP_IPHONE_67)</span></div>
+    <div><span class="ok">✓</span> Subscription <span class="dim">— pro_monthly: price, localization, review image</span></div>
+    <div><span class="ok">✓</span> Readiness check <span class="dim">— v1.2.0</span></div>
+    <div class="h gold mt">⚠ Manual steps required (Apple has no API for these)</div>
+    <div class="rule">──────────────────────────────────────────────────────</div>
+    <div><span class="warn">1.</span> App Privacy (data collection) <span class="dim">— declare data types, then Publish · ASC UI, no API</span></div>
+  </div>
+</div>
+</body></html>

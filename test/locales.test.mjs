@@ -291,3 +291,44 @@ test("a display type with no local files is reported, not silently skipped", asy
   assert.equal(missing.length, 1);
   assert.equal(missing[0].displayType, "APP_IPAD_PRO_129");
 });
+
+test("the emoji rule survives multi-locale — it applies to every listing", async () => {
+  // Regression guard: when `locales` arrived, checkSemantics still looked only at
+  // metadata.description, so the single most-cited gotcha in this tool silently
+  // stopped applying to every locale but the primary.
+  const { findings } = validateConfig({
+    locale: "en-US",
+    metadata: { ...BASE },
+    locales: { "en-US": {}, tr: { description: "Kalıcı alışkanlıklar 🎉" } },
+  });
+  assert.ok(
+    findings.some((f) => f.id === "config.locales.tr.description.emoji"),
+    findings.map((f) => f.id).join(", "),
+  );
+});
+
+test("length limits apply per locale too", () => {
+  const { findings } = validateConfig({
+    locale: "en-US",
+    metadata: { ...BASE },
+    locales: { "en-US": {}, tr: { subtitle: "x".repeat(40) } },
+  });
+  assert.ok(findings.some((f) => f.id === "config.locales.tr.subtitle.too-long"));
+});
+
+test("a single-locale config still names the flat key for semantic rules", () => {
+  const { findings } = validateConfig({ locale: "en-US", metadata: { ...BASE, description: "Great 🎉" } });
+  assert.ok(findings.some((f) => f.id === "config.metadata.description.emoji"));
+});
+
+test("values inside an array are validated — screenshots.sets used to be skipped", () => {
+  const { findings } = validateConfig({
+    locale: "en-US",
+    screenshots: { sets: [{ displayType: "APP_IPHONE_69", dir: "./x" }] },
+  });
+  // APP_IPHONE_69 does not exist; Apple 409s and lists the valid types.
+  assert.ok(
+    findings.some((f) => f.id === "config.screenshots.sets[0].displayType.enum"),
+    findings.map((f) => f.id).join(", "),
+  );
+});

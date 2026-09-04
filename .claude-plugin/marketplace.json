@@ -9,7 +9,7 @@
       "name": "appstore-release",
       "source": "./",
       "description": "Ship an iOS app to App Store review end-to-end via the App Store Connect API — an opinionated, idempotent submission pipeline with a readiness report, for humans and AI agents.",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "author": {
         "name": "Furkan Beydemir"
       }

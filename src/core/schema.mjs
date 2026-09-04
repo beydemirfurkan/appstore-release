@@ -112,6 +112,10 @@ function walk(value, rawSchema, path, out, root) {
     push(out, path, "minimum", `is below the minimum of ${schema.minimum}`, `Use ${schema.minimum} or more.`);
   }
 
+  if (Array.isArray(value) && schema.items) {
+    value.forEach((item, i) => walk(item, schema.items, `${path}[${i}]`, out, root));
+  }
+
   if (schema.type === "object" || schema.properties) {
     if (!isPlainObject(value)) return;
 

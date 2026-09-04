@@ -1,6 +1,6 @@
 {
   "name": "appstore-release",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Ship an iOS app to App Store review end-to-end via the App Store Connect API \u2014 an opinionated, idempotent submission pipeline with a readiness report, for humans and AI agents.",
   "keywords": [
     "app-store",

@@ -127,12 +127,12 @@ function checkLocaleRequirements(config) {
 
 const EMOJI_RE = /\p{Extended_Pictographic}/u;
 
-/** @type {Array<{path: string, max: number}>} */
+/** Per-listing limits, applied to every locale. */
 const LIMITS = [
-  { path: "metadata.subtitle", max: 30 },
-  { path: "metadata.keywords", max: 100 },
-  { path: "metadata.promotionalText", max: 170 },
-  { path: "metadata.name", max: 30 },
+  { field: "subtitle", max: 30 },
+  { field: "keywords", max: 100 },
+  { field: "promotionalText", max: 170 },
+  { field: "name", max: 30 },
 ];
 
 /**
@@ -141,11 +141,21 @@ const LIMITS = [
  */
 export function checkSemantics(config) {
   if (!config) return [];
+  const locales = resolveLocales(config);
+  if (!locales.length) return [];
+
+  const single = locales.length === 1;
   const out = [];
 
-  for (const { path, max } of LIMITS) {
-    const value = at(config, path);
-    if (typeof value === "string" && value.length > max) {
+  for (const { locale, metadata } of locales) {
+    // Name the key the author would edit, and only qualify by locale when there
+    // is more than one to distinguish.
+    const keyFor = (field) => (single ? `metadata.${field}` : `locales.${locale}.${field}`);
+
+    for (const { field, max } of LIMITS) {
+      const value = metadata[field];
+      if (typeof value !== "string" || value.length <= max) continue;
+      const path = keyFor(field);
       out.push(
         finding({
           id: `config.${path}.too-long`,
@@ -159,23 +169,24 @@ export function checkSemantics(config) {
         }),
       );
     }
-  }
 
-  const description = at(config, "metadata.description");
-  if (typeof description === "string" && EMOJI_RE.test(description)) {
-    out.push(
-      finding({
-        id: "config.metadata.description.emoji",
-        category: Category.CONFIG,
-        title: "config.metadata.description contains emoji",
-        detail:
-          "App Store Connect rejects this with 409 ATTRIBUTE.INVALID.INVALID_CHARACTERS. " +
-          "Bullets (•) and em dashes (—) are fine; pictographs are not.",
-        fixOwner: FixOwner.CLI,
-        fix: "Remove the emoji; use plain uppercase section headers instead.",
-        docs: "references/gotchas.md#metadata",
-      }),
-    );
+    const description = metadata.description;
+    if (typeof description === "string" && EMOJI_RE.test(description)) {
+      const path = keyFor("description");
+      out.push(
+        finding({
+          id: `config.${path}.emoji`,
+          category: Category.CONFIG,
+          title: `config.${path} contains emoji`,
+          detail:
+            "App Store Connect rejects this with 409 ATTRIBUTE.INVALID.INVALID_CHARACTERS. " +
+            "Bullets (•) and em dashes (—) are fine; pictographs are not.",
+          fixOwner: FixOwner.CLI,
+          fix: "Remove the emoji; use plain uppercase section headers instead.",
+          docs: "references/gotchas.md#metadata",
+        }),
+      );
+    }
   }
 
   return out;

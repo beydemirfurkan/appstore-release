@@ -22,9 +22,14 @@ import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry
 import { parseArgs, splitFlags, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
 import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
+import { buildTools } from "./mcp/tools.mjs";
+import { RESOURCES } from "./mcp/resources.mjs";
 import { doctorCommand } from "./cli/doctor.mjs";
 
 const version = createRequire(import.meta.url)("../package.json").version;
+
+// Counted rather than written down, so the help text cannot drift from reality.
+const MCP_TOOL_COUNT = buildTools({ env: {} }).length;
 
 /** @param {unknown} e */
 const messageOf = (e) => (e instanceof Error ? e.message : String(e));
@@ -200,7 +205,7 @@ function writeHelp(stream) {
       `  schema           print the config JSON Schema\n` +
       `  validate         check the config offline\n` +
       `  doctor           verify credentials, tools and config; touches no app data\n` +
-      `  mcp              run the MCP server on stdio (10 tools, 6 resources)\n` +
+      `  mcp              run the MCP server on stdio (${MCP_TOOL_COUNT} tools, ${RESOURCES.length} resources)\n` +
       `  release          the ${PIPELINE.length}-step listing pipeline, then a readiness check\n` +
       `${ops}\n\n` +
       `Options\n${flags}\n\n` +

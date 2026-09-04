@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
+
+Everything here is additive: a 2.0.0 config still means exactly what it did.
 
 ### Added
 

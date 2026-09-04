@@ -2,6 +2,7 @@
 // the App Review paywall screenshot) so it leaves MISSING_METADATA → READY_TO_SUBMIT.
 // Note: attaching a FIRST-TIME subscription to the version + submitting is UI-only (see submit.mjs).
 import { Status } from "../core/status.mjs";
+import { AssetUploader } from "../asc/assets.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -62,36 +63,61 @@ export async function run({ client, discovery, uploader, config, resolvePath }) 
         (best, c) => (Math.abs(c.price - cfg.priceAmount) < Math.abs(best.price - cfg.priceAmount) ? c : best),
         pts[0],
       );
-      const current = await client.get(`/v1/subscriptions/${sub.id}/prices?limit=50`);
-      for (const pr of current.data || [])
-        await client.delete(`/v1/subscriptionPrices/${pr.id}`, { throwOnError: false });
-      await client.post(`/v1/subscriptionPrices`, {
-        data: {
-          type: "subscriptionPrices",
-          attributes: { preserveCurrentPrice: false },
-          relationships: {
-            subscription: { data: { type: "subscriptions", id: sub.id } },
-            subscriptionPricePoint: { data: { type: "subscriptionPricePoints", id: target.id } },
+      // Only replace when the target differs. Deleting and recreating an
+      // identical price on every run was the reason this operation could never
+      // honestly report "already correct".
+      const current = await client.get(`/v1/subscriptions/${sub.id}/prices?include=subscriptionPricePoint&limit=50`);
+      const alreadySet = (current.data || []).some((pr) =>
+        (current.included || []).some(
+          (inc) =>
+            inc.type === "subscriptionPricePoints" &&
+            inc.id === pr.relationships?.subscriptionPricePoint?.data?.id &&
+            inc.id === target.id,
+        ),
+      );
+      if (!alreadySet) {
+        for (const pr of current.data || [])
+          await client.delete(`/v1/subscriptionPrices/${pr.id}`, { throwOnError: false });
+        await client.post(`/v1/subscriptionPrices`, {
+          data: {
+            type: "subscriptionPrices",
+            attributes: { preserveCurrentPrice: false },
+            relationships: {
+              subscription: { data: { type: "subscriptions", id: sub.id } },
+              subscriptionPricePoint: { data: { type: "subscriptionPricePoints", id: target.id } },
+            },
           },
-        },
-      });
-      changes.push(`price ${target.price}`);
+        });
+        changes.push(`price ${target.price}`);
+      }
     }
   }
 
   // App Review paywall screenshot (required to leave MISSING_METADATA)
   if (cfg.reviewScreenshot) {
+    const filePath = resolvePath(cfg.reviewScreenshot, "config.subscription.reviewScreenshot");
+    const local = AssetUploader.read(filePath);
     const existing = await client.get(`/v1/subscriptions/${sub.id}/appStoreReviewScreenshot`, { throwOnError: false });
-    if (!existing.error && existing.data) {
-      await client.delete(`/v1/subscriptionAppStoreReviewScreenshots/${existing.data.id}`, { throwOnError: false });
+    const remote = existing.error ? null : existing.data;
+
+    // Same file, already committed: leave it alone. Re-uploading an identical
+    // screenshot on every run is what made this always report CHANGED.
+    const identical =
+      remote?.attributes?.sourceFileChecksum === local.checksum &&
+      remote?.attributes?.assetDeliveryState?.state === "COMPLETE";
+
+    if (!identical) {
+      if (remote) {
+        await client.delete(`/v1/subscriptionAppStoreReviewScreenshots/${remote.id}`, { throwOnError: false });
+      }
+      await uploader.upload({
+        reservePath: `/v1/subscriptionAppStoreReviewScreenshots`,
+        type: "subscriptionAppStoreReviewScreenshots",
+        relationships: { subscription: { data: { type: "subscriptions", id: sub.id } } },
+        filePath,
+      });
+      changes.push("review screenshot");
     }
-    await uploader.upload({
-      reservePath: `/v1/subscriptionAppStoreReviewScreenshots`,
-      type: "subscriptionAppStoreReviewScreenshots",
-      relationships: { subscription: { data: { type: "subscriptions", id: sub.id } } },
-      filePath: resolvePath(cfg.reviewScreenshot, "config.subscription.reviewScreenshot"),
-    });
-    changes.push("review screenshot");
   }
 
   if (!changes.length) return { status: Status.OK, message: `${cfg.productId} already complete` };

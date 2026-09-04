@@ -1,6 +1,11 @@
-// Uploads the textual store listing for the configured locale.
-// App Info: name, subtitle, privacy policy URL.  Version: description, keywords,
-// promotional text, support/marketing URLs, (whatsNew only for non-first versions).
+// The textual store listing for the configured locale.
+//
+// Apple splits these fields across two resources and the split is not obvious:
+// name, subtitle and the privacy policy URL live on appInfoLocalizations, while
+// description, keywords, promotional text and the support/marketing URLs live on
+// appStoreVersionLocalizations. Getting it wrong returns a 409 naming a field
+// that does look like it should be there.
+
 import { Status } from "../core/status.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
@@ -12,41 +17,80 @@ export const meta = {
   mutates: true,
 };
 
+const APP_INFO_FIELDS = ["name", "subtitle", "privacyPolicyUrl"];
+const VERSION_FIELDS = ["description", "keywords", "promotionalText", "supportUrl", "marketingUrl"];
+
 // runOperation validates `meta.needs` before we get here, so config.metadata and
 // config.locale are guaranteed present — no defensive re-check.
+/** @param {import("../core/context.mjs").Context} ctx */
 export async function run({ discovery, client, config }) {
   const locale = config.locale;
   const m = config.metadata;
+  const changed = [];
 
   // App Info localization: name / subtitle / privacy policy URL
   const { info } = await discovery.appInfo();
   const infoLoc = await discovery.appInfoLocalization(info.id, locale);
-  await client.patch(`/v1/appInfoLocalizations/${infoLoc.id}`, {
-    data: {
-      type: "appInfoLocalizations",
-      id: infoLoc.id,
-      attributes: { name: m.name, subtitle: m.subtitle, privacyPolicyUrl: m.privacyPolicyUrl },
-    },
-  });
+  const infoCurrent = await readAttributes(client, `/v1/appInfoLocalizations/${infoLoc.id}`, APP_INFO_FIELDS);
+  const infoDiff = diff(infoCurrent, pick(m, APP_INFO_FIELDS));
+  if (Object.keys(infoDiff).length) {
+    await client.patch(`/v1/appInfoLocalizations/${infoLoc.id}`, {
+      data: { type: "appInfoLocalizations", id: infoLoc.id, attributes: infoDiff },
+    });
+    changed.push(...Object.keys(infoDiff));
+  }
 
   // Version localization: description / keywords / promo / URLs
   const version = await discovery.editableVersion();
   const verLoc = await discovery.versionLocalization(version.id, locale);
-  const attributes = {
-    description: m.description,
-    keywords: m.keywords,
-    promotionalText: m.promotionalText,
-    supportUrl: m.supportUrl,
-    marketingUrl: m.marketingUrl,
-  };
-  // whatsNew is only editable on updates, not the first submission.
-  const isFirst =
-    version.attributes.versionString === "1.0" || version.attributes.appStoreState === "PREPARE_FOR_SUBMISSION";
-  if (m.whatsNew && !isFirst) attributes.whatsNew = m.whatsNew;
+  const wanted = pick(m, VERSION_FIELDS);
 
-  await client.patch(`/v1/appStoreVersionLocalizations/${verLoc.id}`, {
-    data: { type: "appStoreVersionLocalizations", id: verLoc.id, attributes },
+  // whatsNew is rejected on a genuinely first submission with 409 STATE_ERROR.
+  // "First" means the app has never had another version — not merely that this
+  // one is in PREPARE_FOR_SUBMISSION, which every unsubmitted update also is.
+  if (m.whatsNew && !(await isFirstEverVersion(client, discovery, version))) {
+    wanted.whatsNew = m.whatsNew;
+  }
+
+  const verCurrent = await readAttributes(client, `/v1/appStoreVersionLocalizations/${verLoc.id}`, [
+    ...VERSION_FIELDS,
+    "whatsNew",
+  ]);
+  const verDiff = diff(verCurrent, wanted);
+  if (Object.keys(verDiff).length) {
+    await client.patch(`/v1/appStoreVersionLocalizations/${verLoc.id}`, {
+      data: { type: "appStoreVersionLocalizations", id: verLoc.id, attributes: verDiff },
+    });
+    changed.push(...Object.keys(verDiff));
+  }
+
+  if (!changed.length) return { status: Status.OK, message: `${locale}: already up to date` };
+  return { status: Status.CHANGED, message: `${locale}: ${changed.join(", ")}`, details: { changed } };
+}
+
+/** Read only the fields we are about to consider writing. */
+async function readAttributes(client, path, fields) {
+  const resource = path.split("/")[2];
+  const res = await client.get(`${path}?fields[${resource}]=${fields.join(",")}`, { throwOnError: false });
+  return res.error ? {} : (res.data?.attributes ?? {});
+}
+
+const pick = (source, fields) =>
+  Object.fromEntries(fields.filter((f) => source[f] !== undefined).map((f) => [f, source[f]]));
+
+/** Only the fields whose value would actually change. */
+function diff(current, wanted) {
+  const out = {};
+  for (const [key, value] of Object.entries(wanted)) {
+    if ((current[key] ?? "") !== (value ?? "")) out[key] = value;
+  }
+  return out;
+}
+
+/** True when this app has never had any other version. */
+async function isFirstEverVersion(client, discovery, version) {
+  const all = await client.all(`/v1/apps/${discovery.appId}/appStoreVersions?fields[appStoreVersions]=versionString`, {
+    limit: 50,
   });
-
-  return { status: Status.CHANGED, message: `${locale}: name, subtitle, description, keywords, URLs` };
+  return all.filter((v) => v.id !== version.id).length === 0;
 }

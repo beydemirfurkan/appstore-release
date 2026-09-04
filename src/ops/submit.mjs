@@ -5,6 +5,7 @@
 // is not yet in review, this command returns MANUAL and does NOT submit — the user must
 // attach it on the version page and submit in the ASC UI (bundling app + subscription).
 import { Status } from "../core/status.mjs";
+import { getReadinessReport } from "../report/report.mjs";
 
 const OPEN_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES", "COMPLETING"];
 
@@ -22,12 +23,33 @@ export const meta = {
       default: false,
       description: "actually finalize the submission; without it the submission is only prepared",
     },
+    force: {
+      type: "boolean",
+      default: false,
+      description: "submit even though the readiness report still has blockers",
+    },
   },
 };
 
 /** @param {import("../core/context.mjs").Context} ctx */
-export async function run({ client, discovery, config }, args = {}) {
+export async function run(ctx, args = {}) {
+  const { client, discovery, config } = ctx;
   const appId = discovery.appId;
+
+  // The guardrail a plain API wrapper cannot offer: we know what "ready" means,
+  // so we can decline to spend a review cycle on a submission Apple will bounce.
+  // Only checked when actually finalizing — preparing is harmless.
+  if (args.submit && !args.force) {
+    const report = await getReadinessReport(ctx);
+    if (report.verdict !== "ready") {
+      return {
+        status: Status.ERROR,
+        message: `not ready to submit (${report.verdict}); pass --force to submit anyway`,
+        details: report,
+        findings: report.findings,
+      };
+    }
+  }
 
   // Guard: a first-time subscription must go through the UI.
   const productId = config?.subscription?.productId;

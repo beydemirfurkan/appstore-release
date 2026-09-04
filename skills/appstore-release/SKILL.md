@@ -43,7 +43,17 @@ npx appstore-release check       # the verdict and the ordered plan
 
 `check --json` gives the same thing as structured data: `verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `rejected`, `live`, and `nextActions` is the plan.
 
-### 2. Build the binary (Expo/EAS)
+### 2. Open a version, if none is editable
+
+`check` reports `version.none` when every version is already live. Nothing can be
+prepared until the next one exists:
+
+```bash
+npx appstore-release new-version          # infers the next number
+npx appstore-release new-version 1.2.0    # or name it
+```
+
+### 3. Build the binary (Expo/EAS)
 
 Only needed when `check` reports no build. If `eas build` fails on stale credentials (_"Provisioning Profile has expired / No certificate exists with serial…"_):
 
@@ -58,7 +68,7 @@ eas build -p ios --profile production --non-interactive --no-wait
 eas submit -p ios --profile production --id <buildId>
 ```
 
-### 3. Fill the listing
+### 4. Fill the listing
 
 ```bash
 npx appstore-release release --dry-run    # show the user exactly what would change
@@ -67,14 +77,14 @@ npx appstore-release release              # apply it
 
 Screenshots must already exist at `config.screenshots.dir` — see references/screenshots.md for producing exact-size PNGs. If the app supports iPad, it needs an iPad set too: use `config.screenshots.sets` with one entry per device size. A locale subdirectory (`./shots/tr/`) overrides the base directory for that locale.
 
-### 4. Hand off the two UI-only steps
+### 5. Hand off the two UI-only steps
 
 `check` lists these when they apply, with the exact clicks. Apple has no API for either; do not pretend otherwise and do not attempt a workaround.
 
 1. **App Privacy → Data Collection.** Declare the data types matching the app's privacy manifest, then **Publish**. If the binary ships `NSUserTrackingUsageDescription` but you declare no tracking, Publish is blocked — the app must drop the key and be rebuilt (references/gotchas.md).
 2. **A first subscription.** Version page → _In-App Purchases and Subscriptions → Select → \<product\>_ → Save → _Add for Review → Submit_.
 
-### 5. Submit
+### 6. Submit
 
 ```bash
 npx appstore-release check

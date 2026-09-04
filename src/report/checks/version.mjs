@@ -19,9 +19,9 @@ export function check({ snapshot }) {
         detail: live
           ? `The newest version is ${live.attributes.versionString} in state ${live.attributes.appStoreState}, which cannot be edited.`
           : "This app has no App Store version yet.",
-        fixOwner: FixOwner.UI,
-        fix: "Create the next version in App Store Connect before preparing its listing.",
-        fixClicks: ["App Store", "iOS App", "+ (next to the version list)", "enter the version number"],
+        fixOwner: FixOwner.CLI,
+        fix: "Open the next version before preparing its listing.",
+        fixCommand: "appstore-release new-version",
       }),
     );
     return out; // nothing below can be judged without a version

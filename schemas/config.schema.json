@@ -247,7 +247,30 @@
         "releaseType": {
           "type": "string",
           "enum": ["MANUAL", "AFTER_APPROVAL", "SCHEDULED"],
-          "description": "Not implemented yet — declared here but not written to App Store Connect."
+          "description": "Deprecated: use the top-level `release` block. Still honoured, with a warning."
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "description": "When and how an approved version reaches the store.",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["MANUAL", "AFTER_APPROVAL", "SCHEDULED"],
+          "description": "MANUAL waits for you to release it; AFTER_APPROVAL goes live as soon as Apple approves; SCHEDULED needs earliestDate."
+        },
+        "earliestDate": {
+          "type": "string",
+          "description": "ISO 8601 date-time. Required when type is SCHEDULED."
+        },
+        "phased": {
+          "type": "boolean",
+          "description": "Roll the update out to a percentage of users over seven days."
         }
       }
     },

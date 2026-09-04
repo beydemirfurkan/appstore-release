@@ -15,6 +15,8 @@ import * as reviewInfo from "./review-info.mjs";
 import * as screenshots from "./screenshots.mjs";
 import * as subscription from "./subscription.mjs";
 import * as submit from "./submit.mjs";
+import * as newVersion from "./new-version.mjs";
+import * as releaseOptions from "./release-options.mjs";
 
 /**
  * @typedef {Object} OperationMeta
@@ -36,6 +38,7 @@ export const OPERATIONS = {
   check,
   credentials,
   submit,
+  "new-version": newVersion,
   "attach-build": attachBuild,
   metadata,
   pricing,
@@ -43,6 +46,7 @@ export const OPERATIONS = {
   "age-rating": ageRating,
   category,
   "review-info": reviewInfo,
+  "release-options": releaseOptions,
   screenshots,
   subscription,
 };
@@ -59,6 +63,7 @@ export const PIPELINE = Object.freeze([
   "age-rating",
   "category",
   "review-info",
+  "release-options",
   "screenshots",
   "subscription",
 ]);

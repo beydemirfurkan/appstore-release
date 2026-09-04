@@ -171,19 +171,28 @@ export async function run({ client, discovery, uploader, config, resolvePath, dr
     );
   }
 
-  // Ordering is cheap, idempotent, and the only way filename order becomes
-  // display order — so it is sent every time.
-  await client.patch(`/v1/appScreenshotSets/${set.id}/relationships/appScreenshots`, {
-    data: ordered.map(({ id }) => ({ type: "appScreenshots", id })),
-  });
+  // Ordering is how filename order becomes display order, but sending it when it
+  // already matches would mean a "nothing changed" run still wrote something —
+  // and the idempotency claim has to be literally true to be worth making.
+  const currentOrder = remote.filter((r) => !toDelete.includes(r)).map((r) => r.id);
+  const wantedOrder = ordered.map(({ id }) => id);
+  const orderDiffers =
+    currentOrder.length !== wantedOrder.length || currentOrder.some((id, i) => id !== wantedOrder[i]);
 
-  const changed = uploaded.length || toDelete.length;
+  if (orderDiffers) {
+    await client.patch(`/v1/appScreenshotSets/${set.id}/relationships/appScreenshots`, {
+      data: wantedOrder.map((id) => ({ type: "appScreenshots", id })),
+    });
+  }
+
+  const changed = uploaded.length || toDelete.length || orderDiffers;
   const details = {
     displayType,
     total: local.length,
     uploaded,
     deleted: toDelete.map((r) => r.attributes?.fileName ?? r.id),
     unchanged: local.length - uploaded.length,
+    reordered: orderDiffers,
   };
 
   if (!changed) {

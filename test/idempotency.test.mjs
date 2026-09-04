@@ -112,6 +112,10 @@ test("re-uploading unchanged screenshots uploads nothing and deletes nothing", a
     mock.mutations().filter((m) => m.method === "POST"),
     [],
   );
+  // Including the ordering PATCH: a run that changes nothing must send nothing,
+  // or the idempotency claim is only nearly true.
+  assert.deepEqual(mock.mutations(), [], "an unchanged run must be write-free");
+  assert.equal(res.details.reordered, false);
 });
 
 test("only the changed file is uploaded, and the untouched one survives", async () => {

@@ -223,12 +223,22 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
   const submission = await section(
     "submission",
     async () => {
+      // Items are included because their individual state is the only thing the
+      // API says about *why* a submission is stuck — the Resolution Center text
+      // itself is not exposed anywhere.
       const r = await client.get(
-        `/v1/reviewSubmissions?filter[app]=${appId}&filter[platform]=IOS&fields[reviewSubmissions]=state,submitted&limit=10`,
+        `/v1/reviewSubmissions?filter[app]=${appId}&filter[platform]=IOS` +
+          `&fields[reviewSubmissions]=state,submitted,items&include=items&limit=10`,
         { throwOnError: false },
       );
       if (r.error) return null;
-      return (r.data ?? []).find((s) => s.attributes.state !== "COMPLETE") ?? null;
+      const open = (r.data ?? []).find((s) => s.attributes.state !== "COMPLETE");
+      if (!open) return null;
+      const itemIds = new Set((open.relationships?.items?.data ?? []).map((d) => d.id));
+      return {
+        ...open,
+        items: (r.included ?? []).filter((x) => x.type === "reviewSubmissionItems" && itemIds.has(x.id)),
+      };
     },
     null,
   );

@@ -44,6 +44,7 @@ function tool(tools, name) {
 }
 
 const MUTATING = [
+  "asc_open_next_version",
   "asc_apply_release",
   "asc_upload_screenshots",
   "asc_configure_subscription",
@@ -51,18 +52,20 @@ const MUTATING = [
   "asc_generate_credentials",
 ];
 
-test("the server exposes exactly ten tools", async () => {
+test("the tool surface is exactly this, and grows only on purpose", async () => {
   const mcp = await connect();
   const tools = await mcp.tools();
-  // The number is the product decision, so it gets a test. Adding an eleventh
-  // should be a deliberate act, not a drift.
-  assert.equal(tools.length, 10, tools.map((t) => t.name).join(", "));
+  // The count is a product decision, so it is pinned. asc_open_next_version was
+  // the eleventh, added because without it an agent that hit version.none had no
+  // way forward at all — every other tool needs an editable version to act on.
+  assert.equal(tools.length, 11, tools.map((t) => t.name).join(", "));
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     "asc_app_overview",
     "asc_apply_release",
     "asc_configure_subscription",
     "asc_generate_credentials",
     "asc_list_apps",
+    "asc_open_next_version",
     "asc_plan_release",
     "asc_readiness_report",
     "asc_submit_for_review",

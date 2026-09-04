@@ -5,7 +5,10 @@
 // PATCH /v1/appStoreVersionLocalizations still does not know that whatsNew 409s
 // on a first version, that emoji in the description is a hard rejection, or that
 // the age-rating declaration needs all 21 attributes. Those tools hand the model
-// the landmines; these ten defuse them.
+// the landmines; these eleven defuse them.
+//
+// The count is a product decision with a test behind it. Each tool earns its
+// place by being an outcome someone wants, not an API call someone could make.
 //
 // A tool list is also a per-request tax on every conversation the server is
 // attached to, and tool-selection accuracy falls off well before a thousand
@@ -236,6 +239,31 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           ...changes.map((c) => `- ${c.action} ${c.resource}`),
         ].join("\n");
         return structured(text, { dryRun: true, results, changes });
+      },
+    },
+
+    {
+      name: "asc_open_next_version",
+      title: "Open the next version",
+      description:
+        "Create the next App Store version, so its listing can be prepared. Needed whenever every existing " +
+        "version is already live — asc_readiness_report reports that as version.none. A no-op when a version " +
+        "is already editable, so it is safe to call first.",
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      inputSchema: {
+        appId,
+        configPath,
+        version: z
+          .string()
+          .optional()
+          .describe("Version string, e.g. 1.2.0. Inferred from the newest existing one if omitted."),
+        confirm,
+      },
+      async run(args) {
+        const { ctx, refusal } = await contextOrRefusal(args, env);
+        if (refusal) return refusal;
+        const res = await runOperation("new-version", ctx, { version: args.version });
+        return structured(`${res.status.toUpperCase()} — ${res.message}`, res);
       },
     },
 

@@ -27,7 +27,7 @@ An agent that can call `PATCH /v1/appStoreVersionLocalizations/{id}` still does 
 - a screenshot that skips its commit step stays invisible forever with nothing in the UI to explain why,
 - and a first subscription simply **cannot** be attached to a version through the API at all.
 
-Endpoint coverage hands the model the landmines. This tool defuses them. It ships **10 tools**, and the important one answers the only question that matters:
+Endpoint coverage hands the model the landmines. This tool defuses them. It ships **11 tools**, and the important one answers the only question that matters:
 
 ```
 $ appstore-release check

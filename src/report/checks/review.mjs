@@ -61,18 +61,46 @@ export function check({ snapshot }) {
 
   const state = snapshot.version.attributes.appStoreState;
   if (["REJECTED", "METADATA_REJECTED"].includes(state)) {
+    // Everything the API will tell us about the rejection, which is the shape of
+    // it and not the substance. Saying that plainly is more useful than implying
+    // we could fetch the reviewer's message.
+    const unresolved = (snapshot.submission?.items ?? []).filter((i) => i.attributes?.resolved === false);
+    const detail = [
+      `The version is editable again. ${state === "METADATA_REJECTED" ? "A metadata rejection usually means text or screenshots, not the binary." : "This may be the binary or the listing."}`,
+      unresolved.length ? `${unresolved.length} submission item(s) are still unresolved.` : "",
+      "The reviewer's message is in Resolution Center, which Apple does not expose through the API — you have to read it.",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     out.push(
       finding({
         id: "submission.rejected",
         category: Category.ASC_STATE,
         title: `Apple rejected this version (${state})`,
-        detail:
-          "The version is editable again. The rejection text itself lives in Resolution Center, " +
-          "which Apple does not expose through the API.",
+        detail,
         fixOwner: FixOwner.UI,
         uiOnly: true,
-        fix: "Read the Resolution Center message, fix what it names, then resubmit.",
+        fix: "Read the Resolution Center message, fix what it names, then run release and submit again.",
         fixClicks: ["App Store Connect", "your app", "App Review", "Resolution Center"],
+        evidence: { resource: "appStoreVersions", id: snapshot.version.id, actual: state },
+      }),
+    );
+  }
+
+  // A submission that Apple could not process at all, as distinct from one it
+  // reviewed and rejected.
+  if (snapshot.submission?.attributes?.state === "UNRESOLVED_ISSUES") {
+    out.push(
+      finding({
+        id: "submission.unresolved-issues",
+        category: Category.ASC_STATE,
+        title: "The open submission has unresolved issues",
+        detail: "App Store Connect will not accept it until they are cleared.",
+        fixOwner: FixOwner.UI,
+        uiOnly: true,
+        fix: "Open the submission in App Store Connect and clear what it lists.",
+        fixClicks: ["App Store Connect", "your app", "App Review"],
       }),
     );
   }

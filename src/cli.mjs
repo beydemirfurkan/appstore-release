@@ -22,6 +22,7 @@ import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry
 import { parseArgs, splitFlags, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
 import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
+import { doctorCommand } from "./cli/doctor.mjs";
 
 const version = createRequire(import.meta.url)("../package.json").version;
 
@@ -73,6 +74,9 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   if (command === "schema") return schemaCommand(stdout);
   if (command === "init") return initCommand({ stdout, stderr, cwd, target: parsed.positionals[0] });
   if (command === "validate") return validateCommand({ stdout, stderr, cwd, env, explicit: flags.config });
+  if (command === "doctor") {
+    return doctorCommand({ stdout, stderr, env, cwd, config: flags.config, appId: flags["app-id"] });
+  }
   if (command === "mcp") {
     // Hand the process to the MCP server; it owns stdio from here.
     const { main: mcpMain } = await import("./mcp/server.mjs");
@@ -195,6 +199,7 @@ function writeHelp(stream) {
       `  init             scaffold appstore.config.json (no credentials needed)\n` +
       `  schema           print the config JSON Schema\n` +
       `  validate         check the config offline\n` +
+      `  doctor           verify credentials, tools and config; touches no app data\n` +
       `  mcp              run the MCP server on stdio (10 tools, 6 resources)\n` +
       `  release          the ${PIPELINE.length}-step listing pipeline, then a readiness check\n` +
       `${ops}\n\n` +

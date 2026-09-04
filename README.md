@@ -1,125 +1,218 @@
 # appstore-release
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
-[![npx skills add](https://img.shields.io/badge/npx%20skills%20add-beydemirfurkan%2Fappstore--release-000000?logo=npm&logoColor=white)](https://www.skills.sh/)
+[![npm](https://img.shields.io/npm/v/appstore-release?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/appstore-release)
+[![MCP server](https://img.shields.io/badge/MCP-server-6c5ce7)](https://modelcontextprotocol.io)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugin-marketplaces)
-[![GitHub stars](https://img.shields.io/github/stars/beydemirfurkan/appstore-release?style=flat&color=eab308)](https://github.com/beydemirfurkan/appstore-release/stargazers)
 
-**Ship an iOS app to App Store review end-to-end — driven by the App Store Connect API.**
+**Ship an iOS app to App Store review — end to end, over the App Store Connect API.**
 
-An [agent skill](https://www.skills.sh/) that turns the tedious, error-prone App Store submission into a single repeatable pipeline. You fill one `config.json`; the tooling generates credentials, uploads metadata + screenshots, sets pricing, age rating, content rights and review info, configures subscriptions, and submits for review. It only stops for the **two things Apple genuinely does not expose via API** — and hands you the exact clicks for those.
+A CLI and an MCP server that turn the tedious, error-prone parts of an App Store submission into one repeatable, idempotent pipeline. You fill in a `config.json` once; it attaches the build, writes the metadata, uploads the screenshots, sets pricing, age rating, content rights and review info, configures subscriptions, and submits for review.
 
-Built for [Claude Code](https://code.claude.com) and any agent that can run shell commands. Parametric: works for **any** app given an ASC API key + app id.
+It stops for the **two things Apple genuinely does not expose via API** — and hands you the exact clicks for those.
 
 ![demo](docs/demo.png)
 
 ---
 
-## Why
+## This is not another App Store Connect API wrapper
 
-Submitting an iOS app touches ~15 App Store Connect surfaces, several of which fail with cryptic errors the first time (emoji in the description, a missing price tier, an age-rating field the API silently requires, a first-time subscription that can't be attached via API, an `NSUserTrackingUsageDescription` that blocks App Privacy…). This skill **encodes every one of those pitfalls** (see [`gotchas.md`](skills/appstore-release/references/gotchas.md)) so you never hit them twice.
+There are several MCP servers that expose the App Store Connect API, some advertising over a thousand tools. Raw endpoint coverage is not the scarce thing.
 
-- ✅ **~90% automated** via the ASC API — idempotent, re-runnable.
-- ⚠️ **2 UI-only steps** are detected and surfaced with exact instructions (App Privacy data-collection; first-time subscription attach).
-- 🧩 **Parametric** — no hardcoded ids; everything is discovered from your app id.
-- 🧱 **Clean architecture** (SOLID) — easy to read, audit, and extend.
+An agent that can call `PATCH /v1/appStoreVersionLocalizations/{id}` still does not know that:
+
+- `whatsNew` returns **409 STATE_ERROR** on a first version,
+- an emoji in the description is a hard **409 ATTRIBUTE.INVALID.INVALID_CHARACTERS**,
+- the age-rating declaration lives on `appInfos` (not the version) and needs all 21 attributes including `ageAssurance`, or it 409s,
+- a screenshot that skips its commit step stays invisible forever with nothing in the UI to explain why,
+- and a first subscription simply **cannot** be attached to a version through the API at all.
+
+Endpoint coverage hands the model the landmines. This tool defuses them. It ships **10 tools**, and the important one answers the only question that matters:
+
+```
+$ appstore-release check
+
+Readiness — Wellness · v1.0 (PREPARE_FOR_SUBMISSION)
+──────────────────────────────────────────────────────────
+BLOCKED — there is still work this tool can do
+
+✓ Version and build
+✗ Pricing, category and ratings
+✓ Store metadata
+✗ Screenshots
+· Subscriptions
+✗ Review and submission
+
+Next, in order
+──────────────────────────────────────────────────────────
+1. Run appstore-release pricing
+   $ appstore-release pricing
+2. Run appstore-release screenshots
+   $ appstore-release screenshots
+3. Declare the data types matching the app's privacy manifest, then press Publish.
+   App Store Connect → your app → App Privacy → Get Started / Edit → Publish
+```
+
+Every finding carries who can fix it. `uiOnly: true` means Apple has no API and never will; `fixOwner: "ui"` without it means we could automate it and have not yet. Those are never conflated — there is a test that enforces it.
 
 ## Install
 
-**As a CLI** (works with any agent that can run a shell command):
+**As an MCP server** — for Claude Code, Claude Desktop, Cursor, Zed, or anything that speaks MCP:
 
-```bash
-npm i -g appstore-release      # or just use npx appstore-release <command>
+```jsonc
+{
+  "mcpServers": {
+    "appstore-release": {
+      "command": "npx",
+      "args": ["-y", "appstore-release", "mcp"],
+      "env": {
+        "ASC_KEY_ID": "ABCDE12345",
+        "ASC_ISSUER_ID": "69a6de00-…",
+        "ASC_P8_PATH": "/abs/AuthKey_ABCDE12345.p8",
+        "ASC_APP_ID": "1234567890",
+      },
+    },
+  },
+}
 ```
 
-**As an agent skill** ([skills.sh](https://www.skills.sh/)):
+**As a CLI** — for any agent that can run a shell command, and for CI:
 
 ```bash
-npx skills add beydemirfurkan/appstore-release
+npm i -g appstore-release      # or just npx appstore-release <command>
 ```
 
-**As a Claude Code plugin:**
+**As a Claude Code plugin** (brings the skill and the MCP server together):
 
 ```
 /plugin marketplace add beydemirfurkan/appstore-release
 /plugin install appstore-release@beydemirfurkan
 ```
 
-Or clone and point your agent at [`SKILL.md`](skills/appstore-release/SKILL.md).
-
 ## Quick start
 
-1. **Create an ASC API key** (App Store Connect → Users and Access → Integrations → App Store Connect API → **App Manager** role). Download the `.p8`, note the Key ID + Issuer ID. See [`setup.md`](skills/appstore-release/references/setup.md).
-2. **Fill a config** from [`config-template.json`](skills/appstore-release/references/config-template.json).
-3. **Set env + run:**
+1. **Create an App Store Connect API key** — Users and Access → Integrations → App Store Connect API, role **App Manager**. Download the `.p8`; note the Key ID and Issuer ID. ([setup.md](skills/appstore-release/references/setup.md))
+2. **Scaffold and fill a config:**
 
-```bash
-export ASC_KEY_ID=...          # 10-char key id
-export ASC_ISSUER_ID=...       # issuer uuid
-export ASC_P8_PATH=/abs/AuthKey_XXXX.p8
-export ASC_APP_ID=1234567890   # numeric app id from the ASC url
-export APPSTORE_CONFIG=/abs/config.json
+   ```bash
+   appstore-release init          # writes appstore.config.json with a $schema for autocomplete
+   ```
 
-appstore-release status            # read-only overview
-appstore-release release           # run the whole listing pipeline (idempotent)
-appstore-release check             # what's still missing + the UI-only steps
-appstore-release submit --submit   # submit the app version for review
-```
+3. **Point it at your app and check:**
 
-Or just tell your agent: _"publish my app for review"_ — with the skill installed it drives all of the above and asks you only for genuine decisions (subscription price, release timing) and the two UI-only steps.
+   ```bash
+   export ASC_KEY_ID=ABCDE12345
+   export ASC_ISSUER_ID=69a6de00-…
+   export ASC_P8_PATH=/abs/AuthKey_ABCDE12345.p8   # or ASC_P8 with the key inline
+   export ASC_APP_ID=1234567890                    # the digits in the App Store Connect URL
 
-## What it does
+   appstore-release doctor        # credentials, tools and config — touches no app data
+   appstore-release check         # what is missing, in the order to fix it
+   appstore-release release --dry-run    # exactly what would change, sending nothing
+   appstore-release release       # apply it (idempotent — safe to re-run)
+   appstore-release submit --submit
+   ```
 
-| Command            | Automates                                                                    |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `credentials`      | fresh distribution cert + provisioning profile (fixes stale EAS credentials) |
-| `attach-build`     | attach the newest VALID build to the version                                 |
-| `metadata`         | name, subtitle, description, keywords, promo, support/marketing/privacy URLs |
-| `pricing`          | price tier (Free) + copyright                                                |
-| `content-rights`   | third-party content declaration                                              |
-| `age-rating`       | full 2025 age-rating declaration (4+)                                        |
-| `category`         | primary/secondary category                                                   |
-| `review-info`      | App Review contact + demo account                                            |
-| `screenshots`      | upload exact-size PNGs (reserve→upload→commit)                               |
-| `subscription`     | localization, price, group, paywall review image                             |
-| `submit`           | create + submit the review submission                                        |
-| `status` / `check` | read-only overview / readiness report                                        |
+Or just tell your agent _"publish my app for review"_.
 
-### The two UI-only steps (Apple has no API)
+## Commands
 
-1. **App Privacy → Data Collection** — declare data types, then Publish.
-2. **First-time subscription** — attach it to the version and submit in the UI.
+| Command                    | What it does                                                                       |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `init` `schema` `validate` | scaffold a config, print its JSON Schema, check it offline — no credentials needed |
+| `doctor`                   | verify credentials, `openssl`, Node and config without touching app data           |
+| `status`                   | full read-only inventory                                                           |
+| `check`                    | readiness report: findings, verdict, ordered next actions                          |
+| `release`                  | the whole listing pipeline, then a check                                           |
+| `attach-build`             | attach the newest VALID build (or `--build <version>`)                             |
+| `metadata`                 | name, subtitle, description, keywords, promo, support/marketing/privacy URLs       |
+| `pricing`                  | price schedule + copyright                                                         |
+| `content-rights`           | third-party content declaration                                                    |
+| `age-rating`               | the full 2025 age-rating declaration                                               |
+| `category`                 | primary/secondary category                                                         |
+| `review-info`              | App Review contact + demo account                                                  |
+| `screenshots`              | diff-then-upload exact-size PNGs                                                   |
+| `subscription`             | localizations, price, paywall review image                                         |
+| `submit --submit`          | submit for review — refuses unless the readiness verdict is `ready`                |
+| `credentials`              | distribution certificate + provisioning profile (fixes stale EAS credentials)      |
+| `mcp`                      | run the MCP server on stdio                                                        |
 
-`check` detects and prints both with exact clicks.
+Global flags: `--json` (one JSON document on stdout, human text on stderr), `--dry-run`, `--config`, `--project-root`, `--app-id`, `--verbose`, `--exit-zero`.
+
+**Exit codes** are the point of the design: `0` ok · `2` usage · `3` config/credentials · `4` blocked but fixable · `5` only a human in App Store Connect can finish. That last distinction is what makes `appstore-release check && appstore-release submit --submit` safe in CI.
+
+## MCP tools
+
+| Tool                         | Read-only | Purpose                                                  |
+| ---------------------------- | --------- | -------------------------------------------------------- |
+| `asc_readiness_report`       | ✓         | verdict, findings, ordered next actions — **start here** |
+| `asc_app_overview`           | ✓         | inventory of the app's current state                     |
+| `asc_list_apps`              | ✓         | find the numeric app id from a name or bundle id         |
+| `asc_validate_config`        | ✓         | check a config; no network, no credentials               |
+| `asc_plan_release`           | ✓         | dry-run the pipeline and return the diff                 |
+| `asc_apply_release`          |           | write the listing                                        |
+| `asc_upload_screenshots`     |           | diff-then-upload                                         |
+| `asc_configure_subscription` |           | localizations, price, review screenshot                  |
+| `asc_submit_for_review`      |           | irreversible; refuses unless ready                       |
+| `asc_generate_credentials`   |           | off unless the operator opts in                          |
+
+Resources: `appstore-release://gotchas`, `://runbook`, `://config-schema`, `://config-template`, `://references/screenshots`, `://references/setup`.
+
+Every mutating tool requires an explicit `confirm: true`, which forces a two-turn handshake the host shows the user. `asc_submit_for_review` computes the readiness report first and declines when anything is blocking — a guardrail a generic API wrapper structurally cannot offer, because it does not know what "ready" means.
+
+## The two UI-only steps
+
+Apple exposes no API for either. `check` detects both and prints the exact clicks.
+
+1. **App Privacy → Data Collection** — every `appDataUsages*` endpoint 404s. Declare the data types, then Publish.
+2. **A first subscription** — `reviewSubmissionItems` has no `subscription` relationship. Attach it to the version and submit in the UI. Subsequent subscriptions work through the API.
+
+## Safety
+
+- **Idempotent.** Re-running when everything already matches sends nothing. Screenshots diff against the checksum App Store Connect stores; metadata writes only what differs.
+- **`--dry-run` is enforced at the HTTP client**, not per operation, so it cannot be forgotten. A test asserts zero writes across all 12 mutating operations.
+- **Credentials never enter tool arguments.** Tool arguments are model-visible and reach transcripts and host logs; a leaked `.p8` cannot be rotated without breaking every other integration. They come from the environment only, and a test asserts no tool accepts one.
+- **Certificate slots are not spent silently.** Apple caps an account at three distribution certificates; `credentials` reuses one whose key you already hold and refuses the last slot without `--allow-new-cert`.
+- Secrets are written `0600` into a `0700` directory, and `git check-ignore` is consulted so an unignored secret is reported.
 
 ## Architecture
 
 ```
 src/
-  cli.mjs             single entrypoint / dispatcher
-  core/               context (composition root) · env · config · log
-  asc/                client · jwt · discovery · assets — the App Store Connect layer
-  ops/                one file per task, uniform { meta, run(ctx) } contract
-skills/appstore-release/
-  SKILL.md            the runbook an agent follows
-  references/         setup · gotchas · screenshots · config-template
+  cli.mjs      dispatcher · cli/     args, rendering, doctor, offline commands
+  index.mjs    library API: createContext, runOperation, runPipeline, listOperations
+  core/        context (composition root) · credentials · config · schema · findings · paths · events
+  asc/         client (retry, pagination, dry-run) · jwt · discovery · assets · png
+  ops/         one file per task, uniform { meta, run(ctx, args) } contract
+  report/      snapshot → checks/ → report → three renderers
+  mcp/         server, tools, resources
 ```
 
-Dependency injection via `src/core/context.mjs`; add a capability by dropping a file in `src/ops/` and registering it in `src/cli.mjs`. See [`_contract.md`](src/ops/_contract.md).
+The library API is the same one the CLI and the MCP server use, so the surfaces cannot drift:
+
+```js
+import { createContext, getReadinessReport, runPipeline } from "appstore-release";
+
+const ctx = await createContext({
+  credentials: { keyId, issuerId, privateKey, appId },
+  config: "./appstore.config.json",
+  dryRun: true,
+});
+const report = await getReadinessReport(ctx);
+if (report.verdict === "ready") await runPipeline(undefined, ctx);
+```
+
+Add a capability by dropping a file in `src/ops/` and registering it in `src/ops/registry.mjs`. See [`_contract.md`](src/ops/_contract.md).
 
 ## Requirements
 
-- Node.js 20.11+ (uses built-in `fetch`, `crypto`).
-- `openssl` (for the `credentials` command).
-- An Expo/EAS-built iOS app is assumed for the build step, but the ASC listing/submission commands work for any iOS app already uploaded to App Store Connect.
-
-## Security
-
-Never commit secrets. The `.gitignore` blocks `*.p8`, `credentials.json`, `*.p12`, `*.mobileprovision`, and `secrets/`. Verify with `git check-ignore <file>`. The skill reads your `.p8` only to sign short-lived JWTs locally; nothing is sent anywhere but Apple's API.
+- Node.js 20.11+ (built-in `fetch` and `crypto`; two dependencies, both for the MCP server).
+- `openssl` — only for the `credentials` command.
+- An iOS app already uploaded to App Store Connect. The build step assumes Expo/EAS; everything else works for any iOS app.
 
 ## Contributing
 
-Issues and PRs welcome — especially new gotchas and additional commands (in-app events, custom product pages, phased release, Android/Play parity). Keep commands idempotent and config-driven per the contract.
+Issues and PRs welcome — especially new gotchas, new checks, and the roadmap items: multi-locale metadata, multiple screenshot display types, paid price tiers, arbitrary age ratings, version creation, phased release. Keep operations idempotent and config-driven per the contract, and add a test.
 
 ## License
 

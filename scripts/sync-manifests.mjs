@@ -52,11 +52,13 @@ if (skillName !== pkg.name) {
   process.exitCode = 1;
 }
 
+// Diagnostics go to stderr: this runs as a prepack hook, and anything on stdout
+// corrupts `npm pack --json`.
 if (check && stale.length) {
   console.error(`✗ stale manifests: ${stale.join(", ")}\n  run: npm run manifests:sync`);
   process.exitCode = 1;
 } else if (stale.length) {
-  console.log(`✓ synced ${stale.join(", ")} to ${pkg.name}@${pkg.version}`);
+  console.error(`✓ synced ${stale.join(", ")} to ${pkg.name}@${pkg.version}`);
 } else if (!process.exitCode) {
-  console.log(`✓ manifests already at ${pkg.name}@${pkg.version}`);
+  console.error(`✓ manifests already at ${pkg.name}@${pkg.version}`);
 }

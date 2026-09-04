@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS is not optional: the credentials operation shells out to the
+        # system openssl, whose -legacy support differs between platforms.
+        os: [ubuntu-latest, macos-latest]
+        node: [20, 22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run format:check
+      - run: npm run schema:validate
+      - run: npm run manifests:check
+      - run: npm test
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Pack and check what would be published
+        run: |
+          npm pack --dry-run --json > pack.json
+          node -e '
+            const [pkg] = require("./pack.json");
+            const names = pkg.files.map((f) => f.path);
+            const leaked = names.filter((n) =>
+              /\.p8$|credentials\.json$|\.p12$|\.mobileprovision$|^secrets\/|appstore\.config\.json$|^\.env/.test(n),
+            );
+            if (leaked.length) {
+              console.error("✗ these must never be published:\n  " + leaked.join("\n  "));
+              process.exit(1);
+            }
+            if (pkg.unpackedSize > 2_000_000) {
+              console.error(`✗ package is ${pkg.unpackedSize} bytes; something large slipped in`);
+              process.exit(1);
+            }
+            console.log(`✓ ${names.length} files, ${pkg.unpackedSize} bytes, no secrets`);
+          '
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: The installed binary must actually run
+        run: |
+          npm pack --pack-destination /tmp
+          mkdir /tmp/consumer && cd /tmp/consumer && npm init -y >/dev/null
+          npm install /tmp/appstore-release-*.tgz
+          ./node_modules/.bin/appstore-release --version
+          ./node_modules/.bin/appstore-release init
+          ./node_modules/.bin/appstore-release validate
+          ./node_modules/.bin/appstore-release schema > /dev/null

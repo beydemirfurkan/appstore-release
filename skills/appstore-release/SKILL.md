@@ -1,112 +1,102 @@
 ---
 name: appstore-release
-description: Ship an iOS app (built with EAS/Expo) to App Store review end-to-end via the App Store Connect API — credentials, build attach, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions, and the review submission. Use when the user says "publish/submit my app", "send it to App Review", "ship the iOS app", "fill out App Store Connect", "upload metadata/screenshots", or "automate App Store Connect". Parametric: works for any app given an ASC API key + app id + a config file.
+description: Ship an iOS app to App Store review end-to-end via the App Store Connect API — build attach, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions, and the review submission. Use when the user says "publish/submit my app", "send it to App Review", "ship the iOS app", "fill out App Store Connect", "upload metadata/screenshots", "my app got rejected", or "automate App Store Connect". Works for any app given an App Store Connect API key, an app id, and a config file.
 ---
 
 # App Store Release
 
-Drive an entire iOS App Store submission from the **App Store Connect API**. Design goal: the user provides credentials + a `config.json` **once**, then the agent does everything that is automatable and only interrupts the user for the handful of things Apple genuinely does not expose via API. **Do not ask the user to re-confirm things that are already in the config or have sensible defaults.**
+Drive an entire iOS App Store submission from the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for the two things Apple genuinely does not expose.
 
-## Operating principle (read this first)
+## Operating principle
 
-1. **Config-driven, not prompt-driven.** All app content lives in `config.json`. Run commands; don't interview the user.
-2. **Only two things are UI-only** (Apple has no API): **App Privacy data-collection** and **first-time subscription attach + submit**. The tooling detects and surfaces these with exact clicks. Everything else is scripted.
-3. **Ask the user only when**: config is missing a required field (tell them exactly which), a business decision isn't in config (subscription price, release timing), or before the single irreversible action (final submit). Otherwise proceed.
-4. **Idempotent**: every command is safe to re-run. `appstore-release release` can be run repeatedly.
+1. **Let `check` decide what to do.** It returns a verdict and an ordered list of next actions, each labelled as something the tool can fix or something only a human in App Store Connect can. Do not plan the sequence yourself — read it.
+2. **Config-driven, not prompt-driven.** All app content lives in the config. Run commands; do not interview the user about things the config already answers.
+3. **Ask the user only when**: the config is missing a field (say exactly which), a business decision is not in the config (subscription price, release timing), or before the single irreversible action (final submit).
+4. **Everything is idempotent.** `release` is safe to re-run; a second run with nothing changed sends nothing.
 
-## Architecture (SOLID, so you can extend it)
+## Setup — see references/setup.md
 
-```
-scripts/
-  cli.mjs                 single entrypoint / dispatcher (appstore-release <command>)
-  lib/                    injected services, one responsibility each
-    env.mjs               parse+validate env (creds, app id)
-    jwt.mjs               ES256 token provider
-    client.mjs            AscClient — auth + HTTP + uniform errors
-    discovery.mjs         locate ASC resources by natural key (no hardcoded ids)
-    assets.mjs            reserve→upload→commit binary uploader
-    config.mjs            load + validate config, list what's missing
-    log.mjs               structured results + machine-readable summary
-    context.mjs           composition root (dependency injection)
-  commands/               one file per task; uniform contract (see _contract.md)
-```
-
-Add a capability = add a `commands/x.mjs` (meta + `run(ctx)`) and register it in `cli.mjs`.
-
-## Setup (one time) — see references/setup.md
-
-1. ASC API key (**App Manager**): download `AuthKey_XXXX.p8`, note Key ID + Issuer ID.
-2. App record exists in ASC (bundle id registered). `ASC_APP_ID` = numeric id from the app's ASC URL.
-3. EAS project configured, `eas login` done.
-4. Fill `config.json` from `references/config-template.json`. Validate anytime: any command prints exactly which fields are missing.
-
-## Environment
+The user needs an App Store Connect API key with the **App Manager** role, and the numeric app id from the App Store Connect URL.
 
 ```bash
-export ASC_KEY_ID=... ASC_ISSUER_ID=... ASC_P8_PATH=/abs/AuthKey_XXXX.p8   # gitignore the .p8
-export ASC_APP_ID=1234567890
-export APPSTORE_CONFIG=/abs/config.json
+export ASC_KEY_ID=...            # 10 characters
+export ASC_ISSUER_ID=...         # a UUID
+export ASC_P8_PATH=/abs/AuthKey_XXXXXXXXXX.p8    # or ASC_P8 with the PEM inline
+export ASC_APP_ID=1234567890     # digits from the ASC URL, NOT the bundle id
 ```
 
-Run it with `npx appstore-release <command>` from the user's project directory — no
-`cd` anywhere, and never from inside this skill's own directory.
+Run everything with `npx appstore-release <command>` from the user's project directory. Relative paths in the config resolve against the config file, so never `cd` anywhere first.
+
+If there is no config yet: `npx appstore-release init` writes one with a `$schema`, then fill it in from what the user tells you. `npx appstore-release validate` checks it without needing credentials or a network.
 
 ## Runbook
 
 ### 1. Orient
 
 ```bash
-appstore-release status          # full read-only overview
-appstore-release check           # readiness + the UI-only steps still pending
+npx appstore-release doctor      # credentials, openssl, config — touches no app data
+npx appstore-release check       # the verdict and the ordered plan
 ```
 
-### 2. Build the binary (EAS)
+`check --json` gives the same thing as structured data: `verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `rejected`, `live`, and `nextActions` is the plan.
 
-- If `eas build` fails with stale credentials (_"provisioning profile expired / no certificate with serial…"_):
-  ```bash
-  appstore-release credentials     # fresh dist cert + profile → credentials.json
-  ```
-  then set `"credentialsSource":"local"` on the eas.json production profile.
-- Build + submit the binary (export `EXPO_ASC_API_KEY_PATH/KEY_ID/ISSUER_ID` + `EXPO_APPLE_TEAM_ID` + `EXPO_APPLE_TEAM_TYPE` for non-interactive):
-  ```bash
-  eas build -p ios --profile production --non-interactive --no-wait
-  eas submit -p ios --profile production --id <buildId>
-  ```
-  Wait until the build is **VALID** (`appstore-release status`).
+### 2. Build the binary (Expo/EAS)
 
-### 3. Fill the entire listing in one shot
+Only needed when `check` reports no build. If `eas build` fails on stale credentials (_"Provisioning Profile has expired / No certificate exists with serial…"_):
 
 ```bash
-appstore-release release         # attach build → metadata → pricing → content-rights →
-                             # age-rating → category → review-info → screenshots →
-                             # subscription → check
+npx appstore-release credentials    # reuses an existing certificate when it can
 ```
 
-`release` runs the whole pipeline (idempotent) and ends with `check`, which prints the remaining **UI-only** steps. Screenshots must exist first (`config.screenshots.dir`) — see references/screenshots.md to generate them.
+then set `"credentialsSource": "local"` on the eas.json production profile. **Never pass `--allow-new-cert` without telling the user** — Apple caps the account at three distribution certificates.
 
-### 4. The two UI-only steps (hand off with exact clicks)
+```bash
+eas build -p ios --profile production --non-interactive --no-wait
+eas submit -p ios --profile production --id <buildId>
+```
 
-`check` lists these when they apply:
+### 3. Fill the listing
 
-1. **App Privacy → Data Collection**: declare the data types matching the app's privacy manifest, then **Publish**. ⚠️ If the binary ships `NSUserTrackingUsageDescription` but you declare no tracking, Publish is blocked → remove the key, rebuild (references/gotchas.md).
-2. **First-time subscription**: version page → _In-App Purchases and Subscriptions → Select → <product>_ → Save → _Add for Review → Submit_. (The API can't attach a first subscription.)
+```bash
+npx appstore-release release --dry-run    # show the user exactly what would change
+npx appstore-release release              # apply it
+```
+
+Screenshots must already exist at `config.screenshots.dir` — see references/screenshots.md for producing exact-size PNGs.
+
+### 4. Hand off the two UI-only steps
+
+`check` lists these when they apply, with the exact clicks. Apple has no API for either; do not pretend otherwise and do not attempt a workaround.
+
+1. **App Privacy → Data Collection.** Declare the data types matching the app's privacy manifest, then **Publish**. If the binary ships `NSUserTrackingUsageDescription` but you declare no tracking, Publish is blocked — the app must drop the key and be rebuilt (references/gotchas.md).
+2. **A first subscription.** Version page → _In-App Purchases and Subscriptions → Select → \<product\>_ → Save → _Add for Review → Submit_.
 
 ### 5. Submit
 
 ```bash
-appstore-release check                 # confirm nothing's missing
-appstore-release submit --submit       # app-only / updates (no first-time IAP)
+npx appstore-release check
+npx appstore-release submit --submit
 ```
 
-For a first-time subscription, the user submits in the UI (step 4.2). Verify with `status`: version + subscription both `WAITING_FOR_REVIEW`.
+`submit` computes the readiness report first and refuses unless the verdict is `ready`. If the user insists on submitting anyway, `--force` exists — tell them Apple will reject it.
+
+Verify with `status`: the version and any subscription should both be `WAITING_FOR_REVIEW`.
 
 ### Rejections
 
-On rejection the version becomes editable again (`REJECTED`/`METADATA_REJECTED`/`DEVELOPER_REJECTED`). Read the resolution-center message, fix (metadata via `release`, or rebuild for binary issues), resubmit.
+On rejection the version becomes editable again. The rejection _text_ lives in Resolution Center, which Apple does not expose through the API — the user has to read it. Then fix (metadata via `release`, or a rebuild for binary issues) and resubmit.
+
+## When something returns a 409
+
+Read references/gotchas.md before guessing. It documents the exact error strings and their causes: emoji in the description, `whatsNew` on a first version, the age-rating attribute set, `ageRatingOverride` conflicting with `ageRatingOverrideV2`, the missing price tier, the screenshot commit step.
+
+## Extending
+
+Operations live in `src/ops/`, one file each, with a uniform `{ meta, run(ctx, args) }` contract — see `src/ops/_contract.md`. Add a file, register it in `src/ops/registry.mjs`, and both the CLI and the MCP server pick it up.
 
 ## References
 
-- `references/setup.md` — key creation, app record, EAS, secrets hygiene.
-- `references/gotchas.md` — every real pitfall (read before the first run).
-- `references/screenshots.md` — generating exact-size PNGs (HTML → headless Chrome).
-- `references/config-template.json` — per-app config (validated by `lib/config.mjs`).
+- `references/setup.md` — key creation, app record, secrets hygiene.
+- `references/gotchas.md` — every pitfall hit in practice. Read before the first run.
+- `references/screenshots.md` — producing exact-size PNGs.
+- `references/config-template.json` — the config, validated against a published JSON Schema.

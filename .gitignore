@@ -8,8 +8,10 @@ dist.*
 secrets/
 .env
 
-# A user's filled config may contain personal contact info — keep the template only
+# A user's filled config carries their App Review contact details — keep the template only
 config.json
+appstore.config.json
+.appstore-release/
 
 # Node
 node_modules/

@@ -1,42 +1,137 @@
-<!doctype html><html><head><meta charset="utf-8"><title>demo</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{width:1240px;height:772px;background:radial-gradient(circle at 30% 0%,#15233b,#0a0f1a 70%);
-       display:flex;align-items:center;justify-content:center;font-family:"SF Mono",Menlo,Consolas,monospace}
-  .term{width:1140px;background:#0d1117;border:1px solid #232a36;border-radius:14px;overflow:hidden;
-        box-shadow:0 40px 90px rgba(0,0,0,.55)}
-  .bar{height:44px;background:linear-gradient(#20262f,#1a1f27);display:flex;align-items:center;padding:0 18px;gap:9px;border-bottom:1px solid #232a36}
-  .dot{width:13px;height:13px;border-radius:50%}
-  .r{background:#ff5f57}.y{background:#febc2e}.g{background:#28c840}
-  .ttl{margin-left:14px;color:#7d8797;font-size:13px}
-  .body{padding:24px 30px 30px;font-size:16.5px;line-height:1.72;color:#c9d1d9}
-  .prompt .p{color:#58a6ff}.prompt .c{color:#e6edf3;font-weight:600}
-  .h{color:#e6edf3;font-weight:700;margin-top:18px}
-  .rule{color:#30363d;letter-spacing:-1px}
-  .ok{color:#3fb950}.warn{color:#d29922}.dim{color:#8b949e}.gold{color:#e3b341;font-weight:700}
-  .mt{margin-top:20px}
-</style></head>
-<body>
-<div class="term">
-  <div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-    <span class="ttl">appstore-release — node cli.mjs release</span></div>
-  <div class="body">
-    <div class="prompt"><span class="p">~/my-app/scripts</span> <span class="c">$ node cli.mjs release</span></div>
-    <div class="h">App Store Release — listing pipeline</div>
-    <div class="rule">──────────────────────────────────────────────────────</div>
-    <div><span class="ok">✓</span> Build attach <span class="dim">— attached build 42</span></div>
-    <div><span class="ok">✓</span> Store metadata <span class="dim">— en-US: name, subtitle, description, keywords, URLs</span></div>
-    <div><span class="ok">✓</span> Pricing <span class="dim">— Free + copyright</span></div>
-    <div><span class="ok">✓</span> Content rights <span class="dim">— DOES_NOT_USE_THIRD_PARTY_CONTENT</span></div>
-    <div><span class="ok">✓</span> Age rating <span class="dim">— 4+</span></div>
-    <div><span class="ok">✓</span> Category <span class="dim">— LIFESTYLE</span></div>
-    <div><span class="ok">✓</span> Review info <span class="dim">— contact + notes</span></div>
-    <div><span class="ok">✓</span> App screenshots <span class="dim">— 6 uploaded (APP_IPHONE_67)</span></div>
-    <div><span class="ok">✓</span> Subscription <span class="dim">— pro_monthly: price, localization, review image</span></div>
-    <div><span class="ok">✓</span> Readiness check <span class="dim">— v1.2.0</span></div>
-    <div class="h gold mt">⚠ Manual steps required (Apple has no API for these)</div>
-    <div class="rule">──────────────────────────────────────────────────────</div>
-    <div><span class="warn">1.</span> App Privacy (data collection) <span class="dim">— declare data types, then Publish · ASC UI, no API</span></div>
-  </div>
-</div>
-</body></html>
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: #0d1117;
+        --chrome: #161b22;
+        --fg: #c9d1d9;
+        --dim: #6e7681;
+        --green: #3fb950;
+        --red: #f85149;
+        --gold: #d29922;
+        --blue: #58a6ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        width: 1240px;
+        height: 1010px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #010409;
+        font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      }
+      .window {
+        width: 1140px;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+        background: var(--bg);
+      }
+      .titlebar {
+        height: 40px;
+        background: var(--chrome);
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        gap: 8px;
+        border-bottom: 1px solid #21262d;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .title {
+        flex: 1;
+        text-align: center;
+        color: var(--dim);
+        font-size: 12.5px;
+        margin-right: 52px;
+      }
+      pre {
+        margin: 0;
+        padding: 22px 26px 26px;
+        color: var(--fg);
+        font-size: 13px;
+        line-height: 1.58;
+        white-space: pre-wrap;
+      }
+      .p {
+        color: var(--blue);
+      }
+      .g {
+        color: var(--green);
+      }
+      .r {
+        color: var(--red);
+      }
+      .y {
+        color: var(--gold);
+      }
+      .d {
+        color: var(--dim);
+      }
+      .b {
+        color: #f0f6fc;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="window">
+      <div class="titlebar">
+        <div class="dot" style="background: #ff5f57"></div>
+        <div class="dot" style="background: #febc2e"></div>
+        <div class="dot" style="background: #28c840"></div>
+        <div class="title">appstore-release — check</div>
+      </div>
+      <pre>
+<span class="p">$</span> appstore-release check
+
+Readiness — <span class="b">Wellness</span> · v1.0 (PREPARE_FOR_SUBMISSION)
+<span class="d">──────────────────────────────────────────────────────────────────</span>
+<span class="y">BLOCKED — there is still work this tool can do</span>
+
+<span class="g">✓</span> Version and build
+<span class="r">✗</span> Pricing, category and ratings
+<span class="g">✓</span> Store metadata
+<span class="r">✗</span> Screenshots
+<span class="d">·</span> Subscriptions
+<span class="r">✗</span> Review and submission
+
+Findings <span class="d">(4 blocking, 1 warning)</span>
+<span class="d">──────────────────────────────────────────────────────────────────</span>
+<span class="r">[fix]</span>  No price tier
+       <span class="d">Even a free app needs a price schedule; without one App Store</span>
+       <span class="d">Connect refuses "Add for Review".</span>
+<span class="r">[fix]</span>  No age rating declaration
+       <span class="d">Lives on appInfos, not the version, and needs the full attribute</span>
+       <span class="d">set including ageAssurance — a partial one returns 409.</span>
+<span class="r">[fix]</span>  3 of 5 screenshots never finished uploading
+       <span class="d">Reserved but not committed, so Apple will not use them.</span>
+<span class="y">[you]</span>  App Privacy data collection must be published by hand
+       <span class="d">Apple keeps the privacy label UI-only; every appDataUsages</span>
+       <span class="d">endpoint returns 404.</span>
+<span class="d">[warn] whatsNew is set on a first version — ASC returns 409 STATE_ERROR</span>
+
+Next, in order
+<span class="d">──────────────────────────────────────────────────────────────────</span>
+1. Run appstore-release pricing
+   <span class="p">$</span> appstore-release pricing
+2. Run appstore-release age-rating
+   <span class="p">$</span> appstore-release age-rating
+3. Run appstore-release screenshots
+   <span class="p">$</span> appstore-release screenshots
+4. Declare the data types matching the app's privacy manifest, then Publish
+   <span class="d">App Store Connect → your app → App Privacy → Edit → Publish</span>
+</pre
+      >
+    </div>
+  </body>
+</html>

@@ -59,9 +59,125 @@
         }
       }
     },
+    "ageRating": {
+      "type": "object",
+      "description": "The age-rating declaration. Every key defaults to NONE or false, and the complete set is always sent — Apple returns 409 for a partial one. Omit this block for a 4+ app.",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "alcoholTobaccoOrDrugUseOrReferences": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "contests": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "gamblingSimulated": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "gunsOrOtherWeapons": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "horrorOrFearThemes": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "matureOrSuggestiveThemes": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "medicalOrTreatmentInformation": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "profanityOrCrudeHumor": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "sexualContentGraphicAndNudity": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "sexualContentOrNudity": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "violenceCartoonOrFantasy": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "violenceRealistic": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "violenceRealisticProlongedGraphicOrSadistic": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE."
+        },
+        "advertising": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "ageAssurance": {
+          "type": "boolean",
+          "description": "Defaults to false. Required by Apple — sent as false when unset."
+        },
+        "gambling": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "healthOrWellnessTopics": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "lootBox": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "messagingAndChat": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "parentalControls": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "unrestrictedWebAccess": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "userGeneratedContent": {
+          "type": "boolean",
+          "description": "Defaults to false."
+        },
+        "kidsAgeBand": {
+          "type": ["string", "null"],
+          "enum": ["FIVE_AND_UNDER", "SIX_TO_EIGHT", "NINE_TO_ELEVEN", null],
+          "description": "Only for apps in the Kids category."
+        }
+      }
+    },
     "ageRating4Plus": {
       "type": "boolean",
-      "description": "Write the full 4+ age rating declaration. Set false to leave the declaration alone. Arbitrary ratings are not configurable yet."
+      "description": "Deprecated: set `ageRating` instead. `false` still means 'leave the declaration alone'."
     },
     "contentRights": {
       "type": "string",
@@ -69,9 +185,29 @@
       "description": "Third-party content declaration, required before review."
     },
     "price": {
-      "type": "string",
-      "enum": ["free"],
-      "description": "Only free apps are supported so far; paid price tiers are not implemented."
+      "description": "Either the string \"free\", or an amount and the territory it is quoted in. Apple takes a price point rather than an amount, so the nearest one is used.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["free"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["amount"],
+          "properties": {
+            "amount": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Target customer price."
+            },
+            "baseTerritory": {
+              "type": "string",
+              "description": "Territory the amount is quoted in. Defaults to USA."
+            }
+          }
+        }
+      ]
     },
     "review": {
       "type": "object",

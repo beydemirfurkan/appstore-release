@@ -1,6 +1,11 @@
-// Sets the version copyright and, for free apps, the Free price tier (which also
-// fills territory availability). Idempotent: skips whatever is already correct.
+// Version copyright, and the app's price schedule.
+//
+// Apple takes a price *point* id rather than an amount, and a new app is refused
+// at "Add for Review" without a schedule — even a free one. Paid tiers used to be
+// unimplemented, so a paid app could not be released through this tool at all.
+
 import { Status } from "../core/status.mjs";
+import { nearestPricePoint, resolvePrice } from "../core/price.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -11,6 +16,7 @@ export const meta = {
   mutates: true,
 };
 
+/** @param {import("../core/context.mjs").Context} ctx */
 export async function run({ client, discovery, config }) {
   const version = await discovery.editableVersion();
   const changes = [];
@@ -26,21 +32,43 @@ export async function run({ client, discovery, config }) {
     }
   }
 
-  if (config?.price === "free") {
-    const existing = await client.get(`/v1/appPriceSchedules/${discovery.appId}/manualPrices?limit=1`, {
-      throwOnError: false,
-    });
-    const hasPrice = !existing.error && (existing.data || []).length > 0;
-    if (!hasPrice) {
-      const pp = await client.get(`/v1/apps/${discovery.appId}/appPricePoints?filter[territory]=USA&limit=200`);
-      const free = (pp.data || []).find((d) => parseFloat(d.attributes.customerPrice) === 0);
-      if (!free) return { status: Status.ERROR, message: "free price point not found for USA" };
+  const price = resolvePrice(config?.price);
+  if (price) {
+    const existing = await client.get(
+      `/v1/appPriceSchedules/${discovery.appId}/manualPrices?include=appPricePoint&limit=10`,
+      { throwOnError: false },
+    );
+    const hasSchedule = !existing.error && (existing.data || []).length > 0;
+
+    const points = await client.all(
+      `/v1/apps/${discovery.appId}/appPricePoints?filter[territory]=${price.baseTerritory}`,
+      { limit: 200 },
+    );
+    const target = price.free ? nearestPricePoint(points, 0) : nearestPricePoint(points, price.amount);
+
+    if (!target) {
+      return {
+        status: Status.ERROR,
+        message: `no price points available for ${price.baseTerritory}`,
+      };
+    }
+    if (!price.free && Math.abs(target.customerPrice - price.amount) > 0.01) {
+      // Say so rather than silently charging a different amount than asked.
+      changes.push(`price ${target.customerPrice} (nearest to ${price.amount})`);
+    }
+
+    // Already on the right price point? Then there is nothing to do — replacing
+    // an identical schedule would make every run report a change.
+    const currentPointId = (existing.included ?? []).find((i) => i.type === "appPricePoints")?.id;
+    if (hasSchedule && currentPointId === target.id) {
+      // nothing to do
+    } else {
       await client.post(`/v1/appPriceSchedules`, {
         data: {
           type: "appPriceSchedules",
           relationships: {
             app: { data: { type: "apps", id: discovery.appId } },
-            baseTerritory: { data: { type: "territories", id: "USA" } },
+            baseTerritory: { data: { type: "territories", id: price.baseTerritory } },
             manualPrices: { data: [{ type: "appPrices", id: "${p1}" }] },
           },
         },
@@ -49,11 +77,13 @@ export async function run({ client, discovery, config }) {
             type: "appPrices",
             id: "${p1}",
             attributes: { startDate: null },
-            relationships: { appPricePoint: { data: { type: "appPricePoints", id: free.id } } },
+            relationships: { appPricePoint: { data: { type: "appPricePoints", id: target.id } } },
           },
         ],
       });
-      changes.push("free price");
+      if (!changes.some((c) => c.startsWith("price "))) {
+        changes.push(price.free ? "free price" : `price ${target.customerPrice} ${price.baseTerritory}`);
+      }
     }
   }
 

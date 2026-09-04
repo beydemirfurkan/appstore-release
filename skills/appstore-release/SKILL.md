@@ -13,6 +13,7 @@ Drive an entire iOS App Store submission from the App Store Connect API. The use
 2. **Config-driven, not prompt-driven.** All app content lives in the config. Run commands; do not interview the user about things the config already answers.
 3. **Ask the user only when**: the config is missing a field (say exactly which), a business decision is not in the config (subscription price, release timing), or before the single irreversible action (final submit).
 4. **Everything is idempotent.** `release` is safe to re-run; a second run with nothing changed sends nothing.
+5. **Ask about content, not about schema.** If the app is paid, has mature content, supports iPad, or ships in several languages, those are config decisions — `price`, `ageRating`, `screenshots.sets`, `locales`. Ask the user the question in their terms and write the config yourself; `npx appstore-release schema` has the exact shape.
 
 ## Setup — see references/setup.md
 

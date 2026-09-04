@@ -44,6 +44,29 @@ function walk(value, rawSchema, path, out, root) {
   if (value === undefined || rawSchema == null) return;
   const schema = deref(rawSchema, root);
 
+  // oneOf: try each branch in isolation and keep the findings of none if any
+  // branch accepts. Reporting every branch's complaints would be noise —
+  // "price must be a string" and "price must be an object" are both wrong.
+  if (Array.isArray(schema.oneOf)) {
+    const attempts = schema.oneOf.map((branch) => {
+      const branchOut = [];
+      walk(value, branch, path, branchOut, root);
+      return branchOut;
+    });
+    if (attempts.some((a) => a.length === 0)) return;
+
+    // Nothing matched. Report the branch the author clearly meant — the one
+    // whose declared type matches what they actually wrote — rather than the
+    // one with the fewest complaints, which for `price: {}` would be the string
+    // branch saying "should be string" instead of "amount is required".
+    const sameType = schema.oneOf
+      .map((branch, i) => ({ branch: deref(branch, root), findings: attempts[i] }))
+      .filter(({ branch }) => branch.type && typeMatches(value, branch.type));
+    const pool = sameType.length ? sameType.map((x) => x.findings) : attempts;
+    out.push(...pool.reduce((a, b) => (b.length < a.length ? b : a)));
+    return;
+  }
+
   if (schema.type && !typeMatches(value, schema.type)) {
     return push(
       out,

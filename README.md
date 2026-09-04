@@ -26,12 +26,20 @@ Submitting an iOS app touches ~15 App Store Connect surfaces, several of which f
 
 ## Install
 
+**As a CLI** (works with any agent that can run a shell command):
+
+```bash
+npm i -g appstore-release      # or just use npx appstore-release <command>
+```
+
 **As an agent skill** ([skills.sh](https://www.skills.sh/)):
+
 ```bash
 npx skills add beydemirfurkan/appstore-release
 ```
 
 **As a Claude Code plugin:**
+
 ```
 /plugin marketplace add beydemirfurkan/appstore-release
 /plugin install appstore-release@beydemirfurkan
@@ -52,33 +60,33 @@ export ASC_P8_PATH=/abs/AuthKey_XXXX.p8
 export ASC_APP_ID=1234567890   # numeric app id from the ASC url
 export APPSTORE_CONFIG=/abs/config.json
 
-cd skills/appstore-release/scripts
-node cli.mjs status            # read-only overview
-node cli.mjs release           # run the whole listing pipeline (idempotent)
-node cli.mjs check             # what's still missing + the UI-only steps
-node cli.mjs submit --submit   # submit the app version for review
+appstore-release status            # read-only overview
+appstore-release release           # run the whole listing pipeline (idempotent)
+appstore-release check             # what's still missing + the UI-only steps
+appstore-release submit --submit   # submit the app version for review
 ```
 
-Or just tell your agent: *"publish my app for review"* — with the skill installed it drives all of the above and asks you only for genuine decisions (subscription price, release timing) and the two UI-only steps.
+Or just tell your agent: _"publish my app for review"_ — with the skill installed it drives all of the above and asks you only for genuine decisions (subscription price, release timing) and the two UI-only steps.
 
 ## What it does
 
-| Command | Automates |
-|---|---|
-| `credentials` | fresh distribution cert + provisioning profile (fixes stale EAS credentials) |
-| `attach-build` | attach the newest VALID build to the version |
-| `metadata` | name, subtitle, description, keywords, promo, support/marketing/privacy URLs |
-| `pricing` | price tier (Free) + copyright |
-| `content-rights` | third-party content declaration |
-| `age-rating` | full 2025 age-rating declaration (4+) |
-| `category` | primary/secondary category |
-| `review-info` | App Review contact + demo account |
-| `screenshots` | upload exact-size PNGs (reserve→upload→commit) |
-| `subscription` | localization, price, group, paywall review image |
-| `submit` | create + submit the review submission |
-| `status` / `check` | read-only overview / readiness report |
+| Command            | Automates                                                                    |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `credentials`      | fresh distribution cert + provisioning profile (fixes stale EAS credentials) |
+| `attach-build`     | attach the newest VALID build to the version                                 |
+| `metadata`         | name, subtitle, description, keywords, promo, support/marketing/privacy URLs |
+| `pricing`          | price tier (Free) + copyright                                                |
+| `content-rights`   | third-party content declaration                                              |
+| `age-rating`       | full 2025 age-rating declaration (4+)                                        |
+| `category`         | primary/secondary category                                                   |
+| `review-info`      | App Review contact + demo account                                            |
+| `screenshots`      | upload exact-size PNGs (reserve→upload→commit)                               |
+| `subscription`     | localization, price, group, paywall review image                             |
+| `submit`           | create + submit the review submission                                        |
+| `status` / `check` | read-only overview / readiness report                                        |
 
 ### The two UI-only steps (Apple has no API)
+
 1. **App Privacy → Data Collection** — declare data types, then Publish.
 2. **First-time subscription** — attach it to the version and submit in the UI.
 
@@ -87,21 +95,21 @@ Or just tell your agent: *"publish my app for review"* — with the skill instal
 ## Architecture
 
 ```
+src/
+  cli.mjs             single entrypoint / dispatcher
+  core/               context (composition root) · env · config · log
+  asc/                client · jwt · discovery · assets — the App Store Connect layer
+  ops/                one file per task, uniform { meta, run(ctx) } contract
 skills/appstore-release/
   SKILL.md            the runbook an agent follows
-  scripts/
-    cli.mjs           single entrypoint / dispatcher
-    lib/              injected services, one responsibility each
-      env jwt client discovery assets config log context
-    commands/         one file per task, uniform { meta, run(ctx) } contract
   references/         setup · gotchas · screenshots · config-template
 ```
 
-Dependency injection via `lib/context.mjs`; add a capability by dropping a file in `commands/` and registering it in `cli.mjs`. See [`_contract.md`](skills/appstore-release/scripts/commands/_contract.md).
+Dependency injection via `src/core/context.mjs`; add a capability by dropping a file in `src/ops/` and registering it in `src/cli.mjs`. See [`_contract.md`](src/ops/_contract.md).
 
 ## Requirements
 
-- Node.js 18+ (uses built-in `fetch`, `crypto`).
+- Node.js 20.11+ (uses built-in `fetch`, `crypto`).
 - `openssl` (for the `credentials` command).
 - An Expo/EAS-built iOS app is assumed for the build step, but the ASC listing/submission commands work for any iOS app already uploaded to App Store Connect.
 

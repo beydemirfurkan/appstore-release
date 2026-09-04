@@ -20,7 +20,9 @@ export async function run({ client, discovery, config }) {
   }
 
   if (config?.price === "free") {
-    const existing = await client.get(`/v1/appPriceSchedules/${discovery.appId}/manualPrices?limit=1`, { throwOnError: false });
+    const existing = await client.get(`/v1/appPriceSchedules/${discovery.appId}/manualPrices?limit=1`, {
+      throwOnError: false,
+    });
     const hasPrice = !existing.error && (existing.data || []).length > 0;
     if (!hasPrice) {
       const pp = await client.get(`/v1/apps/${discovery.appId}/appPricePoints?filter[territory]=USA&limit=200`);

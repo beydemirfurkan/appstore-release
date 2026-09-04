@@ -21,7 +21,9 @@ export async function run({ client, discovery, config, log }) {
   const owner = (config.review?.contactFirstName || "Developer").replace(/[^\w ]/g, "");
 
   // 1. Private key + CSR
-  sh(`openssl req -new -newkey rsa:2048 -nodes -keyout "${outDir}/dist.key" -out "${outDir}/dist.csr" -subj "/CN=${(config.metadata?.name || "App").replace(/[^\w ]/g, "")} Distribution/O=${owner}/C=US"`);
+  sh(
+    `openssl req -new -newkey rsa:2048 -nodes -keyout "${outDir}/dist.key" -out "${outDir}/dist.csr" -subj "/CN=${(config.metadata?.name || "App").replace(/[^\w ]/g, "")} Distribution/O=${owner}/C=US"`,
+  );
   const csrContent = readFileSync(`${outDir}/dist.csr`, "utf8");
 
   // 2. Distribution certificate
@@ -34,7 +36,9 @@ export async function run({ client, discovery, config, log }) {
 
   // 3. .p12 (legacy PBE for EAS/node compatibility)
   sh(`openssl x509 -inform DER -in "${outDir}/dist.cer" -out "${outDir}/dist.pem"`);
-  sh(`openssl pkcs12 -export -legacy -inkey "${outDir}/dist.key" -in "${outDir}/dist.pem" -out "${outDir}/dist.p12" -passout pass:${password} -name "Distribution"`);
+  sh(
+    `openssl pkcs12 -export -legacy -inkey "${outDir}/dist.key" -in "${outDir}/dist.pem" -out "${outDir}/dist.p12" -passout pass:${password} -name "Distribution"`,
+  );
 
   // 4. App Store provisioning profile bound to the new cert
   const profile = (
@@ -62,8 +66,8 @@ export async function run({ client, discovery, config, log }) {
         },
       },
       null,
-      2
-    ) + "\n"
+      2,
+    ) + "\n",
   );
 
   return {

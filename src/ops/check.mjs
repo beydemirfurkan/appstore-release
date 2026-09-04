@@ -7,7 +7,9 @@ export const meta = { id: "check", title: "Readiness check", phase: "listing", n
 export async function run({ client, discovery, config, log }) {
   const version = await discovery.editableVersion();
   const vfull = (
-    await client.get(`/v1/appStoreVersions/${version.id}?fields[appStoreVersions]=versionString,appStoreState,copyright`)
+    await client.get(
+      `/v1/appStoreVersions/${version.id}?fields[appStoreVersions]=versionString,appStoreState,copyright`,
+    )
   ).data;
 
   log.section(`Readiness — v${vfull.attributes.versionString} (${vfull.attributes.appStoreState})`);
@@ -26,22 +28,28 @@ export async function run({ client, discovery, config, log }) {
 
   const locale = config?.locale;
   if (locale) {
-    const verLoc = (await client.get(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=50`)).data.find(
-      (l) => l.attributes.locale === locale
-    );
+    const verLoc = (
+      await client.get(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations?limit=50`)
+    ).data.find((l) => l.attributes.locale === locale);
     if (verLoc) {
       const la = (
-        await client.get(`/v1/appStoreVersionLocalizations/${verLoc.id}?fields[appStoreVersionLocalizations]=description,keywords,supportUrl`)
+        await client.get(
+          `/v1/appStoreVersionLocalizations/${verLoc.id}?fields[appStoreVersionLocalizations]=description,keywords,supportUrl`,
+        )
       ).data.attributes;
       mark(!!la.description, "Description");
       mark(!!la.keywords, "Keywords");
       mark(!!la.supportUrl, "Support URL");
 
-      const sets = await client.get(`/v1/appStoreVersionLocalizations/${verLoc.id}/appScreenshotSets?include=appScreenshots`);
-      let total = 0, complete = 0;
+      const sets = await client.get(
+        `/v1/appStoreVersionLocalizations/${verLoc.id}/appScreenshotSets?include=appScreenshots`,
+      );
+      let total = 0,
+        complete = 0;
       for (const s of sets.data) {
         const shots = (sets.included || []).filter(
-          (x) => x.type === "appScreenshots" && (s.relationships?.appScreenshots?.data || []).some((d) => d.id === x.id)
+          (x) =>
+            x.type === "appScreenshots" && (s.relationships?.appScreenshots?.data || []).some((d) => d.id === x.id),
         );
         total += shots.length;
         complete += shots.filter((x) => x.attributes.assetDeliveryState?.state === "COMPLETE").length;
@@ -50,14 +58,20 @@ export async function run({ client, discovery, config, log }) {
     }
   }
 
-  const price = await client.get(`/v1/appPriceSchedules/${discovery.appId}/manualPrices?limit=1`, { throwOnError: false });
+  const price = await client.get(`/v1/appPriceSchedules/${discovery.appId}/manualPrices?limit=1`, {
+    throwOnError: false,
+  });
   mark(!price.error && (price.data || []).length > 0, "Price tier set");
 
   let subReadyToSubmit = false;
   const productId = config?.subscription?.productId;
   if (productId) {
     const { sub } = await discovery.subscription(productId);
-    mark(sub && sub.attributes.state !== "MISSING_METADATA", `Subscription ${productId}`, sub?.attributes?.state || "not found");
+    mark(
+      sub && sub.attributes.state !== "MISSING_METADATA",
+      `Subscription ${productId}`,
+      sub?.attributes?.state || "not found",
+    );
     subReadyToSubmit = sub?.attributes?.state === "READY_TO_SUBMIT";
   }
 
@@ -73,7 +87,8 @@ export async function run({ client, discovery, config, log }) {
       id: "first-subscription",
       title: "First subscription",
       status: Status.MANUAL,
-      message: "attach to the version + submit in the ASC UI (version page → In-App Purchases and Subscriptions → Select → Save → Add for Review → Submit)",
+      message:
+        "attach to the version + submit in the ASC UI (version page → In-App Purchases and Subscriptions → Select → Save → Add for Review → Submit)",
     });
   }
 

@@ -11,7 +11,9 @@ export async function run({ client, discovery, uploader, config }) {
   if (!dir) return { status: Status.ERROR, message: "config.screenshots.dir is required" };
 
   const absDir = resolve(process.cwd(), dir);
-  const files = readdirSync(absDir).filter((f) => f.toLowerCase().endsWith(".png")).sort();
+  const files = readdirSync(absDir)
+    .filter((f) => f.toLowerCase().endsWith(".png"))
+    .sort();
   if (!files.length) return { status: Status.ERROR, message: `no PNGs found in ${dir}` };
 
   const displayType = config.screenshots.displayType || "APP_IPHONE_67";
@@ -26,7 +28,9 @@ export async function run({ client, discovery, uploader, config }) {
         data: {
           type: "appScreenshotSets",
           attributes: { screenshotDisplayType: displayType },
-          relationships: { appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: verLoc.id } } },
+          relationships: {
+            appStoreVersionLocalization: { data: { type: "appStoreVersionLocalizations", id: verLoc.id } },
+          },
         },
       })
     ).data;
@@ -44,7 +48,7 @@ export async function run({ client, discovery, uploader, config }) {
         relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: set.id } } },
         filePath: resolve(absDir, file),
         fileName: file,
-      })
+      }),
     );
   }
   await client.patch(`/v1/appScreenshotSets/${set.id}/relationships/appScreenshots`, {

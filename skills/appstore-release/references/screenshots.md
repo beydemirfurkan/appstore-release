@@ -1,8 +1,9 @@
 # Generating App Store screenshots
 
-App Store requires exact-pixel PNGs. The largest iPhone slot the API accepts is **`APP_IPHONE_67` = 1290×2796** (covers 6.7″/6.9″). `node cli.mjs screenshots` uploads whatever PNGs are in `config.screenshots.dir` — this doc is how to *produce* them.
+App Store requires exact-pixel PNGs. The largest iPhone slot the API accepts is **`APP_IPHONE_67` = 1290×2796** (covers 6.7″/6.9″). `appstore-release screenshots` uploads whatever PNGs are in `config.screenshots.dir` — this doc is how to _produce_ them.
 
 Two honest options (ask the user):
+
 1. **Real captures + frame** — run the app in the iOS Simulator, screenshot real screens, add a device frame + caption. Most accurate, lowest rejection risk.
 2. **Designed, faithful mockups** — recreate the real screens in HTML from the code (exact colors, strings, layout) inside a device frame with a marketing caption. Fast, no simulator. **Must mirror the real app** — Apple rejects screenshots that misrepresent it.
 
@@ -20,10 +21,12 @@ Two honest options (ask the user):
      --window-size=1290,2796 --screenshot=shot-1.png "http://localhost:8799/shot-1.html"
    ```
 3. Verify each: `sips -g pixelWidth -g pixelHeight -g hasAlpha file.png` → must be exactly 1290×2796. (App icons additionally need `hasAlpha: no`.)
-4. Put the final PNGs in `config.screenshots.dir` (filename order = display order) and run `node cli.mjs screenshots`.
+4. Put the final PNGs in `config.screenshots.dir` (filename order = display order) and run `appstore-release screenshots`.
 
 ## Caption structure that worked
+
 Per shot: premium background, a small gold uppercase eyebrow, a ~92px bold headline, a ~40px subheadline, then a device-framed screen (Dynamic Island + 9:41 status bar) bleeding off the bottom edge. Keep caption placement + device size consistent across all shots.
 
 ## Paywall review screenshot (for subscriptions)
+
 The subscription review screenshot should clearly show the purchase UI: plan name, **price**, subscribe button, features, auto-renew fine print. Render full-screen (no marketing caption) at 1290×2796 and pass as `config.subscription.reviewScreenshot`.

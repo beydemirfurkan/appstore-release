@@ -46,12 +46,18 @@ export async function run({ client, discovery, uploader, config }) {
 
   // Price (nearest price point in the base territory; replaces existing)
   if (cfg.priceTerritory && cfg.priceAmount != null) {
-    const pp = await client.get(`/v1/subscriptions/${sub.id}/pricePoints?filter[territory]=${cfg.priceTerritory}&limit=200`);
+    const pp = await client.get(
+      `/v1/subscriptions/${sub.id}/pricePoints?filter[territory]=${cfg.priceTerritory}&limit=200`,
+    );
     const pts = (pp.data || []).map((d) => ({ id: d.id, price: parseFloat(d.attributes.customerPrice) }));
     if (pts.length) {
-      const target = pts.reduce((best, c) => (Math.abs(c.price - cfg.priceAmount) < Math.abs(best.price - cfg.priceAmount) ? c : best), pts[0]);
+      const target = pts.reduce(
+        (best, c) => (Math.abs(c.price - cfg.priceAmount) < Math.abs(best.price - cfg.priceAmount) ? c : best),
+        pts[0],
+      );
       const current = await client.get(`/v1/subscriptions/${sub.id}/prices?limit=50`);
-      for (const pr of current.data || []) await client.delete(`/v1/subscriptionPrices/${pr.id}`, { throwOnError: false });
+      for (const pr of current.data || [])
+        await client.delete(`/v1/subscriptionPrices/${pr.id}`, { throwOnError: false });
       await client.post(`/v1/subscriptionPrices`, {
         data: {
           type: "subscriptionPrices",

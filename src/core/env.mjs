@@ -20,13 +20,21 @@ export class EnvironmentError extends Error {}
 export function readEnvironment({ requireAppId = true, requireConfig = false } = {}) {
   const { ASC_KEY_ID, ASC_ISSUER_ID, ASC_P8_PATH, ASC_APP_ID, APPSTORE_CONFIG } = process.env;
 
-  const missing = [];
-  if (!ASC_KEY_ID) missing.push("ASC_KEY_ID");
-  if (!ASC_ISSUER_ID) missing.push("ASC_ISSUER_ID");
-  if (!ASC_P8_PATH) missing.push("ASC_P8_PATH");
-  if (requireAppId && !ASC_APP_ID) missing.push("ASC_APP_ID");
-  if (requireConfig && !APPSTORE_CONFIG) missing.push("APPSTORE_CONFIG");
-  if (missing.length) {
+  // One combined guard rather than a `missing.length` check afterwards, so the
+  // three required values are narrowed to `string` for the rest of the function.
+  if (
+    !ASC_KEY_ID ||
+    !ASC_ISSUER_ID ||
+    !ASC_P8_PATH ||
+    (requireAppId && !ASC_APP_ID) ||
+    (requireConfig && !APPSTORE_CONFIG)
+  ) {
+    const missing = [];
+    if (!ASC_KEY_ID) missing.push("ASC_KEY_ID");
+    if (!ASC_ISSUER_ID) missing.push("ASC_ISSUER_ID");
+    if (!ASC_P8_PATH) missing.push("ASC_P8_PATH");
+    if (requireAppId && !ASC_APP_ID) missing.push("ASC_APP_ID");
+    if (requireConfig && !APPSTORE_CONFIG) missing.push("APPSTORE_CONFIG");
     throw new EnvironmentError(`Missing required environment variables: ${missing.join(", ")}`);
   }
 

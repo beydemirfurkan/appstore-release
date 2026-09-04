@@ -35,7 +35,8 @@ export async function run({ discovery, client, config }) {
     marketingUrl: m.marketingUrl,
   };
   // whatsNew is only editable on updates, not the first submission.
-  const isFirst = version.attributes.versionString === "1.0" || version.attributes.appStoreState === "PREPARE_FOR_SUBMISSION";
+  const isFirst =
+    version.attributes.versionString === "1.0" || version.attributes.appStoreState === "PREPARE_FOR_SUBMISSION";
   if (m.whatsNew && !isFirst) attributes.whatsNew = m.whatsNew;
 
   await client.patch(`/v1/appStoreVersionLocalizations/${verLoc.id}`, {

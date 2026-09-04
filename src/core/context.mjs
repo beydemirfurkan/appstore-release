@@ -16,6 +16,20 @@ import { createLogger } from "./log.mjs";
  * @property {AssetUploader} uploader
  * @property {object|null} config
  * @property {ReturnType<typeof createLogger>} log
+ * @property {CliOptions} [options]  attached by the dispatcher, not by createContext
+ */
+
+/**
+ * @typedef {Object} CliOptions
+ * @property {boolean} [submit]  finalize the review submission
+ * @property {boolean} [json]    emit the machine-readable summary
+ * @property {string}  [build]   attach a specific build instead of the newest VALID one
+ */
+
+/**
+ * What every operation actually receives. `discovery` is null only when no app id
+ * was supplied, and the dispatcher always requires one before running an operation.
+ * @typedef {Context & { discovery: Discovery }} OperationContext
  */
 
 /** @returns {Context} */

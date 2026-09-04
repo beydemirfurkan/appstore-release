@@ -10,6 +10,7 @@ const OPEN_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "UNR
 
 export const meta = { id: "submit", title: "Submit for review", phase: "submit", needs: [] };
 
+/** @param {import("../core/context.mjs").OperationContext} ctx */
 export async function run({ client, discovery, config, options = {} }) {
   const appId = discovery.appId;
 
@@ -30,13 +31,17 @@ export async function run({ client, discovery, config, options = {} }) {
   // Reuse an open submission or create one.
   const existing = await client.get(
     `/v1/reviewSubmissions?filter[app]=${appId}&filter[state]=${OPEN_STATES.join(",")}&limit=5`,
-    { throwOnError: false }
+    { throwOnError: false },
   );
   let submission = existing.error ? null : (existing.data || []).find((s) => s.attributes.state !== "COMPLETE");
   if (!submission) {
     submission = (
       await client.post(`/v1/reviewSubmissions`, {
-        data: { type: "reviewSubmissions", attributes: { platform: "IOS" }, relationships: { app: { data: { type: "apps", id: appId } } } },
+        data: {
+          type: "reviewSubmissions",
+          attributes: { platform: "IOS" },
+          relationships: { app: { data: { type: "apps", id: appId } } },
+        },
       })
     ).data;
   }
@@ -54,7 +59,7 @@ export async function run({ client, discovery, config, options = {} }) {
         },
       },
     },
-    { throwOnError: false }
+    { throwOnError: false },
   );
   if (add.error && !/cannot be reviewed/i.test(add.error.message) && add.error.status !== 409) {
     // "cannot be reviewed" means other required items are still missing — surface it.
@@ -71,7 +76,7 @@ export async function run({ client, discovery, config, options = {} }) {
   const done = await client.patch(
     `/v1/reviewSubmissions/${submission.id}`,
     { data: { type: "reviewSubmissions", id: submission.id, attributes: { submitted: true } } },
-    { throwOnError: false }
+    { throwOnError: false },
   );
   if (done.error) return { status: Status.ERROR, message: done.error.message };
   return { status: Status.CHANGED, message: "submitted to App Review" };

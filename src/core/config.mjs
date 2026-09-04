@@ -22,7 +22,7 @@ export function loadConfig(path) {
   try {
     return JSON.parse(raw);
   } catch (e) {
-    throw new ConfigError(`Config is not valid JSON: ${e.message}`);
+    throw new ConfigError(`Config is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -54,8 +54,10 @@ export function validateConfig(config, { needs = [] } = {}) {
     need("metadata.privacyPolicyUrl", m.privacyPolicyUrl);
     if (m.subtitle && m.subtitle.length > 30) warnings.push("metadata.subtitle exceeds 30 chars");
     if (m.keywords && m.keywords.length > 100) warnings.push("metadata.keywords exceeds 100 chars");
-    if (m.description && EMOJI_RE.test(m.description)) warnings.push("metadata.description contains emoji — ASC will reject it");
-    if (m.promotionalText && m.promotionalText.length > 170) warnings.push("metadata.promotionalText exceeds 170 chars");
+    if (m.description && EMOJI_RE.test(m.description))
+      warnings.push("metadata.description contains emoji — ASC will reject it");
+    if (m.promotionalText && m.promotionalText.length > 170)
+      warnings.push("metadata.promotionalText exceeds 170 chars");
   }
   if (needs.includes("pricing")) need("metadata.copyright", config.metadata?.copyright);
   if (needs.includes("category")) need("category.primary", config.category?.primary);

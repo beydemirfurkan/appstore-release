@@ -1,0 +1,4 @@
+node_modules/
+types/
+test/fixtures/
+docs/demo.html

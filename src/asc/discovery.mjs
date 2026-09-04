@@ -33,7 +33,7 @@ export class Discovery {
   editableVersion() {
     return this._once("editableVersion", async () => {
       const r = await this.client.get(
-        `/v1/apps/${this.appId}/appStoreVersions?limit=10&fields[appStoreVersions]=versionString,appStoreState,platform`
+        `/v1/apps/${this.appId}/appStoreVersions?limit=10&fields[appStoreVersions]=versionString,appStoreState,platform`,
       );
       return r.data.find((v) => EDITABLE_STATES.includes(v.attributes.appStoreState)) || r.data[0];
     });
@@ -59,7 +59,7 @@ export class Discovery {
   appInfo() {
     return this._once("appInfo", async () => {
       const r = await this.client.get(
-        `/v1/apps/${this.appId}/appInfos?include=primaryCategory,secondaryCategory,ageRatingDeclaration`
+        `/v1/apps/${this.appId}/appInfos?include=primaryCategory,secondaryCategory,ageRatingDeclaration`,
       );
       const info =
         r.data.find((i) => ["PREPARE_FOR_SUBMISSION", "READY_FOR_DISTRIBUTION"].includes(i.attributes.appStoreState)) ||
@@ -93,7 +93,7 @@ export class Discovery {
   async latestBuild(versionFilter) {
     const vf = versionFilter ? `&filter[version]=${versionFilter}` : "";
     const r = await this.client.get(
-      `/v1/builds?filter[app]=${this.appId}${vf}&limit=1&sort=-uploadedDate&fields[builds]=version,processingState,uploadedDate`
+      `/v1/builds?filter[app]=${this.appId}${vf}&limit=1&sort=-uploadedDate&fields[builds]=version,processingState,uploadedDate`,
     );
     return r.data[0];
   }
@@ -101,7 +101,7 @@ export class Discovery {
   /** Newest VALID build (ready to attach). */
   async latestValidBuild() {
     const r = await this.client.get(
-      `/v1/builds?filter[app]=${this.appId}&filter[processingState]=VALID&limit=1&sort=-uploadedDate&fields[builds]=version`
+      `/v1/builds?filter[app]=${this.appId}&filter[processingState]=VALID&limit=1&sort=-uploadedDate&fields[builds]=version`,
     );
     return r.data[0];
   }

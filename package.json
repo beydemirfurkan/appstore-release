@@ -1,0 +1,68 @@
+{
+  "name": "appstore-release",
+  "version": "2.0.0",
+  "description": "Ship an iOS app to App Store review end-to-end via the App Store Connect API \u2014 an opinionated, idempotent submission pipeline with a readiness report, for humans and AI agents.",
+  "keywords": [
+    "app-store",
+    "app-store-connect",
+    "ios",
+    "asc",
+    "submission",
+    "release",
+    "automation",
+    "mcp",
+    "mcp-server",
+    "ai-agent",
+    "claude",
+    "expo",
+    "eas"
+  ],
+  "homepage": "https://github.com/beydemirfurkan/appstore-release",
+  "bugs": "https://github.com/beydemirfurkan/appstore-release/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beydemirfurkan/appstore-release.git"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Furkan Beydemir",
+    "url": "https://github.com/beydemirfurkan"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "bin": {
+    "appstore-release": "src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "schemas",
+    "types",
+    "skills",
+    ".claude-plugin"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "types": "tsc --emitDeclarationOnly --declaration --outDir types",
+    "manifests:sync": "node scripts/sync-manifests.mjs",
+    "manifests:check": "node scripts/sync-manifests.mjs --check",
+    "test": "node --test test/",
+    "version": "npm run manifests:sync && git add .claude-plugin skills/appstore-release/SKILL.md",
+    "prepack": "npm run manifests:check"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3"
+  }
+}

@@ -234,3 +234,60 @@ test("locales present in App Store Connect but absent from the config are surfac
   assert.ok(f, "an unmanaged locale must not look accounted for");
   assert.match(f.detail, /de-DE/);
 });
+
+// ── screenshots across display types and locales ──────────────────────────────
+
+test("screenshot sets expand across display types and locales", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const { resolveScreenshotSets, declaredDisplayTypes } = await import("../src/core/screenshots.mjs");
+
+  const root = mkdtempSync(join(tmpdir(), "asr-shots-"));
+  for (const d of ["iphone", "iphone/tr", "ipad"]) mkdirSync(join(root, d), { recursive: true });
+  for (const f of ["iphone/01.png", "iphone/tr/01.png", "ipad/01.png"]) writeFileSync(join(root, f), "x");
+
+  const config = {
+    locale: "en-US",
+    locales: { "en-US": {}, tr: {} },
+    screenshots: {
+      sets: [
+        { displayType: "APP_IPHONE_67", dir: "./iphone" },
+        { displayType: "APP_IPAD_PRO_3GEN_129", dir: "./ipad" },
+      ],
+    },
+  };
+  const resolve = (p) => join(root, p);
+  const { sets } = resolveScreenshotSets(config, resolve, ["en-US", "tr"]);
+
+  assert.deepEqual(
+    sets.map((s) => `${s.displayType}/${s.locale}`),
+    ["APP_IPHONE_67/en-US", "APP_IPHONE_67/tr", "APP_IPAD_PRO_3GEN_129/en-US", "APP_IPAD_PRO_3GEN_129/tr"],
+  );
+  // A locale subdirectory overrides the base directory for that locale only.
+  const dirOf = (dt, locale) => {
+    const found = sets.find((s) => s.displayType === dt && s.locale === locale);
+    assert.ok(found, `${dt}/${locale} was not resolved`);
+    return found.dir;
+  };
+  assert.equal(dirOf("APP_IPHONE_67", "tr"), join(root, "iphone/tr"));
+  assert.equal(dirOf("APP_IPHONE_67", "en-US"), join(root, "iphone"));
+  // iPad has no per-locale subdirectory, so both locales share the base one.
+  assert.equal(
+    sets.filter((s) => s.displayType === "APP_IPAD_PRO_3GEN_129").every((s) => s.dir === join(root, "ipad")),
+    true,
+  );
+
+  assert.deepEqual(declaredDisplayTypes(config), ["APP_IPHONE_67", "APP_IPAD_PRO_3GEN_129"]);
+  assert.deepEqual(declaredDisplayTypes({ screenshots: { dir: "./x" } }), ["APP_IPHONE_67"]);
+});
+
+test("a display type with no local files is reported, not silently skipped", async () => {
+  const { resolveScreenshotSets } = await import("../src/core/screenshots.mjs");
+  const root = mkdtempSync(join(tmpdir(), "asr-shots2-"));
+  const { missing } = resolveScreenshotSets(
+    { screenshots: { sets: [{ displayType: "APP_IPAD_PRO_129", dir: "./nope" }] } },
+    (p) => join(root, p),
+    ["en-US"],
+  );
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].displayType, "APP_IPAD_PRO_129");
+});

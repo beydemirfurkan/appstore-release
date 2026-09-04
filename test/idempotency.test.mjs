@@ -101,8 +101,9 @@ test("re-uploading unchanged screenshots uploads nothing and deletes nothing", a
   const res = await runOperation("screenshots", ctx, { prune: true });
 
   assert.equal(res.status, Status.OK, res.message);
-  assert.equal(res.details.uploaded.length, 0);
-  assert.equal(res.details.deleted.length, 0);
+  assert.equal(res.details.uploaded, 0);
+  assert.equal(res.details.deleted, 0);
+  assert.equal(res.details.sets.length, 1, "one display type, one locale");
   assert.deepEqual(
     mock.mutations().filter((m) => m.method === "DELETE"),
     [],
@@ -115,7 +116,7 @@ test("re-uploading unchanged screenshots uploads nothing and deletes nothing", a
   // Including the ordering PATCH: a run that changes nothing must send nothing,
   // or the idempotency claim is only nearly true.
   assert.deepEqual(mock.mutations(), [], "an unchanged run must be write-free");
-  assert.equal(res.details.reordered, false);
+  assert.equal(res.details.sets[0].reordered, false);
 });
 
 test("only the changed file is uploaded, and the untouched one survives", async () => {
@@ -127,7 +128,7 @@ test("only the changed file is uploaded, and the untouched one survives", async 
   const res = await runOperation("screenshots", ctx, { prune: true });
 
   assert.equal(res.status, Status.CHANGED);
-  assert.deepEqual(res.details.uploaded, ["02.png"]);
+  assert.deepEqual(res.details.sets[0].uploaded, ["02.png"]);
   assert.equal(res.details.unchanged, 1);
   const deletes = mock.mutations().filter((m) => m.method === "DELETE");
   assert.equal(deletes.length, 1, "only the superseded screenshot should go");
@@ -140,7 +141,7 @@ test("a screenshot that never finished uploading is replaced, not left to rot", 
 
   const res = await runOperation("screenshots", ctx, { prune: false });
 
-  assert.deepEqual(res.details.uploaded, ["01.png"]);
+  assert.deepEqual(res.details.sets[0].uploaded, ["01.png"]);
   assert.equal(
     mock.mutations().filter((m) => m.method === "DELETE").length,
     1,
@@ -156,7 +157,7 @@ test("without prune, an orphan is kept and reported instead of deleted", async (
   const res = await runOperation("screenshots", ctx, { prune: false });
 
   assert.equal(mock.mutations().filter((m) => m.method === "DELETE").length, 0);
-  assert.ok(res.findings.some((f) => f.id === "screenshots.orphans.kept"));
+  assert.ok(res.findings.some((f) => f.id.startsWith("screenshots.orphans.kept")));
 });
 
 test("a wrongly sized PNG is refused before anything is sent", async () => {
@@ -166,7 +167,7 @@ test("a wrongly sized PNG is refused before anything is sent", async () => {
   const res = await runOperation("screenshots", ctx);
 
   assert.equal(res.status, Status.ERROR);
-  assert.ok(res.findings.some((f) => f.id === "screenshots.dimensions.invalid"));
+  assert.ok(res.findings.some((f) => f.id.startsWith("screenshots.dimensions.invalid")));
   assert.equal(mock.calls.length, 0, "it must not reach App Store Connect at all");
 });
 

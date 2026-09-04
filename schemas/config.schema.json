@@ -117,6 +117,7 @@
     },
     "screenshots": {
       "type": "object",
+      "description": "Where the store screenshots live. Use `dir` alone for one device size, or `sets` for several. In either case a subdirectory named after a locale (./shots/tr/) overrides the base directory for that locale.",
       "additionalProperties": false,
       "properties": {
         "$comment": {
@@ -134,11 +135,39 @@
             "APP_IPAD_PRO_129",
             "APP_IPAD_PRO_3GEN_11"
           ],
-          "description": "APP_IPHONE_67 is 1290×2796 and the largest iPhone slot — it covers both 6.7\" and 6.9\". There is no APP_IPHONE_69."
+          "description": "The single device size, when `sets` is not used. APP_IPHONE_67 is 1290×2796 and covers both 6.7\" and 6.9\" — there is no APP_IPHONE_69."
         },
         "dir": {
           "type": "string",
           "description": "Directory of exact-size PNGs, relative to this config file. Filename order is display order, and it must contain nothing but store screenshots."
+        },
+        "sets": {
+          "type": "array",
+          "description": "One entry per device size. Required when the app supports iPad: Apple will not accept a tablet-capable build with no iPad screenshots.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["displayType"],
+            "properties": {
+              "displayType": {
+                "type": "string",
+                "enum": [
+                  "APP_IPHONE_67",
+                  "APP_IPHONE_65",
+                  "APP_IPHONE_61",
+                  "APP_IPHONE_58",
+                  "APP_IPHONE_55",
+                  "APP_IPAD_PRO_3GEN_129",
+                  "APP_IPAD_PRO_129",
+                  "APP_IPAD_PRO_3GEN_11"
+                ]
+              },
+              "dir": {
+                "type": "string",
+                "description": "Directory for this device size. Defaults to screenshots.dir."
+              }
+            }
+          }
         }
       }
     },

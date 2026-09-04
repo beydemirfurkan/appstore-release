@@ -4,6 +4,7 @@
 
 ### Added
 
+- **Multiple screenshot device sizes.** `screenshots.displayType` handled exactly one, so an app supporting iPad could not be submitted at all — Apple requires an iPad set for a tablet-capable build and there was no way to express one. `screenshots.sets` takes an entry per device size, and a subdirectory named after a locale (`./shots/tr/`) overrides the base directory for that locale, so a multi-locale multi-device config does not become a matrix written out by hand. Each set is diffed and reported independently.
 - **Multi-locale listings.** `config.locale` was a single string, so an app listed in more than one language got exactly one localization filled and the rest left empty — which Apple rejects, with nothing here saying so. A `locales` block, keyed by locale code, now describes as many as you like; `metadata` is the default for all of them and each entry overrides only what differs. Every configured locale is written, validated and reported on, and a locale present in App Store Connect but absent from the config is surfaced rather than left looking accounted for. The flat single-locale form is unchanged.
 
 ## 2.0.0

@@ -64,7 +64,7 @@ npx appstore-release release --dry-run    # show the user exactly what would cha
 npx appstore-release release              # apply it
 ```
 
-Screenshots must already exist at `config.screenshots.dir` — see references/screenshots.md for producing exact-size PNGs.
+Screenshots must already exist at `config.screenshots.dir` — see references/screenshots.md for producing exact-size PNGs. If the app supports iPad, it needs an iPad set too: use `config.screenshots.sets` with one entry per device size. A locale subdirectory (`./shots/tr/`) overrides the base directory for that locale.
 
 ### 4. Hand off the two UI-only steps
 

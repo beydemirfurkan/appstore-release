@@ -1,6 +1,6 @@
 // Reports whether the editable version is ready to submit, then records the two
 // UI-only steps Apple exposes no API for (App Privacy; first-time subscription).
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "check", title: "Readiness check", phase: "listing", needs: [] };
 

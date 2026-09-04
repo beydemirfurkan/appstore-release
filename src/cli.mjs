@@ -9,22 +9,22 @@
 //   node cli.mjs submit --submit        submit the app version for review
 //
 // Env: ASC_KEY_ID, ASC_ISSUER_ID, ASC_P8_PATH, ASC_APP_ID, APPSTORE_CONFIG.
-import { createContext } from "./lib/context.mjs";
-import { Status } from "./lib/log.mjs";
+import { createContext } from "./core/context.mjs";
+import { Status } from "./core/log.mjs";
 
-import * as status from "./commands/status.mjs";
-import * as check from "./commands/check.mjs";
-import * as credentials from "./commands/credentials.mjs";
-import * as attachBuild from "./commands/attach-build.mjs";
-import * as metadata from "./commands/metadata.mjs";
-import * as pricing from "./commands/pricing.mjs";
-import * as contentRights from "./commands/content-rights.mjs";
-import * as ageRating from "./commands/age-rating.mjs";
-import * as category from "./commands/category.mjs";
-import * as reviewInfo from "./commands/review-info.mjs";
-import * as screenshots from "./commands/screenshots.mjs";
-import * as subscription from "./commands/subscription.mjs";
-import * as submit from "./commands/submit.mjs";
+import * as status from "./ops/status.mjs";
+import * as check from "./ops/check.mjs";
+import * as credentials from "./ops/credentials.mjs";
+import * as attachBuild from "./ops/attach-build.mjs";
+import * as metadata from "./ops/metadata.mjs";
+import * as pricing from "./ops/pricing.mjs";
+import * as contentRights from "./ops/content-rights.mjs";
+import * as ageRating from "./ops/age-rating.mjs";
+import * as category from "./ops/category.mjs";
+import * as reviewInfo from "./ops/review-info.mjs";
+import * as screenshots from "./ops/screenshots.mjs";
+import * as subscription from "./ops/subscription.mjs";
+import * as submit from "./ops/submit.mjs";
 
 const REGISTRY = {
   status, check, credentials, submit,

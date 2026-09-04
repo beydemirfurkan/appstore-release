@@ -1,8 +1,8 @@
 // Uploads the textual store listing for the configured locale.
 // App Info: name, subtitle, privacy policy URL.  Version: description, keywords,
 // promotional text, support/marketing URLs, (whatsNew only for non-first versions).
-import { Status } from "../lib/log.mjs";
-import { validateConfig } from "../lib/config.mjs";
+import { Status } from "../core/log.mjs";
+import { validateConfig } from "../core/config.mjs";
 
 export const meta = { id: "metadata", title: "Store metadata", phase: "listing", needs: ["metadata"] };
 

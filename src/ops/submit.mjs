@@ -4,7 +4,7 @@
 // subscription cannot be attached via the API. If the config declares a subscription that
 // is not yet in review, this command returns MANUAL and does NOT submit — the user must
 // attach it on the version page and submit in the ASC UI (bundling app + subscription).
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 const OPEN_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES", "COMPLETING"];
 

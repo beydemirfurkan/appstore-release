@@ -1,5 +1,5 @@
 // Declares whether the app uses third-party content (required before submission).
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "content-rights", title: "Content rights", phase: "listing", needs: [] };
 

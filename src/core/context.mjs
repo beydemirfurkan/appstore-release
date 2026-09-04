@@ -1,10 +1,10 @@
 // Composition root. Single responsibility: wire the dependencies once and hand every
 // command the same context (dependency injection — commands never construct their own deps).
 import { readEnvironment } from "./env.mjs";
-import { createTokenProvider } from "./jwt.mjs";
-import { AscClient } from "./client.mjs";
-import { Discovery } from "./discovery.mjs";
-import { AssetUploader } from "./assets.mjs";
+import { createTokenProvider } from "../asc/jwt.mjs";
+import { AscClient } from "../asc/client.mjs";
+import { Discovery } from "../asc/discovery.mjs";
+import { AssetUploader } from "../asc/assets.mjs";
 import { loadConfig } from "./config.mjs";
 import { createLogger } from "./log.mjs";
 

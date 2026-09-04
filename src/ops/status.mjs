@@ -1,5 +1,5 @@
 // Read-only overview of the app's ASC state. Reports via ctx.log; mutates nothing.
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "status", title: "Status", phase: "listing", needs: [] };
 

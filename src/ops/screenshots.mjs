@@ -2,7 +2,7 @@
 // replacing whatever is there. Filename order = display order.
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "screenshots", title: "Screenshots", phase: "listing", needs: ["screenshots"] };
 

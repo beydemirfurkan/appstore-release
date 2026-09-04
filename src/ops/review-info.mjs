@@ -1,5 +1,5 @@
 // Sets the App Review contact info (and optional demo account) on the version.
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "review-info", title: "App Review info", phase: "listing", needs: ["review"] };
 

@@ -1,6 +1,6 @@
 // Sets the version copyright and, for free apps, the Free price tier (which also
 // fills territory availability). Idempotent: skips whatever is already correct.
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "pricing", title: "Pricing + copyright", phase: "listing", needs: ["pricing"] };
 

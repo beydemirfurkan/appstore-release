@@ -1,5 +1,5 @@
 // Attaches the newest VALID build (or a specific one via --build) to the editable version.
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "attach-build", title: "Attach build", phase: "listing", needs: [] };
 

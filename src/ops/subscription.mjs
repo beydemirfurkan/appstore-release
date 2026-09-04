@@ -2,7 +2,7 @@
 // the App Review paywall screenshot) so it leaves MISSING_METADATA → READY_TO_SUBMIT.
 // Note: attaching a FIRST-TIME subscription to the version + submitting is UI-only (see submit.mjs).
 import { resolve } from "node:path";
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "subscription", title: "Subscription", phase: "listing", needs: ["subscription"] };
 

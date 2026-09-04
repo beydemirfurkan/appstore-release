@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { Status } from "../lib/log.mjs";
+import { Status } from "../core/log.mjs";
 
 export const meta = { id: "credentials", title: "iOS distribution credentials", phase: "build", needs: [] };
 

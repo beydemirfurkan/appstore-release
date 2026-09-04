@@ -5,8 +5,10 @@
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const Ajv = require("ajv/dist/2020.js");
-const addFormats = require("ajv-formats");
+// ajv ships CJS with a self-referential `.default`; going through it keeps both
+// the runtime and the type checker happy.
+const Ajv = require("ajv/dist/2020.js").default;
+const addFormats = require("ajv-formats").default;
 
 const schema = require("../schemas/config.schema.json");
 const template = require("../skills/appstore-release/references/config-template.json");
@@ -18,7 +20,8 @@ let validate;
 try {
   validate = ajv.compile(schema);
 } catch (e) {
-  console.error(`✗ schemas/config.schema.json is not valid draft 2020-12:\n  ${e.message}`);
+  const message = e instanceof Error ? e.message : String(e);
+  console.error(`✗ schemas/config.schema.json is not valid draft 2020-12:\n  ${message}`);
   process.exit(1);
 }
 

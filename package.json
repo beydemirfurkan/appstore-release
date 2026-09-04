@@ -53,7 +53,8 @@
     "test": "node --test \"test/**/*.test.mjs\"",
     "version": "npm run manifests:sync && git add .claude-plugin skills/appstore-release/SKILL.md",
     "prepack": "npm run manifests:check",
-    "schema:validate": "node scripts/validate-schema.mjs"
+    "schema:validate": "node scripts/validate-schema.mjs",
+    "verify": "npm run typecheck && npm run format:check && npm run schema:validate && npm run manifests:check && npm test"
   },
   "publishConfig": {
     "access": "public",

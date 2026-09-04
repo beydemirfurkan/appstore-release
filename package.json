@@ -33,14 +33,16 @@
     "node": ">=20.11"
   },
   "bin": {
-    "appstore-release": "src/cli.mjs"
+    "appstore-release": "src/cli.mjs",
+    "appstore-release-mcp": "src/mcp/server.mjs"
   },
   "files": [
     "src",
     "schemas",
     "types",
     "skills",
-    ".claude-plugin"
+    ".claude-plugin",
+    ".mcp.json"
   ],
   "sideEffects": false,
   "scripts": {
@@ -73,6 +75,11 @@
       "default": "./src/index.mjs"
     },
     "./schema": "./schemas/config.schema.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./mcp": "./src/mcp/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.5.4"
   }
 }

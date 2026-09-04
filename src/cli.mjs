@@ -73,6 +73,12 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   if (command === "schema") return schemaCommand(stdout);
   if (command === "init") return initCommand({ stdout, stderr, cwd, target: parsed.positionals[0] });
   if (command === "validate") return validateCommand({ stdout, stderr, cwd, env, explicit: flags.config });
+  if (command === "mcp") {
+    // Hand the process to the MCP server; it owns stdio from here.
+    const { main: mcpMain } = await import("./mcp/server.mjs");
+    await mcpMain();
+    return Exit.OK;
+  }
 
   const isPipeline = command === "release";
   if (!isPipeline && !getOperation(command)) {
@@ -189,6 +195,7 @@ function writeHelp(stream) {
       `  init             scaffold appstore.config.json (no credentials needed)\n` +
       `  schema           print the config JSON Schema\n` +
       `  validate         check the config offline\n` +
+      `  mcp              run the MCP server on stdio (10 tools, 6 resources)\n` +
       `  release          the ${PIPELINE.length}-step listing pipeline, then a readiness check\n` +
       `${ops}\n\n` +
       `Options\n${flags}\n\n` +

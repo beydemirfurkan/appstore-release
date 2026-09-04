@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "appstore-release": {
+      "command": "npx",
+      "args": ["-y", "appstore-release@2", "mcp"],
+      "env": {
+        "ASC_KEY_ID": "${ASC_KEY_ID}",
+        "ASC_ISSUER_ID": "${ASC_ISSUER_ID}",
+        "ASC_P8_PATH": "${ASC_P8_PATH}",
+        "ASC_APP_ID": "${ASC_APP_ID}",
+        "APPSTORE_CONFIG": "${APPSTORE_CONFIG}"
+      }
+    }
+  }
+}

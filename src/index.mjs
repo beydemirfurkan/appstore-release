@@ -9,12 +9,15 @@ import { AscApiError } from "./asc/client.mjs";
 export { createContext, isUsable } from "./core/context.mjs";
 export { resolveCredentials, CredentialsError } from "./core/credentials.mjs";
 export { loadConfig, findConfigPath, ConfigError, CONFIG_CANDIDATES } from "./core/config.mjs";
-export { validateConfig, REQUIREMENTS, requirementsFor } from "./core/requirements.mjs";
+export { validateConfig, REQUIREMENTS, requirementsFor, CONFIG_SCHEMA } from "./core/requirements.mjs";
 export { finding, Severity, Category, FixOwner, blockers, uiOnly, actionable } from "./core/findings.mjs";
 export { Status, Exit } from "./core/status.mjs";
 export { EventType } from "./core/events.mjs";
 export { AscApiError, AscClient } from "./asc/client.mjs";
 export { PIPELINE } from "./ops/registry.mjs";
+export { getAppSnapshot } from "./report/snapshot.mjs";
+export { getReadinessReport, buildReport } from "./report/report.mjs";
+export { renderReportText, renderReportMarkdown } from "./report/render.mjs";
 
 /** @param {unknown} e */
 const messageOf = (e) => (e instanceof Error ? e.message : String(e));

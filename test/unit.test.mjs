@@ -185,3 +185,36 @@ test("a blocker blocks submission by default", () => {
   assert.equal(finding({ id: "x", title: "x" }).blocksSubmission, true);
   assert.equal(finding({ id: "x", title: "x", severity: Severity.WARNING }).blocksSubmission, false);
 });
+
+// ── config schema ─────────────────────────────────────────────────────────────
+
+test("the schema catches a typo instead of silently ignoring it", async () => {
+  const { validateConfig } = await import("../src/core/requirements.mjs");
+  const { findings } = validateConfig({ locale: "en-US", metadata: { keyword: "a,b" } });
+  const typo = findings.find((f) => f.id === "config.metadata.keyword.unknown");
+  assert.ok(typo, "an unknown key must be reported, not ignored");
+  assert.match(typo.fix, /Did you mean "keywords"/);
+});
+
+test("the schema rejects a value outside its enum and names the alternatives", async () => {
+  const { validateConfig } = await import("../src/core/requirements.mjs");
+  const { findings } = validateConfig({ locale: "en-US", screenshots: { displayType: "APP_IPHONE_69" } });
+  const f = findings.find((x) => x.id === "config.screenshots.displayType.enum");
+  assert.ok(f, "APP_IPHONE_69 does not exist and Apple 409s on it");
+  assert.match(f.fix, /APP_IPHONE_67/);
+});
+
+test("the shipped template validates against the shipped schema", async () => {
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const template = require("../skills/appstore-release/references/config-template.json");
+  const { validateConfig } = await import("../src/core/requirements.mjs");
+  const { valid, findings } = validateConfig(template);
+  assert.equal(valid, true, findings.map((f) => f.title).join("; "));
+});
+
+test("$schema and $comment are allowed everywhere; nothing else undeclared is", async () => {
+  const { validateConfig } = await import("../src/core/requirements.mjs");
+  const ok = validateConfig({ $schema: "https://x", $comment: "note", locale: "en-US", metadata: { $comment: "n" } });
+  assert.deepEqual(ok.findings, []);
+});

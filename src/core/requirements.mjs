@@ -3,7 +3,13 @@
 // nothing read it — so a missing field surfaced as a cryptic 409 from Apple
 // instead of "you did not fill in metadata.keywords".
 
+import { createRequire } from "node:module";
+
 import { finding, Severity, Category, FixOwner } from "./findings.mjs";
+import { validateAgainstSchema } from "./schema.mjs";
+
+/** The published schema, also served by `appstore-release schema`. */
+export const CONFIG_SCHEMA = createRequire(import.meta.url)("../../schemas/config.schema.json");
 
 /** Config concerns → the key paths that must be present. */
 export const REQUIREMENTS = Object.freeze({
@@ -138,11 +144,22 @@ export function checkSemantics(config) {
 /**
  * Everything wrong with a config, for a given set of concerns.
  *
+ * Three layers, cheapest first: the schema catches shape and typos, the
+ * requirements catch what this particular operation needs, and the semantic
+ * rules catch what Apple enforces but no schema can express.
+ *
  * @param {object|null} config
- * @param {{ needs?: string[] }} [opts]
+ * @param {{ needs?: string[], schema?: boolean }} [opts]
  * @returns {{ valid: boolean, findings: import("./findings.mjs").Finding[] }}
  */
-export function validateConfig(config, { needs = [] } = {}) {
-  const findings = [...checkRequirements(config, needs), ...checkSemantics(config)];
-  return { valid: !findings.some((f) => f.severity === Severity.BLOCKER), findings };
+export function validateConfig(config, { needs = [], schema = true } = {}) {
+  const findings = [
+    ...(schema && config ? validateAgainstSchema(config, CONFIG_SCHEMA) : []),
+    ...checkRequirements(config, needs),
+    ...checkSemantics(config),
+  ];
+  // One key can trip several layers; report each problem once.
+  const seen = new Set();
+  const unique = findings.filter((f) => !seen.has(f.id) && seen.add(f.id));
+  return { valid: !unique.some((f) => f.severity === Severity.BLOCKER), findings: unique };
 }

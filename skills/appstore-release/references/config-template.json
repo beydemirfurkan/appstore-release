@@ -1,5 +1,5 @@
 {
-  "_comment": "Per-app content. Copy, fill in, and point APPSTORE_CONFIG at it. Credentials come from env (ASC_KEY_ID/ISSUER/P8) and the numeric ASC_APP_ID from env. Values may be in any language — this is your store content.",
+  "$schema": "https://beydemirfurkan.github.io/appstore-release/schemas/v1/config.schema.json",
   "bundleId": "com.example.app",
   "appleTeamId": "XXXXXXXXXX",
   "locale": "en-US",
@@ -10,11 +10,10 @@
     "privacyPolicyUrl": "https://example.com/privacy",
     "supportUrl": "https://example.com/support",
     "marketingUrl": "https://example.com",
-    "description": "Full description. NO emoji (ASC rejects them). Use plain uppercase section headers.",
+    "description": "Full description. No emoji. Use plain uppercase section headers.",
     "keywords": "keyword1,keyword2,keyword3",
     "promotionalText": "Promo text, max 170 chars",
-    "copyright": "2026 Your Name",
-    "whatsNew": "Release notes — ONLY for updates; leave empty on the first submission"
+    "copyright": "2026 Your Name"
   },
 
   "category": { "primary": "LIFESTYLE", "secondary": "REFERENCE" },
@@ -25,28 +24,22 @@
   "review": {
     "contactFirstName": "First",
     "contactLastName": "Last",
-    "contactPhone": "+1...",
+    "contactPhone": "+10000000000",
     "contactEmail": "you@example.com",
     "demoAccountRequired": false,
-    "demoAccountName": "",
-    "demoAccountPassword": "",
-    "notes": "The app is fully usable without an account. ...",
-    "releaseType": "AFTER_APPROVAL"
+    "notes": "The app is fully usable without an account."
   },
 
   "screenshots": {
     "displayType": "APP_IPHONE_67",
-    "dir": "./assets/screenshots",
-    "_note": "1290x2796 PNGs, no alpha. APP_IPHONE_67 is the largest iPhone slot (covers 6.7/6.9) — there is no APP_IPHONE_69. Filename order = display order. This dir must contain ONLY store screenshots."
+    "dir": "./assets/screenshots"
   },
 
   "credentials": {
-    "outputDir": "./secrets",
-    "_note": "Where `credentials` writes the .p12 / .mobileprovision / credentials.json. Gitignore this dir."
+    "outputDir": "./secrets"
   },
 
   "subscription": {
-    "_note": "Omit this whole block if the app has no subscription.",
     "productId": "app_monthly",
     "groupDisplayName": "Premium",
     "localeName": "Monthly Premium",

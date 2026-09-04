@@ -21,6 +21,7 @@ import { runOperation, runPipeline } from "./index.mjs";
 import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry.mjs";
 import { parseArgs, splitFlags, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
+import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
 
 const version = createRequire(import.meta.url)("../package.json").version;
 
@@ -66,6 +67,12 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     writeHelp(stdout);
     return Exit.OK;
   }
+
+  // Local commands run before any context is built — they exist precisely for
+  // the case where there are no credentials yet.
+  if (command === "schema") return schemaCommand(stdout);
+  if (command === "init") return initCommand({ stdout, stderr, cwd, target: parsed.positionals[0] });
+  if (command === "validate") return validateCommand({ stdout, stderr, cwd, env, explicit: flags.config });
 
   const isPipeline = command === "release";
   if (!isPipeline && !getOperation(command)) {
@@ -179,6 +186,9 @@ function writeHelp(stream) {
       `Ship an iOS app to App Store review, end to end, over the App Store Connect API.\n\n` +
       `Usage: appstore-release <command> [options]\n\n` +
       `Commands\n` +
+      `  init             scaffold appstore.config.json (no credentials needed)\n` +
+      `  schema           print the config JSON Schema\n` +
+      `  validate         check the config offline\n` +
       `  release          the ${PIPELINE.length}-step listing pipeline, then a readiness check\n` +
       `${ops}\n\n` +
       `Options\n${flags}\n\n` +

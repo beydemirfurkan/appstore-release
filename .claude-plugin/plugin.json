@@ -1,7 +1,7 @@
 {
   "name": "appstore-release",
   "description": "Ship an iOS app to App Store review end-to-end via the App Store Connect API — credentials, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions, and the review submission.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": { "name": "Furkan Beydemir", "url": "https://github.com/beydemirfurkan" },
   "homepage": "https://github.com/beydemirfurkan/appstore-release",
   "license": "MIT",

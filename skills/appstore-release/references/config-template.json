@@ -3,7 +3,7 @@
   "bundleId": "com.example.app",
   "appleTeamId": "XXXXXXXXXX",
   "locale": "en-US",
-
+  "$comment": "For more than one App Store locale, add a \"locales\" block keyed by locale code. Each entry overrides \"metadata\"; anything it omits is inherited. Example: \"locales\": { \"en-US\": {}, \"tr\": { \"name\": \"Deneme\", \"description\": \"...\" } }",
   "metadata": {
     "name": "App Name",
     "subtitle": "Subtitle, max 30 chars",
@@ -15,12 +15,13 @@
     "promotionalText": "Promo text, max 170 chars",
     "copyright": "2026 Your Name"
   },
-
-  "category": { "primary": "LIFESTYLE", "secondary": "REFERENCE" },
+  "category": {
+    "primary": "LIFESTYLE",
+    "secondary": "REFERENCE"
+  },
   "ageRating4Plus": true,
   "contentRights": "DOES_NOT_USE_THIRD_PARTY_CONTENT",
   "price": "free",
-
   "review": {
     "contactFirstName": "First",
     "contactLastName": "Last",
@@ -29,16 +30,13 @@
     "demoAccountRequired": false,
     "notes": "The app is fully usable without an account."
   },
-
   "screenshots": {
     "displayType": "APP_IPHONE_67",
     "dir": "./assets/screenshots"
   },
-
   "credentials": {
     "outputDir": "./secrets"
   },
-
   "subscription": {
     "productId": "app_monthly",
     "groupDisplayName": "Premium",

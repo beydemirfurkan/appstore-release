@@ -7,19 +7,15 @@ import { createRequire } from "node:module";
 
 import { finding, Severity, Category, FixOwner } from "./findings.mjs";
 import { validateAgainstSchema } from "./schema.mjs";
+import { resolveLocales } from "./locales.mjs";
 
 /** The published schema, also served by `appstore-release schema`. */
 export const CONFIG_SCHEMA = createRequire(import.meta.url)("../../schemas/config.schema.json");
 
 /** Config concerns → the key paths that must be present. */
 export const REQUIREMENTS = Object.freeze({
-  metadata: [
-    "metadata.name",
-    "metadata.description",
-    "metadata.keywords",
-    "metadata.supportUrl",
-    "metadata.privacyPolicyUrl",
-  ],
+  // metadata is handled separately: it is required once per configured locale.
+  metadata: [],
   pricing: ["metadata.copyright"],
   category: ["category.primary"],
   review: ["review.contactFirstName", "review.contactLastName", "review.contactPhone", "review.contactEmail"],
@@ -34,6 +30,9 @@ export const REQUIREMENTS = Object.freeze({
 });
 
 /** @typedef {keyof typeof REQUIREMENTS} Concern */
+
+/** Fields every configured locale must carry. */
+export const LOCALE_REQUIRED = Object.freeze(["name", "description", "keywords", "supportUrl", "privacyPolicyUrl"]);
 
 /** @param {object|null} config @param {string} path */
 const at = (config, path) => path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), config);
@@ -65,7 +64,7 @@ export function checkRequirements(config, needs = []) {
       }),
     ];
   }
-  return requirementsFor(needs)
+  const findings = requirementsFor(needs)
     .filter((path) => at(config, path) == null || at(config, path) === "")
     .map((path) =>
       finding({
@@ -78,6 +77,47 @@ export function checkRequirements(config, needs = []) {
         evidence: { resource: "config", expected: path },
       }),
     );
+
+  if (needs.includes("metadata")) findings.push(...checkLocaleRequirements(config));
+  return findings;
+}
+
+/**
+ * Every configured locale needs a complete listing. Reporting only the primary
+ * one would let the others ship empty, which is exactly the failure this
+ * replaces.
+ *
+ * @param {object} config
+ * @returns {import("./findings.mjs").Finding[]}
+ */
+function checkLocaleRequirements(config) {
+  const locales = resolveLocales(config);
+  if (!locales.length) return [];
+
+  const single = locales.length === 1;
+  const out = [];
+  for (const { locale, metadata } of locales) {
+    for (const field of LOCALE_REQUIRED) {
+      if (metadata[field] != null && metadata[field] !== "") continue;
+      // Name the key the user would actually edit: the flat one when there is
+      // only a single locale, the nested one otherwise.
+      const path = single ? `metadata.${field}` : `locales.${locale}.${field}`;
+      out.push(
+        finding({
+          id: `config.${path}.missing`,
+          category: Category.CONFIG,
+          title: `config.${path} is required`,
+          detail: single
+            ? `The listing cannot be written without ${field}.`
+            : `The ${locale} listing has no ${field}, and Apple rejects a half-filled localization.`,
+          fixOwner: FixOwner.CLI,
+          fix: `Add "${path}" to your config, or set metadata.${field} to share one value across locales.`,
+          evidence: { resource: "config", expected: path, actual: locale },
+        }),
+      );
+    }
+  }
+  return out;
 }
 
 // ── Semantic rules Apple enforces but does not document in its schema ──────────

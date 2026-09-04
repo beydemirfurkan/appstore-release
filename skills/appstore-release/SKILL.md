@@ -29,6 +29,8 @@ Run everything with `npx appstore-release <command>` from the user's project dir
 
 If there is no config yet: `npx appstore-release init` writes one with a `$schema`, then fill it in from what the user tells you. `npx appstore-release validate` checks it without needing credentials or a network.
 
+For an app listed in several languages, add a `locales` block keyed by locale code. `metadata` is the default for all of them and each entry overrides only what differs — so ask the user for the translations, not for every field again. All configured locales are written and checked; an incomplete one is reported by name.
+
 ## Runbook
 
 ### 1. Orient

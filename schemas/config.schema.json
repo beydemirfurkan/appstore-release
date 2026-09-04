@@ -7,9 +7,12 @@
   "additionalProperties": false,
   "required": ["locale"],
   "properties": {
-    "$schema": { "type": "string" },
-    "$comment": { "type": "string" },
-
+    "$schema": {
+      "type": "string"
+    },
+    "$comment": {
+      "type": "string"
+    },
     "bundleId": {
       "type": "string",
       "description": "Reverse-DNS bundle identifier, as registered with Apple. Required by the credentials operation.",
@@ -25,18 +28,206 @@
       "description": "The App Store locale this config's content is written in, e.g. en-US or tr.",
       "minLength": 2
     },
-
-    "metadata": {
+    "locales": {
       "type": "object",
-      "description": "The textual listing. Apple splits these across two resources; this tool routes each field to the right one.",
+      "description": "Additional App Store locales, keyed by locale code. Each entry overrides config.metadata for that locale; anything it omits is inherited. Omit this block entirely for a single-locale app.",
+      "propertyNames": {
+        "pattern": "^[a-z]{2}(-[A-Za-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/listing"
+      }
+    },
+    "metadata": {
+      "$ref": "#/$defs/listing",
+      "description": "The listing for config.locale, and the default for every entry in config.locales. Fields shared across locales belong here so they are written once."
+    },
+    "category": {
+      "type": "object",
       "additionalProperties": false,
       "properties": {
-        "$comment": { "type": "string" },
-        "name": { "type": "string", "maxLength": 30, "description": "App name as shown on the App Store." },
-        "subtitle": { "type": "string", "maxLength": 30, "description": "One line under the name." },
-        "privacyPolicyUrl": { "type": "string", "format": "uri", "description": "Required before review." },
-        "supportUrl": { "type": "string", "format": "uri", "description": "Required before review." },
-        "marketingUrl": { "type": "string", "format": "uri" },
+        "$comment": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "string",
+          "description": "App Store category id, e.g. LIFESTYLE or PRODUCTIVITY."
+        },
+        "secondary": {
+          "type": "string",
+          "description": "Optional second category id."
+        }
+      }
+    },
+    "ageRating4Plus": {
+      "type": "boolean",
+      "description": "Write the full 4+ age rating declaration. Set false to leave the declaration alone. Arbitrary ratings are not configurable yet."
+    },
+    "contentRights": {
+      "type": "string",
+      "enum": ["DOES_NOT_USE_THIRD_PARTY_CONTENT", "USES_THIRD_PARTY_CONTENT"],
+      "description": "Third-party content declaration, required before review."
+    },
+    "price": {
+      "type": "string",
+      "enum": ["free"],
+      "description": "Only free apps are supported so far; paid price tiers are not implemented."
+    },
+    "review": {
+      "type": "object",
+      "description": "What App Review needs in order to reach a human and to sign in.",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "contactFirstName": {
+          "type": "string"
+        },
+        "contactLastName": {
+          "type": "string"
+        },
+        "contactPhone": {
+          "type": "string"
+        },
+        "contactEmail": {
+          "type": "string",
+          "format": "email"
+        },
+        "demoAccountRequired": {
+          "type": "boolean"
+        },
+        "demoAccountName": {
+          "type": "string"
+        },
+        "demoAccountPassword": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Free text for the reviewer."
+        },
+        "releaseType": {
+          "type": "string",
+          "enum": ["MANUAL", "AFTER_APPROVAL", "SCHEDULED"],
+          "description": "Not implemented yet — declared here but not written to App Store Connect."
+        }
+      }
+    },
+    "screenshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "displayType": {
+          "type": "string",
+          "enum": [
+            "APP_IPHONE_67",
+            "APP_IPHONE_65",
+            "APP_IPHONE_61",
+            "APP_IPHONE_58",
+            "APP_IPHONE_55",
+            "APP_IPAD_PRO_3GEN_129",
+            "APP_IPAD_PRO_129",
+            "APP_IPAD_PRO_3GEN_11"
+          ],
+          "description": "APP_IPHONE_67 is 1290×2796 and the largest iPhone slot — it covers both 6.7\" and 6.9\". There is no APP_IPHONE_69."
+        },
+        "dir": {
+          "type": "string",
+          "description": "Directory of exact-size PNGs, relative to this config file. Filename order is display order, and it must contain nothing but store screenshots."
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "outputDir": {
+          "type": "string",
+          "description": "Where the credentials operation writes the .p12, the provisioning profile and credentials.json. Git-ignore it: these are secrets."
+        }
+      }
+    },
+    "subscription": {
+      "type": "object",
+      "description": "Omit this whole block if the app has no subscription.",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "productId": {
+          "type": "string",
+          "description": "The subscription's product id, as created in App Store Connect."
+        },
+        "groupDisplayName": {
+          "type": "string",
+          "description": "Customer-visible name of the subscription group."
+        },
+        "localeName": {
+          "type": "string",
+          "description": "Display name of this subscription."
+        },
+        "localeDescription": {
+          "type": "string",
+          "description": "What the subscription unlocks."
+        },
+        "priceTerritory": {
+          "type": "string",
+          "description": "Base territory for the price, e.g. USA."
+        },
+        "priceAmount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Target price; the nearest Apple price point is used."
+        },
+        "reviewScreenshot": {
+          "type": "string",
+          "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "listing": {
+      "type": "object",
+      "description": "The textual listing for one App Store locale. Apple splits these across two resources; this tool routes each field to the right one.",
+      "additionalProperties": false,
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 30,
+          "description": "App name as shown on the App Store."
+        },
+        "subtitle": {
+          "type": "string",
+          "maxLength": 30,
+          "description": "One line under the name."
+        },
+        "privacyPolicyUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Required before review."
+        },
+        "supportUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Required before review."
+        },
+        "marketingUrl": {
+          "type": "string",
+          "format": "uri"
+        },
         "description": {
           "type": "string",
           "maxLength": 4000,
@@ -61,118 +252,8 @@
           "maxLength": 4000,
           "description": "Release notes. ONLY for updates — setting it on a first version returns 409 STATE_ERROR."
         }
-      }
-    },
-
-    "category": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "$comment": { "type": "string" },
-        "primary": { "type": "string", "description": "App Store category id, e.g. LIFESTYLE or PRODUCTIVITY." },
-        "secondary": { "type": "string", "description": "Optional second category id." }
-      }
-    },
-
-    "ageRating4Plus": {
-      "type": "boolean",
-      "description": "Write the full 4+ age rating declaration. Set false to leave the declaration alone. Arbitrary ratings are not configurable yet."
-    },
-    "contentRights": {
-      "type": "string",
-      "enum": ["DOES_NOT_USE_THIRD_PARTY_CONTENT", "USES_THIRD_PARTY_CONTENT"],
-      "description": "Third-party content declaration, required before review."
-    },
-    "price": {
-      "type": "string",
-      "enum": ["free"],
-      "description": "Only free apps are supported so far; paid price tiers are not implemented."
-    },
-
-    "review": {
-      "type": "object",
-      "description": "What App Review needs in order to reach a human and to sign in.",
-      "additionalProperties": false,
-      "properties": {
-        "$comment": { "type": "string" },
-        "contactFirstName": { "type": "string" },
-        "contactLastName": { "type": "string" },
-        "contactPhone": { "type": "string" },
-        "contactEmail": { "type": "string", "format": "email" },
-        "demoAccountRequired": { "type": "boolean" },
-        "demoAccountName": { "type": "string" },
-        "demoAccountPassword": { "type": "string" },
-        "notes": { "type": "string", "maxLength": 4000, "description": "Free text for the reviewer." },
-        "releaseType": {
-          "type": "string",
-          "enum": ["MANUAL", "AFTER_APPROVAL", "SCHEDULED"],
-          "description": "Not implemented yet — declared here but not written to App Store Connect."
-        }
-      }
-    },
-
-    "screenshots": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "$comment": { "type": "string" },
-        "displayType": {
-          "type": "string",
-          "enum": [
-            "APP_IPHONE_67",
-            "APP_IPHONE_65",
-            "APP_IPHONE_61",
-            "APP_IPHONE_58",
-            "APP_IPHONE_55",
-            "APP_IPAD_PRO_3GEN_129",
-            "APP_IPAD_PRO_129",
-            "APP_IPAD_PRO_3GEN_11"
-          ],
-          "description": "APP_IPHONE_67 is 1290×2796 and the largest iPhone slot — it covers both 6.7\" and 6.9\". There is no APP_IPHONE_69."
-        },
-        "dir": {
-          "type": "string",
-          "description": "Directory of exact-size PNGs, relative to this config file. Filename order is display order, and it must contain nothing but store screenshots."
-        }
-      }
-    },
-
-    "credentials": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "$comment": { "type": "string" },
-        "outputDir": {
-          "type": "string",
-          "description": "Where the credentials operation writes the .p12, the provisioning profile and credentials.json. Git-ignore it: these are secrets."
-        }
-      }
-    },
-
-    "subscription": {
-      "type": "object",
-      "description": "Omit this whole block if the app has no subscription.",
-      "additionalProperties": false,
-      "properties": {
-        "$comment": { "type": "string" },
-        "productId": {
-          "type": "string",
-          "description": "The subscription's product id, as created in App Store Connect."
-        },
-        "groupDisplayName": { "type": "string", "description": "Customer-visible name of the subscription group." },
-        "localeName": { "type": "string", "description": "Display name of this subscription." },
-        "localeDescription": { "type": "string", "description": "What the subscription unlocks." },
-        "priceTerritory": { "type": "string", "description": "Base territory for the price, e.g. USA." },
-        "priceAmount": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Target price; the nearest Apple price point is used."
-        },
-        "reviewScreenshot": {
-          "type": "string",
-          "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
-        }
-      }
+      },
+      "title": "Localized listing"
     }
   }
 }

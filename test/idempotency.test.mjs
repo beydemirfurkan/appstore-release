@@ -228,7 +228,11 @@ test("metadata writes only what differs, and says so honestly", async () => {
   const res = await runOperation("metadata", ctx);
 
   assert.equal(res.status, Status.CHANGED);
-  assert.deepEqual(res.details.changed, ["privacyPolicyUrl"], "it used to PATCH every field unconditionally");
+  assert.deepEqual(
+    res.details.changed,
+    { "en-US": ["privacyPolicyUrl"] },
+    "it used to PATCH every field unconditionally",
+  );
   const patches = mock.mutations().filter((m) => m.method === "PATCH");
   assert.equal(patches.length, 1, "the version localization already matched, so it should not have been touched");
   assert.deepEqual(patches[0].body.data.attributes, { privacyPolicyUrl: "https://example.com/privacy" });

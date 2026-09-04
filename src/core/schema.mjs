@@ -22,12 +22,27 @@ const FORMATS = {
 export function validateAgainstSchema(config, schema) {
   /** @type {import("./findings.mjs").Finding[]} */
   const out = [];
-  walk(config, schema, "", out);
+  walk(config, schema, "", out, schema);
   return out;
 }
 
-function walk(value, schema, path, out) {
-  if (value === undefined || schema == null) return;
+/**
+ * Resolve a local `$ref`. Only `#/$defs/<name>` is supported, which is the only
+ * form our own schema uses — a general resolver would be code nobody exercises.
+ */
+function deref(schema, root) {
+  if (!schema?.$ref) return schema;
+  const name = schema.$ref.replace("#/$defs/", "");
+  const target = root?.$defs?.[name];
+  if (!target) throw new Error(`schema: cannot resolve ${schema.$ref}`);
+  // Keywords alongside the $ref (a description, say) still apply.
+  const { $ref, ...rest } = schema;
+  return { ...target, ...rest };
+}
+
+function walk(value, rawSchema, path, out, root) {
+  if (value === undefined || rawSchema == null) return;
+  const schema = deref(rawSchema, root);
 
   if (schema.type && !typeMatches(value, schema.type)) {
     return push(
@@ -83,6 +98,29 @@ function walk(value, schema, path, out) {
       }
     }
 
+    if (schema.propertyNames?.pattern) {
+      const re = new RegExp(schema.propertyNames.pattern);
+      for (const key of Object.keys(value)) {
+        if (re.test(key)) continue;
+        push(
+          out,
+          join(path, key),
+          "propertyNames",
+          "is not a valid key here",
+          `Keys must match ${schema.propertyNames.pattern} — locale codes look like "en-US" or "tr".`,
+        );
+      }
+    }
+
+    // An object-valued additionalProperties means "every extra key looks like
+    // this", which is how `locales` is expressed.
+    if (isPlainObject(schema.additionalProperties)) {
+      for (const [key, sub] of Object.entries(value)) {
+        if (schema.properties?.[key]) continue;
+        walk(sub, schema.additionalProperties, join(path, key), out, root);
+      }
+    }
+
     if (schema.additionalProperties === false) {
       for (const key of Object.keys(value)) {
         if (schema.properties?.[key]) continue;
@@ -100,7 +138,7 @@ function walk(value, schema, path, out) {
     }
 
     for (const [key, sub] of Object.entries(schema.properties ?? {})) {
-      walk(value[key], sub, join(path, key), out);
+      walk(value[key], sub, join(path, key), out, root);
     }
   }
 }

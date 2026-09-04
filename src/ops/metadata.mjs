@@ -7,6 +7,7 @@
 // that does look like it should be there.
 
 import { Status } from "../core/status.mjs";
+import { resolveLocales } from "../core/locales.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -24,49 +25,66 @@ const VERSION_FIELDS = ["description", "keywords", "promotionalText", "supportUr
 // config.locale are guaranteed present — no defensive re-check.
 /** @param {import("../core/context.mjs").Context} ctx */
 export async function run({ discovery, client, config }) {
-  const locale = config.locale;
-  const m = config.metadata;
-  const changed = [];
-
-  // App Info localization: name / subtitle / privacy policy URL
+  const locales = resolveLocales(config);
   const { info } = await discovery.appInfo();
-  const infoLoc = await discovery.appInfoLocalization(info.id, locale);
-  const infoCurrent = await readAttributes(client, `/v1/appInfoLocalizations/${infoLoc.id}`, APP_INFO_FIELDS);
-  const infoDiff = diff(infoCurrent, pick(m, APP_INFO_FIELDS));
-  if (Object.keys(infoDiff).length) {
-    await client.patch(`/v1/appInfoLocalizations/${infoLoc.id}`, {
-      data: { type: "appInfoLocalizations", id: infoLoc.id, attributes: infoDiff },
-    });
-    changed.push(...Object.keys(infoDiff));
-  }
-
-  // Version localization: description / keywords / promo / URLs
   const version = await discovery.editableVersion();
-  const verLoc = await discovery.versionLocalization(version.id, locale);
-  const wanted = pick(m, VERSION_FIELDS);
+  // Asked once rather than once per locale: it is a property of the app.
+  const firstEver = await isFirstEverVersion(client, discovery, version);
 
-  // whatsNew is rejected on a genuinely first submission with 409 STATE_ERROR.
-  // "First" means the app has never had another version — not merely that this
-  // one is in PREPARE_FOR_SUBMISSION, which every unsubmitted update also is.
-  if (m.whatsNew && !(await isFirstEverVersion(client, discovery, version))) {
-    wanted.whatsNew = m.whatsNew;
+  /** @type {Record<string, string[]>} */
+  const changedByLocale = {};
+
+  for (const { locale, metadata: m } of locales) {
+    const changed = [];
+
+    // App Info localization: name / subtitle / privacy policy URL
+    const infoLoc = await discovery.appInfoLocalization(info.id, locale);
+    const infoCurrent = await readAttributes(client, `/v1/appInfoLocalizations/${infoLoc.id}`, APP_INFO_FIELDS);
+    const infoDiff = diff(infoCurrent, pick(m, APP_INFO_FIELDS));
+    if (Object.keys(infoDiff).length) {
+      await client.patch(`/v1/appInfoLocalizations/${infoLoc.id}`, {
+        data: { type: "appInfoLocalizations", id: infoLoc.id, attributes: infoDiff },
+      });
+      changed.push(...Object.keys(infoDiff));
+    }
+
+    // Version localization: description / keywords / promo / URLs
+    const verLoc = await discovery.versionLocalization(version.id, locale);
+    const wanted = pick(m, VERSION_FIELDS);
+
+    // whatsNew is rejected on a genuinely first submission with 409 STATE_ERROR.
+    // "First" means the app has never had another version — not merely that this
+    // one is in PREPARE_FOR_SUBMISSION, which every unsubmitted update also is.
+    if (m.whatsNew && !firstEver) wanted.whatsNew = m.whatsNew;
+
+    const verCurrent = await readAttributes(client, `/v1/appStoreVersionLocalizations/${verLoc.id}`, [
+      ...VERSION_FIELDS,
+      "whatsNew",
+    ]);
+    const verDiff = diff(verCurrent, wanted);
+    if (Object.keys(verDiff).length) {
+      await client.patch(`/v1/appStoreVersionLocalizations/${verLoc.id}`, {
+        data: { type: "appStoreVersionLocalizations", id: verLoc.id, attributes: verDiff },
+      });
+      changed.push(...Object.keys(verDiff));
+    }
+
+    if (changed.length) changedByLocale[locale] = changed;
   }
 
-  const verCurrent = await readAttributes(client, `/v1/appStoreVersionLocalizations/${verLoc.id}`, [
-    ...VERSION_FIELDS,
-    "whatsNew",
-  ]);
-  const verDiff = diff(verCurrent, wanted);
-  if (Object.keys(verDiff).length) {
-    await client.patch(`/v1/appStoreVersionLocalizations/${verLoc.id}`, {
-      data: { type: "appStoreVersionLocalizations", id: verLoc.id, attributes: verDiff },
-    });
-    changed.push(...Object.keys(verDiff));
-  }
+  const touched = Object.keys(changedByLocale);
+  const scope = locales.length === 1 ? locales[0].locale : `${locales.length} locales`;
+  if (!touched.length)
+    return { status: Status.OK, message: `${scope}: already up to date`, details: { locales: localeCodesOf(locales) } };
 
-  if (!changed.length) return { status: Status.OK, message: `${locale}: already up to date` };
-  return { status: Status.CHANGED, message: `${locale}: ${changed.join(", ")}`, details: { changed } };
+  return {
+    status: Status.CHANGED,
+    message: touched.map((l) => `${l}: ${changedByLocale[l].join(", ")}`).join(" · "),
+    details: { locales: localeCodesOf(locales), changed: changedByLocale },
+  };
 }
+
+const localeCodesOf = (locales) => locales.map((l) => l.locale);
 
 /** Read only the fields we are about to consider writing. */
 async function readAttributes(client, path, fields) {

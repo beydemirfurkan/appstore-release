@@ -15,38 +15,48 @@ export function check({ snapshot, config }) {
   const out = [];
   if (!snapshot.version) return out;
 
-  const locale = snapshot.locale;
-  const loc = snapshot.localizations.find((l) => l.detailed) ?? null;
+  const wanted = snapshot.locales?.length ? snapshot.locales : snapshot.locale ? [snapshot.locale] : [];
+  const detailed = snapshot.localizations.filter((l) => l.detailed);
+  const multi = wanted.length > 1;
+  /** Name the finding after the locale only when there is more than one. */
+  const suffix = (locale) => (multi ? `.${locale}` : "");
 
-  if (!loc) {
-    out.push(
-      finding({
-        id: "metadata.locale.missing",
-        category: Category.ASC_STATE,
-        title: locale ? `No localization for ${locale}` : "No localization",
-        detail: "The version has no localization for the configured locale.",
-        fix: "Run the metadata operation; it creates the localization if it is absent.",
-        fixCommand: "appstore-release metadata",
-      }),
-    );
-    return out;
-  }
-
-  for (const [field, label] of REQUIRED) {
-    if (!loc.attributes?.[field]) {
+  for (const locale of wanted) {
+    const loc = detailed.find((l) => l.attributes?.locale === locale);
+    if (!loc) {
       out.push(
         finding({
-          id: `metadata.${field}.missing`,
+          id: `metadata.locale.missing${suffix(locale)}`,
           category: Category.ASC_STATE,
-          title: `${label} is empty`,
-          detail: `appStoreVersionLocalizations.${field} is not set for ${loc.attributes.locale}.`,
-          fix: `Set metadata.${field === "description" ? "description" : field} in your config and run metadata.`,
+          title: `No localization for ${locale}`,
+          detail: "The version has no localization for this configured locale.",
+          fix: "Run the metadata operation; it creates the localization if it is absent.",
           fixCommand: "appstore-release metadata",
-          evidence: { resource: "appStoreVersionLocalizations", id: loc.id },
+        }),
+      );
+      continue;
+    }
+
+    for (const [field, label] of REQUIRED) {
+      if (loc.attributes?.[field]) continue;
+      out.push(
+        finding({
+          id: `metadata.${field}.missing${suffix(locale)}`,
+          category: Category.ASC_STATE,
+          title: multi ? `${label} is empty for ${locale}` : `${label} is empty`,
+          detail: `appStoreVersionLocalizations.${field} is not set for ${locale}.`,
+          fix: multi
+            ? `Set locales.${locale}.${field} (or metadata.${field} to share it) and run metadata.`
+            : `Set metadata.${field} in your config and run metadata.`,
+          fixCommand: "appstore-release metadata",
+          evidence: { resource: "appStoreVersionLocalizations", id: loc.id, actual: locale },
         }),
       );
     }
   }
+
+  const loc = detailed[0];
+  if (!loc) return out;
 
   // whatsNew is rejected outright on a first version; carrying it in the config
   // is the difference between a clean run and a 409 nobody expects.
@@ -65,17 +75,19 @@ export function check({ snapshot, config }) {
     );
   }
 
-  const undone = snapshot.localizations.filter((l) => !l.detailed);
-  if (undone.length) {
+  // Locales that exist in App Store Connect but the config says nothing about.
+  // We will not touch them, so say so rather than let them look accounted for.
+  const unmanaged = snapshot.localizations.filter((l) => !l.detailed);
+  if (unmanaged.length) {
     out.push(
       finding({
-        id: "metadata.locale.unlocalized",
+        id: "metadata.locale.unmanaged",
         severity: Severity.INFO,
         category: Category.ASC_STATE,
-        title: `${undone.length} other locale(s) exist on this version`,
-        detail: `Only ${loc.attributes.locale} was checked: ${undone.map((l) => l.attributes.locale).join(", ")}.`,
-        fixOwner: FixOwner.UI,
-        fix: "Multi-locale support is not automated yet; review the other locales in App Store Connect.",
+        title: `${unmanaged.length} locale(s) on this version are not in your config`,
+        detail: `Not checked or written: ${unmanaged.map((l) => l.attributes.locale).join(", ")}.`,
+        fixOwner: FixOwner.CLI,
+        fix: "Add them under config.locales to manage them here, or leave them to App Store Connect.",
       }),
     );
   }

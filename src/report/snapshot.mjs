@@ -20,9 +20,12 @@
  * @property {any[]} subscriptions
  * @property {any} reviewDetail
  * @property {any} submission
- * @property {string|null} locale       the locale the report is about
+ * @property {string|null} locale       the primary locale the report is about
+ * @property {string[]} locales         every locale the config describes
  * @property {string[]} errors          sections we could not read, by name
  */
+
+import { localeCodes } from "../core/locales.mjs";
 
 /** Editable states, i.e. the version we are allowed to prepare. */
 export const EDITABLE_STATES = new Set([
@@ -48,7 +51,11 @@ export const EDITABLE_STATES = new Set([
  */
 export async function getAppSnapshot(ctx, { locale } = {}) {
   const { client, appId } = ctx;
-  const wanted = locale ?? ctx.config?.locale ?? null;
+  // Every locale the config describes is inspected, not just the primary one —
+  // a half-filled secondary localization is exactly what Apple rejects.
+  const configured = localeCodes(ctx.config);
+  const wanted = locale ? [locale] : configured;
+  const primary = wanted[0] ?? null;
   /** @type {string[]} */
   const errors = [];
 
@@ -124,11 +131,11 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
           const locs = await client.all(`/v1/appStoreVersions/${version.id}/appStoreVersionLocalizations`, {
             limit: 50,
           });
-          // Only the locale under preparation is expanded; fetching every field
-          // for fifty locales to answer one question is not worth the round trips.
+          // Only the configured locales are expanded; fetching every field for
+          // fifty locales the config says nothing about is not worth the round trips.
           const detailed = [];
           for (const loc of locs) {
-            if (wanted && loc.attributes.locale !== wanted) {
+            if (wanted.length && !wanted.includes(loc.attributes.locale)) {
               detailed.push({ ...loc, detailed: false });
               continue;
             }
@@ -241,7 +248,8 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     subscriptions,
     reviewDetail,
     submission,
-    locale: wanted,
+    locale: primary,
+    locales: wanted,
     errors,
   };
 }

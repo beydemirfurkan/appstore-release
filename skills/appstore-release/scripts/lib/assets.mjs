@@ -38,7 +38,7 @@ export class AssetUploader {
 
     // 3. Commit with the md5 checksum.
     const checksum = crypto.createHash("md5").update(bytes).digest("hex");
-    await this.client.patch(`/${reserved.type}/${reserved.id}`, {
+    await this.client.patch(`/v1/${reserved.type}/${reserved.id}`, {
       data: { type: reserved.type, id: reserved.id, attributes: { uploaded: true, sourceFileChecksum: checksum } },
     });
 

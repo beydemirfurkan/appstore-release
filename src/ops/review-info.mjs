@@ -1,7 +1,14 @@
 // Sets the App Review contact info (and optional demo account) on the version.
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "review-info", title: "App Review info", phase: "listing", needs: ["review"] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "review-info",
+  title: "App Review info",
+  phase: "listing",
+  needs: ["review"],
+  mutates: true,
+};
 
 export async function run({ client, discovery, config }) {
   const r = config?.review;

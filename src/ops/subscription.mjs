@@ -1,12 +1,19 @@
 // Completes a subscription (group localization, subscription localization, price, and
 // the App Review paywall screenshot) so it leaves MISSING_METADATA → READY_TO_SUBMIT.
 // Note: attaching a FIRST-TIME subscription to the version + submitting is UI-only (see submit.mjs).
-import { resolve } from "node:path";
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "subscription", title: "Subscription", phase: "listing", needs: ["subscription"] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "subscription",
+  title: "Subscription",
+  phase: "listing",
+  needs: ["subscription"],
+  mutates: true,
+  destructive: true,
+};
 
-export async function run({ client, discovery, uploader, config }) {
+export async function run({ client, discovery, uploader, config, resolvePath }) {
   const cfg = config?.subscription;
   if (!cfg || !cfg.productId) return { status: Status.SKIPPED, message: "no subscription configured" };
 
@@ -82,7 +89,7 @@ export async function run({ client, discovery, uploader, config }) {
       reservePath: `/v1/subscriptionAppStoreReviewScreenshots`,
       type: "subscriptionAppStoreReviewScreenshots",
       relationships: { subscription: { data: { type: "subscriptions", id: sub.id } } },
-      filePath: resolve(process.cwd(), cfg.reviewScreenshot),
+      filePath: resolvePath(cfg.reviewScreenshot, "config.subscription.reviewScreenshot"),
     });
     changes.push("review screenshot");
   }

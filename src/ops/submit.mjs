@@ -4,14 +4,29 @@
 // subscription cannot be attached via the API. If the config declares a subscription that
 // is not yet in review, this command returns MANUAL and does NOT submit — the user must
 // attach it on the version page and submit in the ASC UI (bundling app + subscription).
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
 const OPEN_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES", "COMPLETING"];
 
-export const meta = { id: "submit", title: "Submit for review", phase: "submit", needs: [] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "submit",
+  title: "Submit for review",
+  phase: "submit",
+  needs: [],
+  mutates: true,
+  irreversible: true,
+  args: {
+    submit: {
+      type: "boolean",
+      default: false,
+      description: "actually finalize the submission; without it the submission is only prepared",
+    },
+  },
+};
 
-/** @param {import("../core/context.mjs").OperationContext} ctx */
-export async function run({ client, discovery, config, options = {} }) {
+/** @param {import("../core/context.mjs").Context} ctx */
+export async function run({ client, discovery, config }, args = {}) {
   const appId = discovery.appId;
 
   // Guard: a first-time subscription must go through the UI.
@@ -69,7 +84,7 @@ export async function run({ client, discovery, config, options = {} }) {
     return { status: Status.ERROR, message: "version not reviewable yet — run `check` to see what's missing" };
   }
 
-  if (!options.submit) {
+  if (!args.submit) {
     return { status: Status.OK, message: `prepared submission ${submission.id} (pass --submit to finalize)` };
   }
 

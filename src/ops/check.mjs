@@ -1,8 +1,15 @@
 // Reports whether the editable version is ready to submit, then records the two
 // UI-only steps Apple exposes no API for (App Privacy; first-time subscription).
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "check", title: "Readiness check", phase: "listing", needs: [] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "check",
+  title: "Readiness check",
+  phase: "listing",
+  needs: [],
+  mutates: false,
+};
 
 export async function run({ client, discovery, config, log }) {
   const version = await discovery.editableVersion();

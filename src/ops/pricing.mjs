@@ -1,8 +1,15 @@
 // Sets the version copyright and, for free apps, the Free price tier (which also
 // fills territory availability). Idempotent: skips whatever is already correct.
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "pricing", title: "Pricing + copyright", phase: "listing", needs: ["pricing"] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "pricing",
+  title: "Pricing + copyright",
+  phase: "listing",
+  needs: ["pricing"],
+  mutates: true,
+};
 
 export async function run({ client, discovery, config }) {
   const version = await discovery.editableVersion();

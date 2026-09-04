@@ -50,7 +50,7 @@
     "types": "tsc --emitDeclarationOnly --declaration --outDir types",
     "manifests:sync": "node scripts/sync-manifests.mjs",
     "manifests:check": "node scripts/sync-manifests.mjs --check",
-    "test": "node --test test/",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "version": "npm run manifests:sync && git add .claude-plugin skills/appstore-release/SKILL.md",
     "prepack": "npm run manifests:check"
   },

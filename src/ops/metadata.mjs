@@ -1,15 +1,20 @@
 // Uploads the textual store listing for the configured locale.
 // App Info: name, subtitle, privacy policy URL.  Version: description, keywords,
 // promotional text, support/marketing URLs, (whatsNew only for non-first versions).
-import { Status } from "../core/log.mjs";
-import { validateConfig } from "../core/config.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "metadata", title: "Store metadata", phase: "listing", needs: ["metadata"] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "metadata",
+  title: "Store metadata",
+  phase: "listing",
+  needs: ["metadata"],
+  mutates: true,
+};
 
+// runOperation validates `meta.needs` before we get here, so config.metadata and
+// config.locale are guaranteed present — no defensive re-check.
 export async function run({ discovery, client, config }) {
-  const { valid, missing } = validateConfig(config, { needs: ["metadata"] });
-  if (!valid) return { status: Status.ERROR, message: `config missing: ${missing.join(", ")}` };
-
   const locale = config.locale;
   const m = config.metadata;
 

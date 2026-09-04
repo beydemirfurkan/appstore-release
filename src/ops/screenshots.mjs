@@ -1,22 +1,41 @@
 // Uploads all PNGs from config.screenshots.dir to the version's screenshot set,
 // replacing whatever is there. Filename order = display order.
 import { readdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { Status } from "../core/log.mjs";
+import { join } from "node:path";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "screenshots", title: "Screenshots", phase: "listing", needs: ["screenshots"] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "screenshots",
+  title: "Screenshots",
+  phase: "listing",
+  needs: ["screenshots"],
+  mutates: true,
+  destructive: true,
+  args: {
+    prune: {
+      type: "boolean",
+      default: true,
+      description: "delete remote screenshots that have no local counterpart",
+    },
+    displayType: {
+      type: "string",
+      description: "override config.screenshots.displayType",
+    },
+  },
+};
 
-export async function run({ client, discovery, uploader, config }) {
+export async function run({ client, discovery, uploader, config, resolvePath }, args = {}) {
   const dir = config?.screenshots?.dir;
   if (!dir) return { status: Status.ERROR, message: "config.screenshots.dir is required" };
 
-  const absDir = resolve(process.cwd(), dir);
+  const absDir = resolvePath(dir, "config.screenshots.dir");
   const files = readdirSync(absDir)
     .filter((f) => f.toLowerCase().endsWith(".png"))
     .sort();
   if (!files.length) return { status: Status.ERROR, message: `no PNGs found in ${dir}` };
 
-  const displayType = config.screenshots.displayType || "APP_IPHONE_67";
+  const displayType = args.displayType || config.screenshots.displayType || "APP_IPHONE_67";
   const version = await discovery.editableVersion();
   const verLoc = await discovery.versionLocalization(version.id, config.locale);
 
@@ -46,7 +65,7 @@ export async function run({ client, discovery, uploader, config }) {
         reservePath: `/v1/appScreenshots`,
         type: "appScreenshots",
         relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: set.id } } },
-        filePath: resolve(absDir, file),
+        filePath: join(absDir, file),
         fileName: file,
       }),
     );

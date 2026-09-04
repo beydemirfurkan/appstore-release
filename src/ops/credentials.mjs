@@ -3,18 +3,47 @@
 import crypto from "node:crypto";
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "credentials", title: "iOS distribution credentials", phase: "build", needs: [] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "credentials",
+  title: "iOS distribution credentials",
+  phase: "build",
+  needs: ["credentials"],
+  mutates: true,
+  destructive: true,
+  args: {
+    allowNewCert: {
+      type: "boolean",
+      default: false,
+      description: "consume one of Apple's three distribution certificate slots",
+    },
+  },
+};
 
-export async function run({ client, discovery, config, log }) {
-  if (!config?.bundleId) return { status: Status.ERROR, message: "config.bundleId is required" };
+export async function run({ client, discovery, config, log, resolvePath, dryRun }) {
   const bundle = await discovery.bundleId(config.bundleId);
   if (!bundle) return { status: Status.ERROR, message: `bundle id not registered on Apple: ${config.bundleId}` };
 
   const relDir = config.credentials?.outputDir || "./secrets";
-  const outDir = resolve(process.cwd(), relDir);
+  const outDir = resolvePath(relDir, "config.credentials.outputDir");
+
+  // The only operation whose side effects are not HTTP: it shells out to openssl
+  // and writes a private key, a .p12 and its password to disk. The client's
+  // dry-run guard cannot see any of that, so this one needs its own.
+  if (dryRun) {
+    return {
+      status: Status.PLANNED,
+      message: `would issue a distribution certificate and profile into ${relDir}`,
+      details: {
+        outputDir: outDir,
+        bundleId: config.bundleId,
+        wouldWrite: ["dist.key", "dist.p12", "profile.mobileprovision", "credentials.json"],
+      },
+    };
+  }
+
   mkdirSync(outDir, { recursive: true });
   const password = crypto.randomBytes(12).toString("hex");
   const sh = (cmd) => execSync(cmd, { stdio: ["ignore", "pipe", "pipe"] });
@@ -57,7 +86,7 @@ export async function run({ client, discovery, config, log }) {
 
   // 5. EAS local credentials
   writeFileSync(
-    resolve(process.cwd(), "credentials.json"),
+    resolvePath("credentials.json", "the EAS credentials file"),
     JSON.stringify(
       {
         ios: {

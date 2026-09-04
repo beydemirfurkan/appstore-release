@@ -1,7 +1,14 @@
 // Sets the app's primary (+ optional secondary) App Store category.
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "category", title: "Category", phase: "listing", needs: ["category"] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "category",
+  title: "Category",
+  phase: "listing",
+  needs: ["category"],
+  mutates: true,
+};
 
 export async function run({ client, discovery, config }) {
   const primary = config?.category?.primary;

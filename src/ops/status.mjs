@@ -1,7 +1,14 @@
 // Read-only overview of the app's ASC state. Reports via ctx.log; mutates nothing.
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "status", title: "Status", phase: "listing", needs: [] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "status",
+  title: "Status",
+  phase: "listing",
+  needs: [],
+  mutates: false,
+};
 
 export async function run({ client, discovery, log }) {
   const appId = discovery.appId;

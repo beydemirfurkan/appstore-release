@@ -1,9 +1,16 @@
 // Sets the age-rating declaration to 4+ (all content NONE, all behavioural flags false).
 // The declaration lives on appInfo, not the version. Never send both ageRatingOverride
 // and ageRatingOverrideV2 (409); omit them entirely.
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "age-rating", title: "Age rating", phase: "listing", needs: [] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "age-rating",
+  title: "Age rating",
+  phase: "listing",
+  needs: [],
+  mutates: true,
+};
 
 const N = "NONE";
 const FOUR_PLUS = {

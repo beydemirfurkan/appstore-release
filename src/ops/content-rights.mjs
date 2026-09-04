@@ -1,7 +1,14 @@
 // Declares whether the app uses third-party content (required before submission).
-import { Status } from "../core/log.mjs";
+import { Status } from "../core/status.mjs";
 
-export const meta = { id: "content-rights", title: "Content rights", phase: "listing", needs: [] };
+/** @type {import("./registry.mjs").OperationMeta} */
+export const meta = {
+  id: "content-rights",
+  title: "Content rights",
+  phase: "listing",
+  needs: [],
+  mutates: true,
+};
 
 export async function run({ client, discovery, config }) {
   const value = config?.contentRights || "DOES_NOT_USE_THIRD_PARTY_CONTENT";

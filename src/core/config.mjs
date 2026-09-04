@@ -1,81 +1,59 @@
-// Config loading & validation. Single responsibility: produce a validated config
-// object, or a precise list of what the user must fill in. No network, no side effects.
-import { readFileSync } from "node:fs";
+// Config loading. Single responsibility: produce a parsed config plus the path it
+// came from, or a precise reason why not. No network, no side effects.
+//
+// Validation lives in requirements.mjs; this module only gets the object.
 
-export class ConfigError extends Error {
-  constructor(message, missing = []) {
-    super(message);
-    this.missing = missing;
-  }
-}
+import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 
-const EMOJI_RE = /[\p{Extended_Pictographic}]/u;
+export class ConfigError extends Error {}
 
-/** Load and parse config.json. */
-export function loadConfig(path) {
-  let raw;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch {
-    throw new ConfigError(`Cannot read config at ${path}`);
+/**
+ * Searched in order when no path is given. `appstore.config.json` is first and
+ * is what `init` writes: the old bare `config.json` collides with this repo's own
+ * .gitignore rule, so anyone following our secret-hygiene advice ended up
+ * ignoring their own config.
+ */
+export const CONFIG_CANDIDATES = Object.freeze([
+  "appstore.config.json",
+  ".appstore-release/config.json",
+  "config.json", // still discovered, for configs written against v1
+]);
+
+/**
+ * @param {{ explicit?: string, env?: Record<string, string|undefined>, cwd?: string }} [opts]
+ * @returns {string|null} absolute path, or null when there is nothing to load
+ */
+export function findConfigPath({ explicit, env = process.env, cwd = process.cwd() } = {}) {
+  const named = explicit ?? env.APPSTORE_CONFIG;
+  if (named) return isAbsolute(named) ? named : resolve(cwd, named);
+  for (const candidate of CONFIG_CANDIDATES) {
+    const p = resolve(cwd, candidate);
+    if (existsSync(p)) return p;
   }
-  try {
-    return JSON.parse(raw);
-  } catch (e) {
-    throw new ConfigError(`Config is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
-  }
+  return null;
 }
 
 /**
- * Validate the config for a given set of concerns. Returns { valid, missing, warnings }.
- * Does not throw — callers decide whether missing fields are fatal for their command.
+ * Accept an already-parsed object as readily as a path — a library or MCP caller
+ * may hold the config in memory and should not have to write it to disk first.
  *
- * @param {object} config
- * @param {{ needs?: ("metadata"|"pricing"|"review"|"screenshots"|"subscription"|"category")[] }} [opts]
+ * @param {string|object|null|undefined} source
+ * @returns {{ config: object|null, configPath: string|null }}
  */
-export function validateConfig(config, { needs = [] } = {}) {
-  const missing = [];
-  const warnings = [];
-  const need = (path, cond) => {
-    if (!cond) missing.push(path);
-  };
+export function loadConfig(source) {
+  if (source == null) return { config: null, configPath: null };
+  if (typeof source === "object") return { config: source, configPath: null };
 
-  if (!config || typeof config !== "object") {
-    return { valid: false, missing: ["<entire config>"], warnings };
+  let raw;
+  try {
+    raw = readFileSync(source, "utf8");
+  } catch {
+    throw new ConfigError(`Cannot read config at ${source}`);
   }
-  need("locale", config.locale);
-
-  if (needs.includes("metadata")) {
-    const m = config.metadata || {};
-    need("metadata.name", m.name);
-    need("metadata.description", m.description);
-    need("metadata.keywords", m.keywords);
-    need("metadata.supportUrl", m.supportUrl);
-    need("metadata.privacyPolicyUrl", m.privacyPolicyUrl);
-    if (m.subtitle && m.subtitle.length > 30) warnings.push("metadata.subtitle exceeds 30 chars");
-    if (m.keywords && m.keywords.length > 100) warnings.push("metadata.keywords exceeds 100 chars");
-    if (m.description && EMOJI_RE.test(m.description))
-      warnings.push("metadata.description contains emoji — ASC will reject it");
-    if (m.promotionalText && m.promotionalText.length > 170)
-      warnings.push("metadata.promotionalText exceeds 170 chars");
+  try {
+    return { config: JSON.parse(raw), configPath: resolve(source) };
+  } catch (e) {
+    throw new ConfigError(`Config is not valid JSON (${source}): ${e instanceof Error ? e.message : String(e)}`);
   }
-  if (needs.includes("pricing")) need("metadata.copyright", config.metadata?.copyright);
-  if (needs.includes("category")) need("category.primary", config.category?.primary);
-  if (needs.includes("review")) {
-    const r = config.review || {};
-    need("review.contactFirstName", r.contactFirstName);
-    need("review.contactLastName", r.contactLastName);
-    need("review.contactPhone", r.contactPhone);
-    need("review.contactEmail", r.contactEmail);
-  }
-  if (needs.includes("screenshots")) need("screenshots.dir", config.screenshots?.dir);
-  if (needs.includes("subscription")) {
-    const s = config.subscription || {};
-    need("subscription.productId", s.productId);
-    need("subscription.priceTerritory", s.priceTerritory);
-    need("subscription.priceAmount", s.priceAmount != null);
-    need("subscription.reviewScreenshot", s.reviewScreenshot);
-  }
-
-  return { valid: missing.length === 0, missing, warnings };
 }

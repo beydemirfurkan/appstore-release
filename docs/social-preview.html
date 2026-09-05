@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      /* GitHub renders the social preview at 1280×640 and crops nothing. Text
+         must survive being shown at ~600px wide in a timeline, so nothing here
+         is smaller than 22px. */
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 76px;
+        background: radial-gradient(120% 120% at 12% 0%, #16203a 0%, #0d1117 55%, #010409 100%);
+        color: #e6edf3;
+        font-family:
+          "SF Pro Display",
+          -apple-system,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+      }
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+        font-size: 25px;
+        color: #7d8590;
+        letter-spacing: 0.02em;
+      }
+      .eyebrow b {
+        color: #e6edf3;
+        font-weight: 600;
+      }
+      h1 {
+        margin: 26px 0 0;
+        font-size: 66px;
+        line-height: 1.08;
+        letter-spacing: -0.028em;
+        font-weight: 700;
+      }
+      h1 .accent {
+        color: #58a6ff;
+      }
+      p {
+        margin: 24px 0 0;
+        font-size: 29px;
+        line-height: 1.45;
+        color: #adbac7;
+        max-width: 1000px;
+      }
+      .chips {
+        margin-top: 40px;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+        font-size: 23px;
+        padding: 11px 20px;
+        border-radius: 999px;
+        border: 1px solid #30363d;
+        background: #161b22;
+        color: #adbac7;
+      }
+      .chip.on {
+        border-color: #2f6f47;
+        background: #10281a;
+        color: #7ee08a;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="eyebrow">🍎 <b>appstore-release</b> &nbsp;·&nbsp; MIT</div>
+    <h1>Ship an iOS app to <span class="accent">App&nbsp;Store review</span>.<br />From your shell, or your agent.</h1>
+    <p>
+      A CLI and an MCP server for the App Store Connect API — with a readiness report that tells you what is blocking
+      submission, and who can fix it.
+    </p>
+    <div class="chips">
+      <div class="chip on">zero dependencies</div>
+      <div class="chip on">no install step</div>
+      <div class="chip">11 MCP tools</div>
+      <div class="chip">idempotent</div>
+    </div>
+  </body>
+</html>

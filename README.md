@@ -220,6 +220,17 @@ Add a capability by dropping a file in `src/ops/` and registering it in `src/ops
 - `openssl` — only for the `credentials` command.
 - An iOS app already uploaded to App Store Connect. The build step assumes Expo/EAS; everything else works for any iOS app.
 
+## Maintaining the images
+
+`docs/demo.png` and `docs/social-preview.png` are rendered from the HTML next to them, so they cannot drift from what the tool actually prints:
+
+```bash
+node scripts/render-demo.mjs           # both
+node scripts/render-demo.mjs social    # just the 1280×640 GitHub preview
+```
+
+The social preview has to be uploaded by hand — GitHub exposes no API for it. Settings → General → Social preview.
+
 ## Contributing
 
 `npm ci && npm run verify` — typecheck, format, schema, manifests, the distribution gate, and 116 tests. There is no build step: the files that ship are the files you edit.

@@ -56,11 +56,8 @@
     "version": "npm run manifests:sync && git add .claude-plugin skills/appstore-release/SKILL.md",
     "prepack": "npm run manifests:check",
     "schema:validate": "node scripts/validate-schema.mjs",
-    "verify": "npm run typecheck && npm run format:check && npm run schema:validate && npm run manifests:check && npm test"
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "verify": "npm run typecheck && npm run format:check && npm run schema:validate && npm run manifests:check && npm run check:dist && npm test",
+    "check:dist": "node scripts/check-distribution.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
@@ -78,8 +75,5 @@
     "./package.json": "./package.json",
     "./mcp": "./src/mcp/server.mjs"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.5.4"
-  }
+  "private": true
 }

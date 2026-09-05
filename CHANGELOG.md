@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed — distribution
+
+**Nothing to install.** The package is no longer published to any registry, and it no longer has runtime dependencies. `git clone && node src/cli.mjs` and `git clone && node src/mcp/server.mjs` are the whole setup.
+
+That meant replacing `@modelcontextprotocol/sdk` and `zod` with about 250 lines: a newline-delimited JSON-RPC 2.0 transport and the six MCP methods this server actually implements. The replacement was checked against a captured wire trace of the SDK server rather than against the spec from memory; the only differences left are deliberate — `listChanged: false` because we never send those notifications, `additionalProperties: false` on tool inputs, and clearer validation messages.
+
+Tool input schemas are now plain JSON Schema, which is what went on the wire anyway. The same validator that checks a user's config now checks a model's tool arguments.
+
+This also fixes the Claude Code plugin properly. A plugin install is a git clone with no install step, so a server that needed `node_modules` could never have run there; `.mcp.json` now points straight at the file instead of shelling out to a package manager.
+
+A `check:dist` gate fails the build if a runtime dependency reappears or anything under `src/` imports something that would need installing, and a CI job drives both the CLI and the MCP server from a bare checkout.
+
 ## 2.1.0
 
 Everything here is additive: a 2.0.0 config still means exactly what it did.

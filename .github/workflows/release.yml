@@ -6,17 +6,15 @@ on:
 
 permissions:
   contents: write
-  id-token: write # npm provenance, via OIDC — no NPM_TOKEN secret to leak
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
       - run: npm run verify
@@ -25,7 +23,8 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p 'require("./package.json").version')"
           [ "$tag" = "$pkg" ] || { echo "tag $tag != package.json $pkg"; exit 1; }
-      - run: npm publish --provenance --access public
+      # Distribution is the repository itself: this package is not published to
+      # any registry, and it needs no install step to run.
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

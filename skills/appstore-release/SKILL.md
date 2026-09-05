@@ -13,7 +13,7 @@ Drive an entire iOS App Store submission from the App Store Connect API. The use
 2. **Config-driven, not prompt-driven.** All app content lives in the config. Run commands; do not interview the user about things the config already answers.
 3. **Ask the user only when**: the config is missing a field (say exactly which), a business decision is not in the config (subscription price, release timing), or before the single irreversible action (final submit).
 4. **Everything is idempotent.** `release` is safe to re-run; a second run with nothing changed sends nothing.
-5. **Ask about content, not about schema.** If the app is paid, has mature content, supports iPad, or ships in several languages, those are config decisions — `price`, `ageRating`, `screenshots.sets`, `locales`. Ask the user the question in their terms and write the config yourself; `npx appstore-release schema` has the exact shape.
+5. **Ask about content, not about schema.** If the app is paid, has mature content, supports iPad, or ships in several languages, those are config decisions — `price`, `ageRating`, `screenshots.sets`, `locales`. Ask the user the question in their terms and write the config yourself; `appstore-release schema` has the exact shape.
 
 ## Setup — see references/setup.md
 
@@ -26,9 +26,17 @@ export ASC_P8_PATH=/abs/AuthKey_XXXXXXXXXX.p8    # or ASC_P8 with the PEM inline
 export ASC_APP_ID=1234567890     # digits from the ASC URL, NOT the bundle id
 ```
 
-Run everything with `npx appstore-release <command>` from the user's project directory. Relative paths in the config resolve against the config file, so never `cd` anywhere first.
+**How to invoke it.** This package has no install step and no dependencies — run the file directly:
 
-If there is no config yet: `npx appstore-release init` writes one with a `$schema`, then fill it in from what the user tells you. `npx appstore-release validate` checks it without needing credentials or a network.
+```bash
+node "${CLAUDE_PLUGIN_ROOT:-.}/src/cli.mjs" <command>
+```
+
+Below it is written as `appstore-release <command>` for readability; that is the same thing. Run it from the user's project directory. Relative paths in the config resolve against the config file, so never `cd` anywhere first.
+
+Run everything with `appstore-release <command>` from the user's project directory. Relative paths in the config resolve against the config file, so never `cd` anywhere first.
+
+If there is no config yet: `appstore-release init` writes one with a `$schema`, then fill it in from what the user tells you. `appstore-release validate` checks it without needing credentials or a network.
 
 For an app listed in several languages, add a `locales` block keyed by locale code. `metadata` is the default for all of them and each entry overrides only what differs — so ask the user for the translations, not for every field again. All configured locales are written and checked; an incomplete one is reported by name.
 
@@ -37,8 +45,8 @@ For an app listed in several languages, add a `locales` block keyed by locale co
 ### 1. Orient
 
 ```bash
-npx appstore-release doctor      # credentials, openssl, config — touches no app data
-npx appstore-release check       # the verdict and the ordered plan
+appstore-release doctor      # credentials, openssl, config — touches no app data
+appstore-release check       # the verdict and the ordered plan
 ```
 
 `check --json` gives the same thing as structured data: `verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `rejected`, `live`, and `nextActions` is the plan.
@@ -49,8 +57,8 @@ npx appstore-release check       # the verdict and the ordered plan
 prepared until the next one exists:
 
 ```bash
-npx appstore-release new-version          # infers the next number
-npx appstore-release new-version 1.2.0    # or name it
+appstore-release new-version          # infers the next number
+appstore-release new-version 1.2.0    # or name it
 ```
 
 ### 3. Build the binary (Expo/EAS)
@@ -58,7 +66,7 @@ npx appstore-release new-version 1.2.0    # or name it
 Only needed when `check` reports no build. If `eas build` fails on stale credentials (_"Provisioning Profile has expired / No certificate exists with serial…"_):
 
 ```bash
-npx appstore-release credentials    # reuses an existing certificate when it can
+appstore-release credentials    # reuses an existing certificate when it can
 ```
 
 then set `"credentialsSource": "local"` on the eas.json production profile. **Never pass `--allow-new-cert` without telling the user** — Apple caps the account at three distribution certificates.
@@ -71,8 +79,8 @@ eas submit -p ios --profile production --id <buildId>
 ### 4. Fill the listing
 
 ```bash
-npx appstore-release release --dry-run    # show the user exactly what would change
-npx appstore-release release              # apply it
+appstore-release release --dry-run    # show the user exactly what would change
+appstore-release release              # apply it
 ```
 
 Screenshots must already exist at `config.screenshots.dir` — see references/screenshots.md for producing exact-size PNGs. If the app supports iPad, it needs an iPad set too: use `config.screenshots.sets` with one entry per device size. A locale subdirectory (`./shots/tr/`) overrides the base directory for that locale.
@@ -87,8 +95,8 @@ Screenshots must already exist at `config.screenshots.dir` — see references/sc
 ### 6. Submit
 
 ```bash
-npx appstore-release check
-npx appstore-release submit --submit
+appstore-release check
+appstore-release submit --submit
 ```
 
 `submit` computes the readiness report first and refuses unless the verdict is `ready`. If the user insists on submitting anyway, `--force` exists — tell them Apple will reject it.

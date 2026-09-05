@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "appstore-release": {
-      "command": "npx",
-      "args": ["-y", "appstore-release@2", "mcp"],
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/src/mcp/server.mjs"],
       "env": {
         "ASC_KEY_ID": "${ASC_KEY_ID}",
         "ASC_ISSUER_ID": "${ASC_ISSUER_ID}",

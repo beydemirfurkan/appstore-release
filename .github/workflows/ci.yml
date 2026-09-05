@@ -31,50 +31,45 @@ jobs:
       - run: npm run manifests:check
       - run: npm test
 
-  package:
+  secrets:
+    # Nothing is published to a registry, but the repository is public, so the
+    # check that used to run over the tarball now runs over the tree.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Pack and check what would be published
+      - name: No secret-shaped file may be committed
         run: |
-          npm pack --dry-run --json > pack.json
-          node -e '
-            const [pkg] = require("./pack.json");
-            const names = pkg.files.map((f) => f.path);
-            const leaked = names.filter((n) =>
-              /\.p8$|credentials\.json$|\.p12$|\.mobileprovision$|^secrets\/|appstore\.config\.json$|^\.env/.test(n),
-            );
-            if (leaked.length) {
-              console.error("✗ these must never be published:\n  " + leaked.join("\n  "));
-              process.exit(1);
-            }
-            if (pkg.unpackedSize > 2_000_000) {
-              console.error(`✗ package is ${pkg.unpackedSize} bytes; something large slipped in`);
-              process.exit(1);
-            }
-            console.log(`✓ ${names.length} files, ${pkg.unpackedSize} bytes, no secrets`);
-          '
+          found=$(git ls-files | grep -Ei '\.p8$|\.p12$|\.mobileprovision$|credentials\.json$|^secrets/|appstore\.config\.json$|^\.env' || true)
+          if [ -n "$found" ]; then echo "✗ these must never be committed:"; echo "$found"; exit 1; fi
+          echo "✓ no secrets in the tree"
 
-  smoke:
+  clone-and-run:
+    # The distribution story is "clone it and run it", so that is what gets
+    # tested: a fresh checkout with no node_modules at all. This is the job that
+    # would catch a runtime dependency sneaking back in.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: The installed binary must actually run
+      - name: The CLI runs from a bare checkout
         run: |
-          npm pack --pack-destination /tmp
-          mkdir /tmp/consumer && cd /tmp/consumer && npm init -y >/dev/null
-          npm install /tmp/appstore-release-*.tgz
-          ./node_modules/.bin/appstore-release --version
-          ./node_modules/.bin/appstore-release init
-          ./node_modules/.bin/appstore-release validate
-          ./node_modules/.bin/appstore-release schema > /dev/null
+          test ! -d node_modules
+          node src/cli.mjs --version
+          node src/cli.mjs schema > /dev/null
+          mkdir /tmp/app && cd /tmp/app
+          node "$GITHUB_WORKSPACE/src/cli.mjs" init
+          node "$GITHUB_WORKSPACE/src/cli.mjs" validate
+      - name: The MCP server answers over stdio from a bare checkout
+        run: |
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | node src/mcp/server.mjs > /tmp/mcp.out
+          node -e '
+            const lines = require("fs").readFileSync("/tmp/mcp.out","utf8").trim().split("\n").map(JSON.parse);
+            const tools = lines.find(m => m.id === 2).result.tools;
+            if (tools.length !== 11) { console.error("expected 11 tools, got " + tools.length); process.exit(1) }
+            console.log("✓ " + tools.length + " tools over stdio, nothing installed");
+          '

@@ -1,7 +1,7 @@
 # appstore-release
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg)](LICENSE)
-[![npm](https://img.shields.io/npm/v/appstore-release?color=cb3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/appstore-release)
+[![zero dependencies](https://img.shields.io/badge/dependencies-none-22c55e)](#requirements)
 [![MCP server](https://img.shields.io/badge/MCP-server-6c5ce7)](https://modelcontextprotocol.io)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugin-marketplaces)
 
@@ -57,14 +57,28 @@ Every finding carries who can fix it. `uiOnly: true` means Apple has no API and 
 
 ## Install
 
-**As an MCP server** — for Claude Code, Claude Desktop, Cursor, Zed, or anything that speaks MCP:
+**There is nothing to install.** No registry, no package manager, no `node_modules` — clone it and run it. That is enforced: a CI job drives both the CLI and the MCP server from a bare checkout, and a gate fails the build if anything under `src/` ever imports something that would need installing.
+
+```bash
+git clone https://github.com/beydemirfurkan/appstore-release.git
+cd appstore-release
+node src/cli.mjs --help
+```
+
+Put it on your PATH if you want the short name:
+
+```bash
+ln -s "$PWD/src/cli.mjs" /usr/local/bin/appstore-release
+```
+
+**As an MCP server** — for Claude Code, Claude Desktop, Cursor, Zed, or anything that speaks MCP. Point it at the file:
 
 ```jsonc
 {
   "mcpServers": {
     "appstore-release": {
-      "command": "npx",
-      "args": ["-y", "appstore-release", "mcp"],
+      "command": "node",
+      "args": ["/abs/path/to/appstore-release/src/mcp/server.mjs"],
       "env": {
         "ASC_KEY_ID": "ABCDE12345",
         "ASC_ISSUER_ID": "69a6de00-…",
@@ -76,13 +90,7 @@ Every finding carries who can fix it. `uiOnly: true` means Apple has no API and 
 }
 ```
 
-**As a CLI** — for any agent that can run a shell command, and for CI:
-
-```bash
-npm i -g appstore-release      # or just npx appstore-release <command>
-```
-
-**As a Claude Code plugin** (brings the skill and the MCP server together):
+**As a Claude Code plugin** — brings the skill and the MCP server together, and needs no install step precisely because there are no dependencies:
 
 ```
 /plugin marketplace add beydemirfurkan/appstore-release
@@ -95,8 +103,10 @@ npm i -g appstore-release      # or just npx appstore-release <command>
 2. **Scaffold and fill a config:**
 
    ```bash
-   appstore-release init          # writes appstore.config.json with a $schema for autocomplete
+   node src/cli.mjs init          # writes appstore.config.json with a $schema for autocomplete
    ```
+
+   (`appstore-release` below is that command; symlink it, alias it, or spell out `node /path/to/src/cli.mjs`.)
 
 3. **Point it at your app and check:**
 
@@ -206,11 +216,13 @@ Add a capability by dropping a file in `src/ops/` and registering it in `src/ops
 
 ## Requirements
 
-- Node.js 20.11+ (built-in `fetch` and `crypto`; two dependencies, both for the MCP server).
+- Node.js 20.11+ and nothing else. **Zero runtime dependencies** — `fetch`, `crypto` and the JSON-RPC layer are all built in or in this repo. `npm install` is only needed to _develop_ on it (TypeScript for type-checking, Prettier, ajv for the schema gate).
 - `openssl` — only for the `credentials` command.
 - An iOS app already uploaded to App Store Connect. The build step assumes Expo/EAS; everything else works for any iOS app.
 
 ## Contributing
+
+`npm ci && npm run verify` — typecheck, format, schema, manifests, the distribution gate, and 116 tests. There is no build step: the files that ship are the files you edit.
 
 Issues and PRs welcome — especially new gotchas, new checks, and the roadmap items: multi-locale metadata, multiple screenshot display types, paid price tiers, arbitrary age ratings, version creation, phased release. Keep operations idempotent and config-driven per the contract, and add a test.
 

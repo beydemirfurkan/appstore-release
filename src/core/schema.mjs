@@ -15,14 +15,22 @@ const FORMATS = {
 };
 
 /**
- * @param {any} config
+ * @typedef {{ out: import("./findings.mjs").Finding[], root: any, label: string }} WalkContext
+ */
+
+/**
+ * @param {any} value
  * @param {any} schema
+ * @param {{ label?: string }} [opts]   what to call the thing being validated —
+ *                                      "config" for a config file, or "" for no
+ *                                      prefix at all when the caller already
+ *                                      says what it is validating
  * @returns {import("./findings.mjs").Finding[]}
  */
-export function validateAgainstSchema(config, schema) {
+export function validateAgainstSchema(value, schema, { label = "config" } = {}) {
   /** @type {import("./findings.mjs").Finding[]} */
   const out = [];
-  walk(config, schema, "", out, schema);
+  walk(value, schema, "", { out, root: schema, label });
   return out;
 }
 
@@ -40,8 +48,10 @@ function deref(schema, root) {
   return { ...target, ...rest };
 }
 
-function walk(value, rawSchema, path, out, root) {
+/** @param {WalkContext} ctx */
+function walk(value, rawSchema, path, ctx) {
   if (value === undefined || rawSchema == null) return;
+  const { out, root } = ctx;
   const schema = deref(rawSchema, root);
 
   // oneOf: try each branch in isolation and keep the findings of none if any
@@ -50,7 +60,7 @@ function walk(value, rawSchema, path, out, root) {
   if (Array.isArray(schema.oneOf)) {
     const attempts = schema.oneOf.map((branch) => {
       const branchOut = [];
-      walk(value, branch, path, branchOut, root);
+      walk(value, branch, path, { ...ctx, out: branchOut });
       return branchOut;
     });
     if (attempts.some((a) => a.length === 0)) return;
@@ -69,7 +79,7 @@ function walk(value, rawSchema, path, out, root) {
 
   if (schema.type && !typeMatches(value, schema.type)) {
     return push(
-      out,
+      ctx,
       path,
       "type",
       `should be ${schema.type}, got ${describe(value)}`,
@@ -77,9 +87,19 @@ function walk(value, rawSchema, path, out, root) {
     );
   }
 
+  if (schema.const !== undefined && value !== schema.const) {
+    return push(
+      ctx,
+      path,
+      "const",
+      `must be ${JSON.stringify(schema.const)}`,
+      `Set it to ${JSON.stringify(schema.const)}.`,
+    );
+  }
+
   if (schema.enum && !schema.enum.includes(value)) {
     return push(
-      out,
+      ctx,
       path,
       "enum",
       `"${value}" is not one of the accepted values`,
@@ -89,11 +109,11 @@ function walk(value, rawSchema, path, out, root) {
 
   if (typeof value === "string") {
     if (schema.minLength != null && value.length < schema.minLength) {
-      push(out, path, "minLength", `is shorter than ${schema.minLength} characters`, "Provide a real value.");
+      push(ctx, path, "minLength", `is shorter than ${schema.minLength} characters`, "Provide a real value.");
     }
     if (schema.maxLength != null && value.length > schema.maxLength) {
       push(
-        out,
+        ctx,
         path,
         "maxLength",
         `is ${value.length} characters; App Store Connect accepts at most ${schema.maxLength}`,
@@ -101,19 +121,19 @@ function walk(value, rawSchema, path, out, root) {
       );
     }
     if (schema.pattern && !new RegExp(schema.pattern).test(value)) {
-      push(out, path, "pattern", `"${value}" is not in the expected form`, schema.description ?? "Check the format.");
+      push(ctx, path, "pattern", `"${value}" is not in the expected form`, schema.description ?? "Check the format.");
     }
     if (schema.format && FORMATS[schema.format] && !FORMATS[schema.format](value)) {
-      push(out, path, "format", `"${value}" is not a valid ${schema.format}`, `Provide a valid ${schema.format}.`);
+      push(ctx, path, "format", `"${value}" is not a valid ${schema.format}`, `Provide a valid ${schema.format}.`);
     }
   }
 
   if (typeof value === "number" && schema.minimum != null && value < schema.minimum) {
-    push(out, path, "minimum", `is below the minimum of ${schema.minimum}`, `Use ${schema.minimum} or more.`);
+    push(ctx, path, "minimum", `is below the minimum of ${schema.minimum}`, `Use ${schema.minimum} or more.`);
   }
 
   if (Array.isArray(value) && schema.items) {
-    value.forEach((item, i) => walk(item, schema.items, `${path}[${i}]`, out, root));
+    value.forEach((item, i) => walk(item, schema.items, `${path}[${i}]`, ctx));
   }
 
   if (schema.type === "object" || schema.properties) {
@@ -121,7 +141,14 @@ function walk(value, rawSchema, path, out, root) {
 
     for (const key of schema.required ?? []) {
       if (value[key] == null || value[key] === "") {
-        push(out, join(path, key), "required", "is required", "Add it to your config.", Severity.BLOCKER);
+        push(
+          ctx,
+          join(path, key),
+          "required",
+          "is required",
+          `Add it to your ${ctx.label || "arguments"}.`,
+          Severity.BLOCKER,
+        );
       }
     }
 
@@ -130,7 +157,7 @@ function walk(value, rawSchema, path, out, root) {
       for (const key of Object.keys(value)) {
         if (re.test(key)) continue;
         push(
-          out,
+          ctx,
           join(path, key),
           "propertyNames",
           "is not a valid key here",
@@ -144,7 +171,7 @@ function walk(value, rawSchema, path, out, root) {
     if (isPlainObject(schema.additionalProperties)) {
       for (const [key, sub] of Object.entries(value)) {
         if (schema.properties?.[key]) continue;
-        walk(sub, schema.additionalProperties, join(path, key), out, root);
+        walk(sub, schema.additionalProperties, join(path, key), ctx);
       }
     }
 
@@ -154,7 +181,7 @@ function walk(value, rawSchema, path, out, root) {
         // A typo like `metadata.keyword` used to sail through and simply do
         // nothing, which is the most expensive kind of silent failure.
         push(
-          out,
+          ctx,
           join(path, key),
           "unknown",
           "is not a recognised setting",
@@ -165,31 +192,31 @@ function walk(value, rawSchema, path, out, root) {
     }
 
     for (const [key, sub] of Object.entries(schema.properties ?? {})) {
-      walk(value[key], sub, join(path, key), out, root);
+      walk(value[key], sub, join(path, key), ctx);
     }
   }
 }
 
 /**
- * @param {import("./findings.mjs").Finding[]} out
+ * @param {WalkContext} ctx
  * @param {string} path
  * @param {string} keyword
  * @param {string} detail
  * @param {string} fix
  * @param {import("./findings.mjs").Finding["severity"]} [severity]
  */
-function push(out, path, keyword, detail, fix, severity = Severity.BLOCKER) {
-  const where = path || "<config root>";
+function push({ out, label }, path, keyword, detail, fix, severity = Severity.BLOCKER) {
+  const where = label ? (path ? `${label}.${path}` : label) : path || "the value";
   out.push(
     finding({
-      id: `config.${path || "root"}.${keyword}`,
+      id: [label, path || "root", keyword].filter(Boolean).join("."),
       severity,
       category: Category.CONFIG,
-      title: `config.${where} ${detail}`,
+      title: `${where} ${detail}`,
       detail: `Schema keyword: ${keyword}.`,
       fixOwner: FixOwner.CLI,
       fix,
-      evidence: { resource: "config", expected: keyword },
+      evidence: { resource: label || "arguments", expected: keyword },
     }),
   );
 }

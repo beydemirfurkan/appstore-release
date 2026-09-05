@@ -15,8 +15,6 @@
 // options. There is one job here — get an app through review — and it has one
 // shape.
 
-import { z } from "zod";
-
 import { createContext } from "../core/context.mjs";
 import { runOperation, runPipeline } from "../index.mjs";
 import { getAppSnapshot } from "../report/snapshot.mjs";
@@ -27,17 +25,45 @@ import { loadConfig, findConfigPath } from "../core/config.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { Severity } from "../core/findings.mjs";
 
+// Input schemas are plain JSON Schema. That is what goes on the wire anyway —
+// zod existed only to be converted into this — and it means the same validator
+// that checks a user's config also checks a model's tool arguments.
+
+/** @param {string} description */
+const str = (description) => ({ type: "string", description });
+/** @param {string} description @param {boolean} [dflt] */
+const bool = (description, dflt) => ({
+  type: "boolean",
+  description,
+  ...(dflt === undefined ? {} : { default: dflt }),
+});
+
 /**
  * Required on every mutating tool. A literal `true` cannot be produced by
  * accident, and the description tells the host what it is confirming — which
  * turns a mutation into a two-turn handshake the user actually sees.
  */
-const confirm = z
-  .literal(true)
-  .describe("Must be true. Set it only after the human has approved this change to a live App Store listing.");
+const confirm = {
+  type: "boolean",
+  const: true,
+  description: "Must be true. Set it only after the human has approved this change to a live App Store listing.",
+};
 
-const appId = z.string().optional().describe("Numeric App Store Connect app id. Defaults to ASC_APP_ID.");
-const configPath = z.string().optional().describe("Path to the config file. Defaults to the usual discovery order.");
+const appId = str("Numeric App Store Connect app id. Defaults to ASC_APP_ID.");
+const configPath = str("Path to the config file. Defaults to the usual discovery order.");
+
+/**
+ * Assemble a tool's input schema.
+ * @param {Record<string, any>} properties
+ * @param {string[]} [required]
+ */
+const input = (properties, required = []) => ({
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  properties,
+  ...(required.length ? { required } : {}),
+  additionalProperties: false,
+});
 
 /** Shared prelude: build a context, or explain why we cannot. */
 async function contextOrRefusal({ appId: id, configPath: cfg, dryRun = false }, env) {
@@ -91,7 +117,7 @@ const summarizeResults = (results) =>
  * @property {string} title
  * @property {string} description
  * @property {{readOnlyHint: boolean, destructiveHint: boolean, idempotentHint: boolean, openWorldHint: boolean}} annotations
- * @property {Record<string, any>} inputSchema           zod shape
+ * @property {Record<string, any>} inputSchema           JSON Schema
  * @property {(args: any) => Promise<any>} run
  */
 
@@ -112,7 +138,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Read-only. Returns findings with a verdict and an ordered list of next actions, each marked as something this " +
         "tool can fix or something only a human in App Store Connect can. Start here.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: { appId, configPath, locale: z.string().optional().describe("Locale to report on.") },
+      inputSchema: input({ appId, configPath, locale: str("Locale to report on.") }),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -128,7 +154,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Read-only inventory: versions, builds, localizations, screenshot sets, pricing and subscriptions. " +
         "Use it to answer questions about current state; use asc_readiness_report to decide what to do.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: { appId, configPath, locale: z.string().optional() },
+      inputSchema: input({ appId, configPath, locale: str("Locale to inspect.") }),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -154,7 +180,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "List the apps this API key can see, with their numeric ids and bundle ids. " +
         "Every other tool needs the numeric id, and it is the one thing people never have to hand.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: { query: z.string().optional().describe("Filter by name or bundle id, case-insensitive.") },
+      inputSchema: input({ query: str("Filter by name or bundle id, case-insensitive.") }),
       async run(args) {
         // No app id needed for this one, so ask for a context without it.
         const ctx = await createContext({ runtime: { env } });
@@ -189,10 +215,10 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "emoji in the description, over-length keywords, whatsNew on a first version. " +
         "Touches no network and needs no credentials, so it is safe to call while drafting.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-      inputSchema: {
-        config: z.record(z.string(), z.unknown()).optional().describe("The config object itself."),
-        configPath: z.string().optional().describe("Or a path to read it from."),
-      },
+      inputSchema: input({
+        config: { type: "object", description: "The config object itself." },
+        configPath: str("Or a path to read it from."),
+      }),
       async run(args) {
         let config = args.config ?? null;
         if (!config) {
@@ -217,14 +243,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Dry-run the whole listing pipeline and return the exact changes it would send to App Store Connect. " +
         "Writes nothing. Call this before asc_apply_release so the human can see the diff first.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: {
+      inputSchema: input({
         appId,
         configPath,
-        only: z
-          .array(z.string())
-          .optional()
-          .describe(`Subset of: ${PIPELINE.join(", ")}`),
-      },
+        only: { type: "array", items: { type: "string" }, description: `Subset of: ${PIPELINE.join(", ")}` },
+      }),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal({ ...args, dryRun: true }, env);
         if (refusal) return refusal;
@@ -250,15 +273,15 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "version is already live — asc_readiness_report reports that as version.none. A no-op when a version " +
         "is already editable, so it is safe to call first.",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: {
-        appId,
-        configPath,
-        version: z
-          .string()
-          .optional()
-          .describe("Version string, e.g. 1.2.0. Inferred from the newest existing one if omitted."),
-        confirm,
-      },
+      inputSchema: input(
+        {
+          appId,
+          configPath,
+          version: str("Version string, e.g. 1.2.0. Inferred from the newest existing one if omitted."),
+          confirm,
+        },
+        ["confirm"],
+      ),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -275,15 +298,15 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "category, review info, screenshots and subscription. Idempotent — re-running when everything already " +
         "matches sends nothing. Does not submit for review.",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: {
-        appId,
-        configPath,
-        only: z
-          .array(z.string())
-          .optional()
-          .describe(`Subset of: ${PIPELINE.join(", ")}`),
-        confirm,
-      },
+      inputSchema: input(
+        {
+          appId,
+          configPath,
+          only: { type: "array", items: { type: "string" }, description: `Subset of: ${PIPELINE.join(", ")}` },
+          confirm,
+        },
+        ["confirm"],
+      ),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -302,15 +325,18 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Upload the PNGs in the configured directory to the version's screenshot set. " +
         "Deletes remote screenshots that have no local counterpart only when prune is true, which it is not by default.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-      inputSchema: {
-        appId,
-        configPath,
-        displayType: z.string().optional().describe("Override config.screenshots.displayType."),
-        // The CLI prunes by default because the human typed the command; a model
-        // should not discover deletion by omitting an argument.
-        prune: z.boolean().optional().default(false).describe("Delete remote screenshots with no local counterpart."),
-        confirm,
-      },
+      inputSchema: input(
+        {
+          appId,
+          configPath,
+          displayType: str("Override config.screenshots.displayType."),
+          // The CLI prunes by default because the human typed the command; a model
+          // should not discover deletion by omitting an argument.
+          prune: bool("Delete remote screenshots with no local counterpart.", false),
+          confirm,
+        },
+        ["confirm"],
+      ),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -326,7 +352,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Write a subscription's localizations, price and App Review paywall screenshot, so it leaves " +
         "MISSING_METADATA. Attaching a first subscription to a version still cannot be done through the API.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
-      inputSchema: { appId, configPath, confirm },
+      inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -342,16 +368,15 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Submit the app version to App Review. This is the irreversible one. It computes the readiness report " +
         "first and refuses if anything is blocking, unless force is set.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-      inputSchema: {
-        appId,
-        configPath,
-        force: z
-          .boolean()
-          .optional()
-          .default(false)
-          .describe("Submit even though blockers remain. Apple will reject it."),
-        confirm,
-      },
+      inputSchema: input(
+        {
+          appId,
+          configPath,
+          force: bool("Submit even though blockers remain. Apple will reject it.", false),
+          confirm,
+        },
+        ["confirm"],
+      ),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
@@ -385,7 +410,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Apple caps an account at three distribution certificates and this consumes one. " +
         "Disabled unless the operator sets APPSTORE_RELEASE_ALLOW_LOCAL_WRITES=1.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-      inputSchema: { appId, configPath, confirm },
+      inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
         if (!allowLocalWrites) {
           return needsConfirmation(

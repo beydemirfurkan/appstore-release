@@ -29,6 +29,8 @@ const SKIP_DIRS = new Set([
 ]);
 const MAX_FILE_BYTES = 512 * 1024;
 const MAX_FILES = 20000;
+/** Directory entries visited per walk, at most: a project never needs more, a home directory would. */
+const MAX_WALK = 100000;
 
 /**
  * @typedef {Object} PlistEntry
@@ -78,6 +80,26 @@ export function loadProject(dir, { expoConfig } = {}) {
   const isExpo = deps.has("expo") || Boolean(expo);
   const managed = isExpo && !native;
 
+  // Nothing that looks like an app here: say so without walking the directory,
+  // which could be a home folder or the root of the disk.
+  if (!pkg && !expo && !native) {
+    return {
+      dir,
+      found: false,
+      expo: false,
+      native: false,
+      managed: false,
+      deps,
+      expoConfig: null,
+      dynamicConfig: false,
+      infoPlist: new Map(),
+      privacyManifests: [],
+      aggregationDisabled: false,
+      sources: [],
+      notes,
+    };
+  }
+
   /** @type {Map<string, PlistEntry>} */
   const infoPlist = new Map();
   const set = (/** @type {string} */ key, /** @type {any} */ value, /** @type {string} */ source) => {
@@ -103,7 +125,8 @@ export function loadProject(dir, { expoConfig } = {}) {
 
   // 2. Native: Info.plist files and INFOPLIST_KEY_* build settings override the
   //    Expo config — they are what actually ships once ios/ exists.
-  const plists = findFiles(dir, (f) => f.endsWith("Info.plist"));
+  const walk = { visited: 0, truncated: false };
+  const plists = findFiles(dir, (f) => f.endsWith("Info.plist"), walk);
   for (const file of plists) {
     const parsed = parsePlist(readFileSync(file, "utf8"));
     if ("error" in parsed) {
@@ -112,7 +135,7 @@ export function loadProject(dir, { expoConfig } = {}) {
     }
     for (const [k, v] of Object.entries(parsed.value ?? {})) set(k, v, rel(dir, file));
   }
-  for (const file of findFiles(dir, (f) => f.endsWith("project.pbxproj"))) {
+  for (const file of findFiles(dir, (f) => f.endsWith("project.pbxproj"), walk)) {
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(/INFOPLIST_KEY_(\w+)\s*=\s*("((?:[^"\\]|\\.)*)"|[^;\s]+)\s*;/g)) {
       const value = m[3] !== undefined ? m[3].replace(/\\"/g, '"') : m[2];
@@ -125,7 +148,7 @@ export function loadProject(dir, { expoConfig } = {}) {
   if (expo?.ios?.privacyManifests) {
     privacyManifests.push({ source: "app.json ios.privacyManifests", types: accessedTypes(expo.ios.privacyManifests) });
   }
-  for (const file of findFiles(dir, (f) => f.endsWith("PrivacyInfo.xcprivacy"))) {
+  for (const file of findFiles(dir, (f) => f.endsWith("PrivacyInfo.xcprivacy"), walk)) {
     const parsed = parsePlist(readFileSync(file, "utf8"));
     if ("error" in parsed) {
       notes.push(`${rel(dir, file)}: ${parsed.error}, not read`);
@@ -139,7 +162,7 @@ export function loadProject(dir, { expoConfig } = {}) {
   // Source text, bounded.
   const sources = [];
   let truncated = false;
-  for (const file of findFiles(dir, (f) => SOURCE_EXTENSIONS.some((e) => f.endsWith(e)))) {
+  for (const file of findFiles(dir, (f) => SOURCE_EXTENSIONS.some((e) => f.endsWith(e)), walk)) {
     if (sources.length >= MAX_FILES) {
       truncated = true;
       break;
@@ -152,6 +175,8 @@ export function loadProject(dir, { expoConfig } = {}) {
     }
   }
   if (truncated) notes.push(`more than ${MAX_FILES} source files; only the first ${MAX_FILES} were scanned`);
+  if (walk.truncated)
+    notes.push(`more than ${MAX_WALK} files and folders; the rest were not read — is this the app's directory?`);
 
   return {
     dir,
@@ -198,13 +223,16 @@ function hasXcodeProject(dir) {
 
 /**
  * Files under `dir` matching `test`, skipping dependencies and build output.
+ * Each call may visit at most MAX_WALK entries; `budget` records whether one ran out.
  * @param {string} dir
  * @param {(path: string) => boolean} test
+ * @param {{ visited: number, truncated: boolean }} budget
  * @returns {string[]}
  */
-function findFiles(dir, test) {
+function findFiles(dir, test, budget) {
   /** @type {string[]} */
   const out = [];
+  let visited = 0;
   const walk = (/** @type {string} */ d) => {
     let entries;
     try {
@@ -213,6 +241,10 @@ function findFiles(dir, test) {
       return;
     }
     for (const e of entries) {
+      if (++visited > MAX_WALK) {
+        budget.truncated = true;
+        return;
+      }
       if (e.name.startsWith(".") && e.name !== ".") continue;
       const p = join(d, e.name);
       if (e.isDirectory()) {

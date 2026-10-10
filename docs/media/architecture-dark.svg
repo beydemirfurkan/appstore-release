@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" width="960" height="660" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 684" width="960" height="684" role="img" aria-labelledby="t d">
 <title id="t">appstore-release architecture</title>
-<desc id="d">Four entry surfaces (eight agent skills, an MCP server with 13 tools, a CLI and a library API) share one core: operations and the readiness report, which call one App Store Connect client.</desc>
+<desc id="d">Four entry surfaces (nine agent skills, an MCP server with 13 tools, a CLI and a library API) share one core: operations and the readiness report, which call one App Store Connect client.</desc>
 <defs>
   <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9198a1"/></marker>
   <style>
@@ -14,37 +14,39 @@
     .k { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
   </style>
 </defs>
-<rect width="960" height="660" rx="16" fill="#0d1117"/>
+<rect width="960" height="684" rx="16" fill="#0d1117"/>
 <text x="24" y="38" class="s k mu" text-anchor="start">ENTRY SURFACES — pick the one your tools speak</text>
-<rect x="24" y="52" width="452" height="176" rx="12" fill="#112136" stroke="#58a6ff" stroke-width="1.25"/>
-<text x="44" y="82" class="s h" text-anchor="start">Agent skills · 8</text>
+<rect x="24" y="52" width="452" height="200" rx="12" fill="#112136" stroke="#58a6ff" stroke-width="1.25"/>
+<text x="44" y="82" class="s h" text-anchor="start">Agent skills · 9</text>
 <text x="44" y="102" class="s c mu" text-anchor="start">npx skills add · Claude Code plugin · Codex · Cursor</text>
 <rect x="44" y="114" width="180" height="32" rx="8" fill="#0d1117" stroke="#58a6ff" stroke-width="1.25"/>
 <text x="134" y="135" class="m c ac" text-anchor="middle">appstore-release</text>
 <text x="236" y="135" class="s c mu" text-anchor="start">router: check → fix → submit</text>
-<rect x="44" y="158" width="134" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="111.0" y="173" class="m c" text-anchor="middle">app-store-screenshot-upload</text>
-<rect x="188.0" y="158" width="126" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="251.2" y="173" class="m c" text-anchor="middle">app-store-age-rating</text>
-<rect x="324.4" y="158" width="149" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="399.0" y="173" class="m c" text-anchor="middle">app-store-subscriptions</text>
-<rect x="44" y="181" width="119" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="103.4" y="196" class="m c" text-anchor="middle">app-store-rejection</text>
-<rect x="172.8" y="181" width="134" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="239.8" y="196" class="m c" text-anchor="middle">ios-code-signing</text>
-<rect x="316.8" y="181" width="126" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="380.0" y="196" class="m c" text-anchor="middle">app-store-testflight</text>
-<rect x="44" y="204" width="104" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="95.8" y="219" class="m c" text-anchor="middle">app-store-customer-reviews</text>
-<rect x="492" y="52" width="140" height="176" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
+<rect x="44" y="158" width="164" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="126.0" y="173" class="m c" text-anchor="middle">app-store-preflight</text>
+<rect x="217" y="158" width="227" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="330.5" y="173" class="m c" text-anchor="middle">app-store-screenshot-upload</text>
+<rect x="44" y="181" width="172" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="130.0" y="196" class="m c" text-anchor="middle">app-store-age-rating</text>
+<rect x="225" y="181" width="195" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="322.5" y="196" class="m c" text-anchor="middle">app-store-subscriptions</text>
+<rect x="44" y="204" width="172" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="130.0" y="219" class="m c" text-anchor="middle">app-store-testflight</text>
+<rect x="225" y="204" width="164" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="307.0" y="219" class="m c" text-anchor="middle">app-store-rejection</text>
+<rect x="44" y="227" width="219" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="153.5" y="242" class="m c" text-anchor="middle">app-store-customer-reviews</text>
+<rect x="272" y="227" width="141" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="342.5" y="242" class="m c" text-anchor="middle">ios-code-signing</text>
+<rect x="492" y="52" width="140" height="200" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
 <text x="508" y="82" class="s h" text-anchor="start">MCP server</text>
 <text x="508" y="110" class="m c mu" text-anchor="start">13 tools</text>
 <text x="508" y="132" class="m c mu" text-anchor="start">skill resources</text>
-<rect x="644" y="52" width="140" height="176" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
+<rect x="644" y="52" width="140" height="200" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
 <text x="660" y="82" class="s h" text-anchor="start">CLI</text>
 <text x="660" y="110" class="m c mu" text-anchor="start">src/cli.mjs</text>
 <text x="660" y="132" class="m c mu" text-anchor="start">exit 0·2·3·4·5</text>
-<rect x="796" y="52" width="140" height="176" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
+<rect x="796" y="52" width="140" height="200" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
 <text x="812" y="82" class="s h" text-anchor="start">Library API</text>
 <text x="812" y="110" class="m c mu" text-anchor="start">createContext()</text>
 <text x="812" y="132" class="m c mu" text-anchor="start">runPipeline()</text>
@@ -54,33 +56,33 @@
 <text x="660" y="190" class="m c mu" text-anchor="start">--dry-run</text>
 <text x="812" y="172" class="s c mu" text-anchor="start">same code path</text>
 <text x="812" y="190" class="s c mu" text-anchor="start">as CLI and MCP</text>
-<path d="M250,232 L250,282" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<path d="M562,232 L562,282" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<path d="M714,232 L714,282" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<path d="M866,232 L866,282" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<text x="24" y="276" class="s k mu" text-anchor="start">ONE CORE — src/</text>
-<rect x="24" y="290" width="912" height="132" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
-<rect x="44" y="308" width="430" height="96" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="64" y="338" class="m h" text-anchor="start">ops/</text>
-<text x="110" y="338" class="s b mu" text-anchor="start">one file per task</text>
-<text x="64" y="362" class="m c mu" text-anchor="start">attach-build · metadata · pricing · age-rating</text>
-<text x="64" y="382" class="m c mu" text-anchor="start">screenshots · subscription · submit · …  idempotent</text>
-<rect x="490" y="308" width="426" height="96" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="510" y="338" class="m h" text-anchor="start">report/</text>
-<text x="592" y="338" class="s b mu" text-anchor="start">readiness verdict</text>
-<text x="510" y="362" class="m c mu" text-anchor="start">snapshot → checks → findings</text>
-<text x="510" y="382" class="s c mu" text-anchor="start">ordered next actions · who can fix each</text>
-<path d="M476,356 L488,356" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<path d="M480,424 L480,470" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<rect x="24" y="474" width="912" height="62" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
-<text x="44" y="510" class="m h" text-anchor="start">asc/</text>
-<text x="92" y="510" class="s b mu" text-anchor="start">one client</text>
-<text x="196" y="510" class="m c mu" text-anchor="start">JWT · retry + backoff · pagination · dry-run enforced at the HTTP layer</text>
-<path d="M330,540 L330,566" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
-<rect x="24" y="570" width="612" height="62" rx="12" fill="#112136" stroke="#58a6ff" stroke-width="1.25"/>
-<text x="44" y="606" class="s h" text-anchor="start">App Store Connect API 4.5</text>
-<text x="270" y="606" class="m c ac" text-anchor="start">App Asset Library · versioned subscriptions</text>
-<rect x="652" y="570" width="284" height="62" rx="12" fill="#2a2213" stroke="#d29922" stroke-width="1.25" stroke-dasharray="5 5"/>
-<text x="672" y="597" class="s b" text-anchor="start">Kept in Apple’s UI</text>
-<text x="672" y="620" class="s c mu" text-anchor="start">App Privacy · clicks if a first product is refused</text>
+<path d="M250,256 L250,306" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<path d="M562,256 L562,306" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<path d="M714,256 L714,306" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<path d="M866,256 L866,306" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<text x="24" y="300" class="s k mu" text-anchor="start">ONE CORE — src/</text>
+<rect x="24" y="314" width="912" height="132" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
+<rect x="44" y="332" width="430" height="96" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="64" y="362" class="m h" text-anchor="start">ops/</text>
+<text x="110" y="362" class="s b mu" text-anchor="start">one file per task</text>
+<text x="64" y="386" class="m c mu" text-anchor="start">attach-build · metadata · pricing · age-rating</text>
+<text x="64" y="406" class="m c mu" text-anchor="start">screenshots · subscription · submit · …  idempotent</text>
+<rect x="490" y="332" width="426" height="96" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
+<text x="510" y="362" class="m h" text-anchor="start">report/</text>
+<text x="592" y="362" class="s b mu" text-anchor="start">readiness verdict</text>
+<text x="510" y="386" class="m c mu" text-anchor="start">snapshot + preflight → checks → findings</text>
+<text x="510" y="406" class="s c mu" text-anchor="start">ordered next actions · who can fix each</text>
+<path d="M476,380 L488,380" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<path d="M480,448 L480,494" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<rect x="24" y="498" width="912" height="62" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
+<text x="44" y="534" class="m h" text-anchor="start">asc/</text>
+<text x="92" y="534" class="s b mu" text-anchor="start">one client</text>
+<text x="196" y="534" class="m c mu" text-anchor="start">JWT · retry + backoff · pagination · dry-run enforced at the HTTP layer</text>
+<path d="M330,564 L330,590" stroke="#9198a1" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<rect x="24" y="594" width="612" height="62" rx="12" fill="#112136" stroke="#58a6ff" stroke-width="1.25"/>
+<text x="44" y="630" class="s h" text-anchor="start">App Store Connect API 4.5</text>
+<text x="270" y="630" class="m c ac" text-anchor="start">App Asset Library · versioned subscriptions</text>
+<rect x="652" y="594" width="284" height="62" rx="12" fill="#2a2213" stroke="#d29922" stroke-width="1.25" stroke-dasharray="5 5"/>
+<text x="672" y="621" class="s b" text-anchor="start">Kept in Apple’s UI</text>
+<text x="672" y="644" class="s c mu" text-anchor="start">App Privacy · a refused first product</text>
 </svg>

@@ -242,7 +242,6 @@ export async function run(ctx, args = {}) {
     };
   }
 
-  ctx.log.info(`Follow it: ${FOLLOW_COMMAND}`);
   return {
     status: Status.CHANGED,
     message: `sent to App Review · ${contents}${skipped}`,

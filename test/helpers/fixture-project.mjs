@@ -42,7 +42,9 @@ export function writeWellnessProject(root) {
     metadata: {
       name: "Wellness",
       subtitle: "Small habits, every day",
-      description: "Track the habits that keep you well. Gentle reminders, honest insights, no streak shaming.",
+      description:
+        "Track the habits that keep you well. Gentle reminders, honest insights, no streak shaming.\n\n" +
+        "Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/",
       keywords: "health,routine,tracker,mood,sleep,mindfulness,journal",
       supportUrl: "https://example.com/support",
       marketingUrl: "https://example.com",

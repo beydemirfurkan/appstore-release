@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com. Needs an App Store Connect API key with the App Manager role. git is used once to fetch the CLI when the skill runs outside a checkout.
 metadata:
   author: Furkan Beydemir
-  version: "3.2.0"
+  version: "4.0.0"
   guidelines: "2026-06-08"
 ---
 

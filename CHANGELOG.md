@@ -1,5 +1,44 @@
 # Changelog
 
+## 4.0.0
+
+The app itself, not only its listing: an offline preflight for what App Review rejects in the code and the Info.plist, App Store rules corrected against Apple's own wording, and skill names people search for.
+
+### Breaking
+
+- **Skills renamed** to what people search for. The router keeps its name.
+
+  | 3.x                 | 4.0                           |
+  | ------------------- | ----------------------------- |
+  | `asc-screenshots`   | `app-store-screenshot-upload` |
+  | `asc-age-rating`    | `app-store-age-rating`        |
+  | `asc-subscriptions` | `app-store-subscriptions`     |
+  | `asc-rejection`     | `app-store-rejection`         |
+  | `asc-credentials`   | `ios-code-signing`            |
+  | `asc-testflight`    | `app-store-testflight`        |
+  | `asc-reviews`       | `app-store-customer-reviews`  |
+
+  Upgrading: `npx skills remove asc-screenshots asc-age-rating asc-subscriptions asc-rejection asc-credentials asc-testflight asc-reviews`, then `npx skills add beydemirfurkan/appstore-release`. MCP resource URIs under the old names (`appstore-release://skills/asc-*`) still resolve.
+
+- **`check` has a new first section, App**, from the preflight below. A certain problem in the app — a native API without its usage description, an invalid required-reason code — now blocks, so a version that was `ready` can come back `blocked`.
+- **Keywords are limited to 100 bytes**, as Apple words it, not 100 characters. A Turkish or Japanese keyword list that passed before can now be refused offline (`config.*.keywords.too-long`).
+- **What's New is required on every version after the first**, in every locale (`metadata.whatsNew.missing`, blocker). "First" is now decided in one place: no other version of the app on the platform — not "1.0", not the version count.
+- **An app's first subscription or in-app purchase is submitted with the version, by API.** 3.1.0 left it to the website after Apple's 4.4.1 note (_"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com"_); teams submit it by API in the same review submission, so `submit` now tries that. If App Store Connect refuses — when the item is added or at the final submit — nothing is submitted, the product items are removed from the draft (`DELETE /v1/reviewSubmissionItems/{id}`), and the result is `manual` (exit 5) with the clicks. `submit --submit --skip-products` sends the app alone. `subscription.first.ui-only` / `iap.first.ui-only` (blocker) became `*.first.with-version` (info). Not yet confirmed on a live account either way.
+
+### Added
+
+- **`appstore-release preflight`**: reads the project — Expo `app.json` with plugin precedence, `Info.plist`, `INFOPLIST_KEY_*` build settings, `PrivacyInfo.xcprivacy`, and the source — offline, with no credentials. It reports missing and generic permission texts (5.1.1(ii)), invalid required-reason codes, SDKs from Apple's privacy-manifest list, third-party login without an equivalent private option (4.8), account creation without deletion (5.1.1(v)), external payments (3.1.1), no restore purchases (3.1.2), tracking without ATT (5.1.2(i)), insecure HTTP, secrets in the bundle and undeclared export compliance. Each finding has the guideline and the file and line. A blocker only when certain; anything inferred is a warning, waivable with a reason in `preflight.ignore`. It ends with what only a test on a device can prove. `--expo-config` evaluates a dynamic `app.config.js/ts`; `--json` for scripts. MCP: `asc_validate_config` with `preflight: true` (still 13 tools).
+- **The app-store-preflight skill**, with checklists by kind of app: subscriptions, sign-in, user-generated content, kids, health, AI features, tracking.
+- **Listing checks**: keywords of two characters or fewer, a subtitle repeating the name, "Android" or "Google Play" in the metadata (2.3.10), and a subscription with no Terms of Use link — neither a custom EULA (now read from App Store Connect) nor a link in the description (3.1.2).
+- **`review-info --draft-notes`** drafts the notes for App Review — sign-in, how to reach the main feature, permissions, products — from the config and the app, writing nothing. `review.demo.likely-needed` warns when the app has sign-in and App Review has no way in (2.1).
+- **`submit`**: `--dry-run` lists what would be submitted; a submission ends with `Follow it: appstore-release check --wait 30` (and `details.handoff`); Apple's refusals, nested `associatedErrors` included, are mapped to the command or clicks that fix them, and unknown ones are kept word for word.
+- **`nextActions[].mutates`** marks the steps that write to App Store Connect; the terminal plan says `· writes`.
+- **Skills**: every skill has evals (`evals/evals.json`), the guidelines revision it was checked against (June 8, 2026), and the gate now fails on any `asc <command> --flag` in a skill that the CLI does not have. Rejection: classify first, a decision tree, an UNDERSTANDING / CHANGES MADE / HOW TO VERIFY reply, appeal versus expedited review. Screenshot copy rules; the paywall checklist; customer review text treated as untrusted input.
+
+### Still unverified against a live account
+
+Whether App Store Connect accepts an app's first subscription or in-app purchase by API (the refusal path is the safe one, and tested against the fake), the exact wording of Apple's refusal messages, and the preflight rules' false-positive rate on real projects.
+
 ## 3.2.0
 
 ### Added

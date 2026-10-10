@@ -11,11 +11,20 @@ export const section = { id: "subscription", title: "Purchases" };
 const STANDARD_EULA = "apple.com/legal/internet-services/itunes/dev/stdeula";
 /** "Terms of Use" and its usual names, in the languages listings are most often written in. */
 const TERMS_RE =
-  /terms of (use|service)|\bEULA\b|nutzungsbedingungen|conditions (générales )?d['’]utilisation|términos (de uso|y condiciones)|termini (d['’]uso|di servizio)|termos de uso|kullanım koşulları|gebruiksvoorwaarden|利用規約|使用条款|服務條款|이용약관/i;
+  /\bterms\b|\bEULA\b|nutzungsbedingungen|conditions (générales )?d['’]utilisation|términos|termini (d['’]uso|di servizio)|termos de uso|kullanım (koşulları|şartları)|gebruiksvoorwaarden|利用規約|使用条款|服務條款|이용약관/i;
+/** A link whose own path says what it is: …/terms, …/eula, …/tos. */
+const TERMS_URL_RE = /https?:\/\/\S*\/(terms|eula|tos)\b/i;
 
-/** @param {unknown} text */
+/**
+ * A terms link: Apple's standard EULA, a URL whose path is the terms, or a URL
+ * on the same line as a word for terms ("Kullanım Şartları: https://…").
+ * @param {unknown} text
+ */
 const hasTermsLink = (text) =>
-  typeof text === "string" && (text.includes(STANDARD_EULA) || (TERMS_RE.test(text) && /https?:\/\//.test(text)));
+  typeof text === "string" &&
+  (text.includes(STANDARD_EULA) ||
+    TERMS_URL_RE.test(text) ||
+    text.split("\n").some((line) => TERMS_RE.test(line) && /https?:\/\//.test(line)));
 
 /**
  * Guideline 3.1.2: an auto-renewing subscription's "metadata must include links

@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.0.1
+
+Fixes from running 4.0.0 against a live app.
+
+### Fixed
+
+- **`subscription.terms-link.missing` missed real terms links.** `Kullanım Şartları: https://…/terms` and a bare `Terms: https://…/terms` were reported as no link. A URL whose path is `/terms`, `/eula` or `/tos` now counts, and so does a word for terms on the same line as a URL.
+- Preflight named `app.config.js` when the unread dynamic config was `app.config.ts`; it now names the file.
+- `better-auth` counts as an account library for the account-deletion and review-notes checks.
+
 ## 4.0.0
 
 The app itself, not only its listing: an offline preflight for what App Review rejects in the code and the Info.plist, App Store rules corrected against Apple's own wording, and skill names people search for.

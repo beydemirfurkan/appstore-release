@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.0.2
+
+### Fixed
+
+- **Paths in a monorepo.** A config in `mobile/` could not point at `../app-store-screenshots/`: every path had to stay inside the config's own folder. Paths may now reach anywhere in the git repository the project is in — never the home directory or the root of the disk, even when one of them is a repository. Relative paths still resolve against the config's folder.
+- **Windows.** CI now runs on Windows (Node 20, 22 and 24). Files are checked out with LF everywhere (`.gitattributes`), tests run through `scripts/test.mjs` instead of a shell glob that Windows and Node 20 do not expand, and `preflight --expo-config` calls `npx.cmd` through a shell on Windows.
+
 ## 4.0.1
 
 Fixes from running 4.0.0 against a live app.

@@ -10,7 +10,7 @@ import { dirname } from "node:path";
 import { resolveCredentials } from "./credentials.mjs";
 import { findConfigPath, loadConfig } from "./config.mjs";
 import { createLog } from "./events.mjs";
-import { resolveProjectPath } from "./paths.mjs";
+import { repositoryBoundary, resolveProjectPath } from "./paths.mjs";
 import { createTokenProvider } from "../asc/jwt.mjs";
 import { AscClient, DEFAULT_BASE_URL } from "../asc/client.mjs";
 import { readExpoProject } from "./eas.mjs";
@@ -66,6 +66,9 @@ export async function createContext(options = {}) {
   // was started. This one default is what stops `./assets/screenshots` from
   // resolving inside an installed plugin's own tree.
   const projectRoot = options.projectRoot ?? (configPath ? dirname(configPath) : cwd);
+  // Paths may reach anywhere in the repository the project is in, not only its
+  // own folder: a monorepo keeps its screenshots beside the app.
+  const boundary = repositoryBoundary(projectRoot);
 
   // An Expo project already knows its bundle id and App Store Connect app id;
   // they fill in what the config and the environment leave out.
@@ -110,7 +113,7 @@ export async function createContext(options = {}) {
     dryRun,
     log,
     findings,
-    resolvePath: (rel, purpose) => resolveProjectPath(projectRoot, rel, { purpose }),
+    resolvePath: (rel, purpose) => resolveProjectPath(projectRoot, rel, { purpose, boundary }),
   };
 }
 

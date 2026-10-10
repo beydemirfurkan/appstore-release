@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -398,4 +398,23 @@ test("draft App Review notes: what the app does, and nothing guessed", async () 
     "Sign-in\n- No sign-in is needed: every feature is available without an account.\n\n" +
       "How to reach key features\n- (Two or three steps from launch to the main feature, in the app's own words.)",
   );
+});
+
+test("config paths may reach the enclosing repository, never beyond it", async () => {
+  const { repositoryBoundary } = await import("../src/core/paths.mjs");
+  const repo = mkdtempSync(join(tmpdir(), "asr-repo-"));
+  mkdirSync(join(repo, ".git"));
+  mkdirSync(join(repo, "mobile"));
+  mkdirSync(join(repo, "app-store-screenshots"));
+  const app = join(repo, "mobile");
+  const boundary = repositoryBoundary(app);
+  assert.equal(realpathSync(boundary), realpathSync(repo));
+  assert.equal(
+    resolveProjectPath(app, "../app-store-screenshots/paywall.png", { boundary }),
+    join(repo, "app-store-screenshots/paywall.png"),
+  );
+  assert.throws(() => resolveProjectPath(app, "../../outside.png", { boundary }), PathError);
+  // No repository: the project root is the limit, as before.
+  const loose = mkdtempSync(join(tmpdir(), "asr-loose-"));
+  assert.equal(repositoryBoundary(loose), loose);
 });

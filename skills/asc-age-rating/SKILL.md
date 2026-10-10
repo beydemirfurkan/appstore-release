@@ -10,6 +10,10 @@ metadata:
 
 # Age rating
 
+> **You say:** _"What age rating should my app get?"_ · _"Answer the new social media questions."_
+>
+> **It does:** Walks the 2026 questionnaire with you in plain words, then writes the complete declaration App Store Connect requires — 4+, 9+, 13+, 16+ or 18+.
+
 Apple derives the rating (4+, 9+, 13+, 16+, 18+) from a questionnaire. The API stores the answers as one `ageRatingDeclaration` on the app's App Info, and it only accepts a **complete** set — a partial PATCH 409s. This tool always sends every attribute; you only decide the answers.
 
 ## Running the CLI

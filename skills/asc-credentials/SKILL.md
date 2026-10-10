@@ -10,6 +10,10 @@ metadata:
 
 # iOS credentials for EAS
 
+> **You say:** _"My EAS build fails on the provisioning profile."_ · _"Fix my iOS signing."_
+>
+> **It does:** Reuses or issues an Apple Distribution certificate and an App Store profile and writes them for EAS — without spending one of Apple's three certificate slots unless you say so.
+
 When EAS's stored certificate or profile drifts from what Apple has, `eas build` fails non-interactively. This skill replaces EAS-managed signing with local credentials generated through the API.
 
 ## Running the CLI

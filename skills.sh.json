@@ -1,23 +1,31 @@
 {
   "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
   "groupings": [
     {
-      "title": "Release pipeline",
-      "description": "Take an iOS app from build to App Review over the App Store Connect API, driven by a readiness report.",
+      "title": "Start here",
+      "description": "Say “publish my app for review”. It checks what blocks App Review, fixes it over the App Store Connect API, and submits when nothing is left. iOS 27 ready, no dependencies.",
       "skills": ["appstore-release"]
     },
     {
-      "title": "Focused skills",
-      "description": "One App Store Connect job each \u2014 usable alone, or handed off to by the pipeline.",
-      "skills": [
-        "asc-screenshots",
-        "asc-age-rating",
-        "asc-subscriptions",
-        "asc-rejection",
-        "asc-credentials",
-        "asc-testflight",
-        "asc-reviews"
-      ]
+      "title": "Get the listing right",
+      "description": "Screenshots at Apple's exact sizes — iPhone 6.9\", iPad, iPhone Duo — and the 2026 age-rating questionnaire, written for you.",
+      "skills": ["asc-screenshots", "asc-age-rating"]
+    },
+    {
+      "title": "Sell",
+      "description": "Subscription plans, free trials and lifetime unlocks: created, priced, localized and submitted with your version.",
+      "skills": ["asc-subscriptions"]
+    },
+    {
+      "title": "Test and ship",
+      "description": "Builds to TestFlight testers with notes and beta review, and EAS signing that never burns a certificate slot by accident.",
+      "skills": ["asc-testflight", "asc-credentials"]
+    },
+    {
+      "title": "After review",
+      "description": "Turn a rejection into a resubmission, and answer customer reviews — each reply published only after you approve it.",
+      "skills": ["asc-rejection", "asc-reviews"]
     }
   ]
 }

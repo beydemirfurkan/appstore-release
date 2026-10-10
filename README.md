@@ -4,7 +4,7 @@
 
 **Ship an iOS app to App Store review by asking your agent.**
 
-[![CI](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml/badge.svg)](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE) [![iOS 27](https://img.shields.io/badge/iOS-27-black)](docs/reference.md#updated-for-ios-27)
+[![skills.sh](https://skills.sh/b/beydemirfurkan/appstore-release)](https://skills.sh/beydemirfurkan/appstore-release) [![CI](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml/badge.svg)](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE) [![iOS 27](https://img.shields.io/badge/iOS-27-black)](docs/reference.md#updated-for-ios-27)
 
 <img src="docs/media/hero.gif" alt="appstore-release: check finds twelve blockers, release fixes them, submit sends the app and its new subscription to App Review" width="860">
 

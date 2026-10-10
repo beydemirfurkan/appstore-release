@@ -10,6 +10,10 @@ metadata:
 
 # TestFlight
 
+> **You say:** _"Send this build to my beta testers."_ · _"Invite these three emails to TestFlight."_
+>
+> **It does:** Answers export compliance, writes What to Test, creates beta groups, invites testers and submits for beta review — re-running sends only what changed.
+
 Getting a build to testers is its own decision, separate from the App Store listing, so it is its own command: `testflight`. It reads a `testflight` block from the config and writes only what differs, so it is safe to re-run after every new build.
 
 ## Running the CLI

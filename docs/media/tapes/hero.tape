@@ -8,9 +8,12 @@ Set Width 1300
 Hide
 Type "export DEMO_PORT=4011 PS1='\[\e[38;5;245m\]~/wellness \[\e[38;5;75m\]$\[\e[0m\] ' && source scripts/demo/setup.sh >/dev/null && clear" Enter
 Sleep 1.5s
+# The first frame is what GitHub and link previews show before the GIF plays,
+# so recording starts with the blocked report already on screen.
+Type "appstore-release check" Enter
+Sleep 2s
 Show
 
-Type "appstore-release check" Sleep 300ms Enter
 Sleep 5s
 Type "clear" Enter
 Type "appstore-release release" Sleep 300ms Enter

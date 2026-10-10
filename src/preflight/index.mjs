@@ -8,7 +8,7 @@
 
 import { loadProject } from "./project.mjs";
 import { appFinding, hasAny, Severity } from "./rules/util.mjs";
-import { IAP_PACKAGES } from "./data.mjs";
+import { APPLE_LOGIN_PACKAGES, IAP_PACKAGES, SOCIAL_LOGIN_PACKAGES } from "./data.mjs";
 import { permissions } from "./rules/permissions.mjs";
 import { privacyManifest } from "./rules/privacy-manifest.mjs";
 import { accounts, hasAccounts } from "./rules/accounts.mjs";
@@ -27,6 +27,15 @@ export const RULES = [permissions, privacyManifest, accounts, commerce, platform
  * @property {import("../core/findings.mjs").Finding[]} findings
  * @property {string[]} notes          what could not be read, said plainly
  * @property {string[]} manualChecks   what a static pass cannot prove; test it on a device
+ * @property {PreflightSignals} signals what the app does, for the App Review notes and the review check
+ */
+
+/**
+ * @typedef {Object} PreflightSignals
+ * @property {boolean} signIn       people can have an account (an auth library, or sign-up code)
+ * @property {string[]} logins      third-party sign-in libraries found
+ * @property {boolean} purchases    the app sells something (config products or a purchase library)
+ * @property {Array<{ key: string, text: string }>} permissions  every usage description it ships
  */
 
 /**
@@ -51,6 +60,7 @@ export function runPreflight({ projectDir, config = null, expoConfig }) {
       ],
       notes: [],
       manualChecks: [],
+      signals: { signIn: false, logins: [], purchases: false, permissions: [] },
     };
   }
 
@@ -85,6 +95,14 @@ export function runPreflight({ projectDir, config = null, expoConfig }) {
     findings,
     notes,
     manualChecks: manualChecks(project, sellsProducts),
+    signals: {
+      signIn: hasAccounts(project),
+      logins: [...SOCIAL_LOGIN_PACKAGES, ...APPLE_LOGIN_PACKAGES].filter((p) => project.deps.has(p)),
+      purchases: sellsProducts || hasAny(project, IAP_PACKAGES),
+      permissions: [...project.infoPlist]
+        .filter(([key, { value }]) => key.endsWith("UsageDescription") && typeof value === "string")
+        .map(([key, { value }]) => ({ key, text: value })),
+    },
   };
 }
 

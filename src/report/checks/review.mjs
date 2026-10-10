@@ -82,6 +82,33 @@ export function check({ snapshot, config }) {
     );
   }
 
+  // Guideline 2.1: a reviewer who cannot get past the sign-in screen rejects the
+  // app. Preflight saw sign-in; nothing says how the reviewer gets in.
+  const notes = `${config?.review?.notes ?? ""} ${detail?.attributes?.notes ?? ""}`;
+  if (
+    snapshot.preflight?.signals?.signIn &&
+    !config?.review?.demoAccountName &&
+    !detail?.attributes?.demoAccountName &&
+    !/demo|no (login|sign[- ]?in|account)|without (an )?account/i.test(notes)
+  ) {
+    out.push(
+      finding({
+        id: "review.demo.likely-needed",
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: "The app has sign-in, but App Review has no demo account",
+        detail:
+          "Preflight found sign-in in the app. Guideline 2.1: reviewers need a working demo account, or notes " +
+          "saying every feature is usable without one; otherwise the app is rejected for incomplete information.",
+        fixOwner: FixOwner.CLI,
+        fix:
+          "Set review.demoAccountName and review.demoAccountPassword (or say in review.notes that no account is " +
+          "needed), then run review-info. `review-info --draft-notes` drafts the notes.",
+        guideline: "2.1",
+      }),
+    );
+  }
+
   const state = versionState(snapshot.version);
   if (!SUBMITTED_STATES.includes(state)) out.push(privacyFinding(config));
 

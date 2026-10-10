@@ -267,6 +267,16 @@ test("a refusal about the app itself keeps the draft and says what to do", async
   assert.equal(productItems(fake).length, 2, "products are not to blame, so they stay in the draft");
 });
 
+test("review-info --draft-notes drafts from the config and the app, and writes nothing", async () => {
+  const { fake, run } = await firstSubscriptionProject();
+  const drafted = await run("review-info", "--draft-notes");
+  assert.equal(drafted.code, Exit.OK);
+  const { notes } = drafted.json.results[0].details;
+  assert.match(notes, /^Sign-in\n/);
+  assert.match(notes, /In-app purchases\n- .*com\.example\.wellness\.monthly/);
+  assert.deepEqual(fake.mutations(), []);
+});
+
 test("an Expo project's store.config.json, eas.json and app.json are used as they are", async () => {
   const { writeFileSync } = await import("node:fs");
   const root = mkdtempSync(join(tmpdir(), "asr-e2e-expo-"));

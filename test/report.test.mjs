@@ -406,3 +406,17 @@ test("next actions say which commands write to App Store Connect", () => {
   assert.equal(pricing?.mutates, true);
   assert.match(renderReportMarkdown(report), /`appstore-release pricing` \(writes to App Store Connect\)/);
 });
+
+test("sign-in without a demo account or a word about it in the notes is a warning", () => {
+  const signals = { signIn: true, logins: [], purchases: false, permissions: [] };
+  const demo = (/** @type {any} */ config, /** @type {any} */ preflight = { findings: [], signals }) =>
+    buildReport({ snapshot: healthySnapshot({ preflight }), config: { locale: "en-US", ...config } }).findings.find(
+      (f) => f.id === "review.demo.likely-needed",
+    );
+  assert.equal(demo({})?.severity, Severity.WARNING);
+  assert.equal(demo({})?.guideline, "2.1");
+  assert.equal(demo({ review: { demoAccountName: "review@example.com" } }), undefined);
+  assert.equal(demo({ review: { notes: "No login is needed: every feature works offline." } }), undefined);
+  assert.equal(demo({}, { findings: [], signals: { ...signals, signIn: false } }), undefined);
+  assert.equal(demo({}, null), undefined, "no preflight, no guess");
+});

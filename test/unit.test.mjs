@@ -370,3 +370,32 @@ test("Apple's refusals: nested reasons read, known ones mapped, product ones kep
   );
   assert.deepEqual(explainRefusal(null), { lines: [], findings: [], productRelated: false });
 });
+
+test("draft App Review notes: what the app does, and nothing guessed", async () => {
+  const { draftReviewNotes } = await import("../src/ops/review-info.mjs");
+  const notes = draftReviewNotes(
+    {
+      review: { notes: "Push notifications are optional." },
+      subscription: { productId: "com.example.pro.monthly", name: "Pro", period: "ONE_MONTH", priceAmount: 4.99 },
+    },
+    {
+      signIn: true,
+      logins: ["expo-apple-authentication"],
+      purchases: true,
+      permissions: [{ key: "NSCameraUsageDescription", text: "Scan a barcode to add it to your list." }],
+    },
+  );
+  assert.match(notes, /^Sign-in\n- \(The app has sign-in: add a demo account/);
+  assert.match(notes, /Sign-in options: expo-apple-authentication\./);
+  assert.match(notes, /How to reach key features\n- \(Two or three steps/);
+  assert.match(notes, /Permissions\n- Camera: "Scan a barcode to add it to your list\."/);
+  assert.match(notes, /Pro — com\.example\.pro\.monthly, auto-renewing one month, 4\.99 \(USA\)/);
+  assert.match(notes, /Notes\n- Push notifications are optional\./);
+
+  const plain = draftReviewNotes({ review: {} }, { signIn: false, logins: [], purchases: false, permissions: [] });
+  assert.equal(
+    plain,
+    "Sign-in\n- No sign-in is needed: every feature is available without an account.\n\n" +
+      "How to reach key features\n- (Two or three steps from launch to the main feature, in the app's own words.)",
+  );
+});

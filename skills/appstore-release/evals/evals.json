@@ -10,14 +10,28 @@
       "asc submit --submit"
     ]
   },
-  { "prompt": "Why can't I submit this version to the App Store?", "expects": ["asc check"] },
+  {
+    "prompt": "Why can't I submit this version to the App Store?",
+    "expects": ["asc check"]
+  },
   {
     "prompt": "Release version 1.3.0 of the app with the new description in English and Turkish.",
     "expects": ["asc new-version 1.3.0", "asc release --dry-run", "asc release"]
   },
-  { "prompt": "It's submitted — tell me when Apple approves it.", "expects": ["asc check --wait 30"] },
+  {
+    "prompt": "It's submitted — tell me when Apple approves it.",
+    "expects": ["asc check --wait 30"]
+  },
   {
     "prompt": "Write the notes for App Review; reviewers need to log in.",
     "expects": ["asc review-info --draft-notes", "asc review-info"]
+  },
+  {
+    "prompt": "How many units did we sell last month?",
+    "expects": ["asc sales --frequency MONTHLY --date"]
+  },
+  {
+    "prompt": "A/B test calmer screenshots on the product page for half the visitors.",
+    "expects": ["experiments", "asc experiments --dry-run", "asc experiments"]
   }
 ]

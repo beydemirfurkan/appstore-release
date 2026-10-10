@@ -45,6 +45,7 @@ import { AssetUploader } from "../asc/assets.mjs";
  * @property {import("./findings.mjs").Finding[]} findings
  * @property {(rel: string, purpose?: string) => string} resolvePath
  * @property {string} stateDir     where what App Store Connect does not remember is kept (core/state.mjs)
+ * @property {Record<string, string|undefined>} env   the environment the context was made with (runtime.env), never process.env behind its back
  */
 
 /**
@@ -108,6 +109,7 @@ export async function createContext(options = {}) {
     appId,
     projectRoot,
     stateDir: stateDir(env),
+    env,
     configPath,
     config,
     client,

@@ -117,11 +117,33 @@ export function refusalLines(error) {
 }
 
 /**
+ * The resources Apple names a refusal against — the keys of
+ * `meta.associatedErrors`, such as "/v2/appStoreVersionExperiments/123". The
+ * surest way to tell what was refused, sentences aside.
+ *
  * @param {{ errors?: any[] } | null | undefined} error
- * @returns {{ lines: string[], findings: import("../core/findings.mjs").Finding[], productRelated: boolean }}
+ * @returns {string[]}
+ */
+export function refusedResources(error) {
+  /** @type {string[]} */
+  const out = [];
+  const visit = (/** @type {any} */ e) => {
+    for (const [path, nested] of Object.entries(e?.meta?.associatedErrors ?? {})) {
+      if (!out.includes(path)) out.push(path);
+      for (const n of /** @type {any[]} */ (Array.isArray(nested) ? nested : [nested])) visit(n);
+    }
+  };
+  for (const e of error?.errors ?? []) visit(e);
+  return out;
+}
+
+/**
+ * @param {{ errors?: any[] } | null | undefined} error
+ * @returns {{ lines: string[], resources: string[], findings: import("../core/findings.mjs").Finding[], productRelated: boolean }}
  */
 export function explainRefusal(error) {
   const lines = refusalLines(error);
+  const resources = refusedResources(error);
   /** @type {import("../core/findings.mjs").Finding[]} */
   const findings = [];
   for (const line of lines) {
@@ -153,5 +175,5 @@ export function explainRefusal(error) {
           }),
     );
   }
-  return { lines, findings, productRelated: lines.some((l) => PRODUCT_RE.test(l)) };
+  return { lines, resources, findings, productRelated: lines.some((l) => PRODUCT_RE.test(l)) };
 }

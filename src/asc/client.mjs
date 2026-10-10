@@ -11,6 +11,9 @@ export const DEFAULT_BASE_URL = "https://api.appstoreconnect.apple.com";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 
+/** A report segment can be large: minutes, not the API's seconds. */
+const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
 export class AscApiError extends Error {
   /**
    * @param {number} status
@@ -76,12 +79,16 @@ export class AscClient {
   /**
    * @param {"GET"|"POST"|"PATCH"|"DELETE"} method
    * @param {string} path
-   * @param {{ body?: object, throwOnError?: boolean, dryRunResult?: () => any, timeoutMs?: number, text?: boolean }} [opts]
+   * @param {{ body?: object, throwOnError?: boolean, dryRunResult?: () => any, timeoutMs?: number, text?: boolean, binary?: boolean }} [opts]
    *
    * When throwOnError is false, API errors resolve to `{ error: AscApiError }`
    * instead of throwing — callers must then check `.error` before `.data`.
    */
-  async request(method, path, { body, throwOnError = true, dryRunResult, timeoutMs, text = false } = {}) {
+  async request(
+    method,
+    path,
+    { body, throwOnError = true, dryRunResult, timeoutMs, text = false, binary = false } = {},
+  ) {
     if (this.dryRun && method !== "GET") return this._planned(method, path, body, dryRunResult);
 
     const url = `${this._baseUrl}${path}`;
@@ -119,6 +126,8 @@ export class AscClient {
       // A few endpoints answer with a file rather than JSON (offer code values
       // are text/csv). The caller asks for the body as text; errors stay JSON.
       if (text && res.ok) return { text: await res.text() };
+      // Reports come back gzipped (application/a-gzip): the bytes, untouched.
+      if (binary && res.ok) return { bytes: Buffer.from(await res.arrayBuffer()) };
       return this._parse(res, method, path, throwOnError);
     }
   }
@@ -164,6 +173,57 @@ export class AscClient {
 
   get(path, opts) {
     return this.request("GET", path, opts);
+  }
+
+  /**
+   * Download a file App Store Connect hands out by URL (an analytics report
+   * segment). The URL is already signed: our token is never sent with it, and
+   * only an https URL is fetched.
+   *
+   * @param {string} url
+   * @returns {Promise<Buffer>}
+   */
+  async download(url) {
+    let next = url;
+    for (let attempt = 1; ; attempt++) {
+      // Redirects are followed by hand, a few at most, and only to https: the
+      // guarantee is about every hop, not just the first URL.
+      let res;
+      for (let hop = 0; ; hop++) {
+        if (!/^https:\/\//i.test(next))
+          throw new Error(`refusing to download a non-https URL: ${new URL(next).origin}`);
+        try {
+          res = await this._fetch(next, {
+            method: "GET",
+            redirect: "manual",
+            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+          });
+        } catch (error) {
+          res = null;
+          if (attempt >= 3) throw error;
+          break;
+        }
+        this.requestCount += 1;
+        // Only the origin and path: the query of a signed URL is its credential.
+        const where = new URL(next);
+        this._log?.request({
+          method: "GET",
+          path: `${where.origin}${where.pathname}`,
+          status: res.status,
+          durationMs: 0,
+          attempt,
+        });
+        const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+        if (!location) break;
+        if (hop >= 3) throw new Error("download failed: too many redirects");
+        next = new URL(location, next).toString();
+      }
+      if (res?.ok) return Buffer.from(await res.arrayBuffer());
+      if (res && res.status < 500) throw new Error(`download failed: HTTP ${res.status}`);
+      if (attempt >= 3) throw new Error(`download failed: HTTP ${res?.status ?? "no response"}`);
+      await sleep(backoffMs(attempt, this._retry, this._random));
+      next = url;
+    }
   }
   post(path, body, opts) {
     return this.request("POST", path, { ...opts, body });

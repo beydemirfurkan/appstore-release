@@ -25,6 +25,10 @@ import * as accessibility from "./accessibility.mjs";
 import * as offerCodes from "./offer-codes.mjs";
 import * as previews from "./previews.mjs";
 import * as customProductPages from "./custom-product-pages.mjs";
+import * as experiments from "./experiments.mjs";
+import * as feedback from "./feedback.mjs";
+import * as sales from "./sales.mjs";
+import * as analytics from "./analytics.mjs";
 
 /**
  * @typedef {Object} OperationMeta
@@ -61,10 +65,14 @@ export const OPERATIONS = {
   screenshots,
   previews,
   "custom-product-pages": customProductPages,
+  experiments,
   subscription,
   "in-app-purchases": inAppPurchases,
   "offer-codes": offerCodes,
   testflight,
+  feedback,
+  sales,
+  analytics,
   reviews,
   reply,
 };
@@ -86,6 +94,7 @@ export const PIPELINE = Object.freeze([
   "screenshots",
   "previews",
   "custom-product-pages",
+  "experiments",
   "subscription",
   "in-app-purchases",
 ]);

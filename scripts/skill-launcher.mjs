@@ -22,7 +22,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const VERSION = "4.2.0";
+export const VERSION = "4.3.0";
 export const REPO = "https://github.com/beydemirfurkan/appstore-release.git";
 
 /** @param {string} dir */

@@ -67,6 +67,12 @@ export function planMedia({ dir, media, ref, placementGroup, feature = "APP_STOR
 
   /** @type {Map<string, Array<{ file: string, path: string, size: number }>>} */
   const byGroup = new Map();
+  // A folder that does not exist is a typo, not "no files": treating it as empty
+  // would remove every placement the folder used to fill.
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+    problem("folder", `${dir} does not exist`, "Fix the folder path in the config, or create it.");
+    return { sets: [], findings };
+  }
   for (const file of mediaFiles(dir, media)) {
     const path = join(dir, file);
     const header = media === "video" ? readVideoHeader(path) : readPngHeader(path);

@@ -124,7 +124,20 @@ export function check({ snapshot, config }) {
     );
   }
 
-  if (SUBMITTED_STATES.slice(0, 3).includes(state)) {
+  if (state === "PENDING_DEVELOPER_RELEASE") {
+    out.push(
+      finding({
+        id: "submission.approved",
+        severity: Severity.INFO,
+        category: Category.ASC_STATE,
+        title: "Approved — waiting for you to release it",
+        detail: "The release type is manual, so the version goes live when you release it.",
+        fixOwner: FixOwner.UI,
+        fix: "Release it in App Store Connect when you are ready.",
+        fixClicks: ["App Store Connect", "your app", "the version", "Release This Version"],
+      }),
+    );
+  } else if (SUBMITTED_STATES.slice(0, 2).includes(state)) {
     out.push(
       finding({
         id: "submission.in-review",

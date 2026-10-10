@@ -27,6 +27,7 @@ export const Exit = Object.freeze({
   NEEDS_HUMAN: 5, // nothing left we can fix; UI-only steps remain
   API: 6, // App Store Connect refused us, after retries
   CONFIRM: 7, // destructive operation refused for want of confirmation
+  WAITING: 8, // `check --wait` ran out of time with the version still in review
 });
 
 /**

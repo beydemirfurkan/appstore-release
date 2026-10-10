@@ -181,7 +181,9 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     findings.filter((f) => !reported.has(f.id)),
   );
 
-  const code = exitCodeFor(results, findings);
+  // `check --wait` that ran out of time: not a failure, not done either.
+  const timedOut = results.some((r) => r.id === "check" && r.details?.timedOut);
+  const code = timedOut ? Exit.WAITING : exitCodeFor(results, findings);
   if (globals.json) {
     writeJson(stdout, {
       ok: code === Exit.OK,
@@ -266,7 +268,7 @@ function writeHelp(stream) {
       `Run \`appstore-release <command> --help\` for a command's own options.\n\n` +
       `Options\n${flags}\n\n` +
       `Exit codes\n` +
-      `  0 ok · 2 usage · 3 config/credentials · 4 blocked (fixable) · 5 needs a human in App Store Connect\n`,
+      `  0 ok · 2 usage · 3 config/credentials · 4 blocked (fixable) · 5 needs a human in App Store Connect · 8 still in review (check --wait)\n`,
   );
 }
 

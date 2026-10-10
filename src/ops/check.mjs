@@ -3,6 +3,7 @@
 
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
+import { waitForReview } from "../report/wait.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -12,6 +13,17 @@ export const meta = {
   needs: [],
   mutates: false,
   args: {
+    wait: {
+      type: "number",
+      default: 0,
+      description:
+        "while the version is in review, keep checking for up to this many minutes (exit 8 if still waiting)",
+    },
+    pollSeconds: {
+      type: "number",
+      default: 60,
+      description: "seconds between checks while waiting",
+    },
     compact: {
       type: "boolean",
       default: false,
@@ -22,10 +34,21 @@ export const meta = {
 
 /**
  * @param {import("../core/context.mjs").Context} ctx
- * @param {{ compact?: boolean }} [args]
+ * @param {{ compact?: boolean, wait?: number, pollSeconds?: number }} [args]
  */
 export async function run(ctx, args = {}) {
-  const report = await getReadinessReport(ctx);
+  let report;
+  let waiting = null;
+  if (args.wait && args.wait > 0) {
+    waiting = await waitForReview(ctx, {
+      minutes: args.wait,
+      pollSeconds: args.pollSeconds ?? 60,
+      onTick: (m) => ctx.log.info(`still in review after ${m} min…`),
+    });
+    report = waiting.report;
+  } else {
+    report = await getReadinessReport(ctx);
+  }
   ctx.log.report(report, { compact: Boolean(args.compact) });
 
   // The UI-only step is an ordinary finding, not a result injected straight
@@ -36,7 +59,7 @@ export async function run(ctx, args = {}) {
   return {
     status: report.verdict === "needs-human" ? Status.MANUAL : Status.OK,
     message: `${report.verdict}${report.summary.blockers ? ` · ${report.summary.blockers} blocking` : ""}`,
-    details: report,
+    details: waiting ? { ...report, waitedMinutes: waiting.waitedMinutes, timedOut: waiting.timedOut } : report,
     findings: report.findings,
   };
 }

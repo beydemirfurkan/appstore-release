@@ -11,6 +11,7 @@ const VERDICT_LINE = {
   blocked: "BLOCKED — there is still work this tool can do",
   "needs-human": "NEEDS YOU — only App Store Connect's UI can finish these",
   "in-review": "IN REVIEW — submitted, waiting on Apple",
+  approved: "APPROVED — waiting for you to release it",
   rejected: "REJECTED — Apple sent it back",
   live: "LIVE — no version is open for editing",
 };
@@ -21,6 +22,7 @@ const HEADLINE = {
   blocked: ["✗", "BLOCKED", "red"],
   "needs-human": ["!", "NEEDS YOU", "yellow"],
   "in-review": ["◷", "IN REVIEW", "cyan"],
+  approved: ["✓", "APPROVED", "green"],
   rejected: ["✗", "REJECTED", "red"],
   live: ["●", "LIVE", "green"],
 };
@@ -96,6 +98,8 @@ function summaryLine(verdict, fixable, human) {
       return `only you can finish ${human === 1 ? "this" : `these ${human}`}, in App Store Connect`;
     case "in-review":
       return "submitted, waiting on Apple";
+    case "approved":
+      return "Apple approved it · release it when you are ready";
     case "rejected":
       return "Apple sent it back · read Resolution Center";
     case "live":

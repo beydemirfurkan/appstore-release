@@ -130,3 +130,22 @@ test("without the App Privacy attestation, release stops at needs-human with the
   assert.equal(submit.code, Exit.BLOCKED);
   assert.match(submit.json.results[0].message, /not ready to submit \(needs-human\)/);
 });
+
+test("check --wait follows the review to its outcome, and exits 8 when time runs out", async () => {
+  const { fake, cli } = setup();
+  await cli("release");
+  await cli("submit", "--submit");
+  const version = fake.get("appStoreVersions", "ver-1");
+
+  const pending = await cli("check", "--wait", "0.003", "--poll-seconds", "0.02");
+  assert.equal(pending.code, Exit.WAITING, "still in review when the wait ends");
+  assert.equal(pending.json.results[0].details.timedOut, true);
+
+  // Apple approves while we are watching.
+  setTimeout(() => {
+    if (version) version.attributes.appStoreState = "PENDING_DEVELOPER_RELEASE";
+  }, 60);
+  const approved = await cli("check", "--wait", "1", "--poll-seconds", "0.02");
+  assert.equal(approved.code, Exit.OK);
+  assert.equal(verdictOf(approved.json), "approved");
+});

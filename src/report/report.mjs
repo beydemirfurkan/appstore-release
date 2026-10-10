@@ -18,7 +18,7 @@ import * as subscription from "./checks/subscription.mjs";
 export const CHECKS = [version, store, metadata, screenshots, subscription, review];
 
 /**
- * @typedef {"ready"|"blocked"|"needs-human"|"in-review"|"live"|"rejected"} Verdict
+ * @typedef {"ready"|"blocked"|"needs-human"|"in-review"|"approved"|"live"|"rejected"} Verdict
  */
 
 /**
@@ -119,7 +119,8 @@ function sectionState(findings) {
  */
 function verdictFor(snapshot, findings) {
   const state = snapshot.version?.attributes?.appStoreState;
-  if (["WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE"].includes(state)) return "in-review";
+  if (state === "PENDING_DEVELOPER_RELEASE") return "approved";
+  if (["WAITING_FOR_REVIEW", "IN_REVIEW"].includes(state)) return "in-review";
   if (["REJECTED", "METADATA_REJECTED"].includes(state)) return "rejected";
   if (!snapshot.version && snapshot.versions?.[0]?.attributes?.appStoreState === "READY_FOR_DISTRIBUTION")
     return "live";

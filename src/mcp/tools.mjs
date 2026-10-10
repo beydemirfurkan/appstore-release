@@ -19,6 +19,7 @@ import { createContext } from "../core/context.mjs";
 import { runOperation, runPipeline } from "../index.mjs";
 import { getAppSnapshot } from "../report/snapshot.mjs";
 import { getReadinessReport } from "../report/report.mjs";
+import { waitForReview } from "../report/wait.mjs";
 import { renderReportMarkdown } from "../report/render.mjs";
 import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
@@ -164,10 +165,29 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Read-only. Returns findings with a verdict and an ordered list of next actions, each marked as something this " +
         "tool can fix or something only a human in App Store Connect can. Start here.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: input({ appId, configPath, locale: str("Locale to report on.") }),
+      inputSchema: input({
+        appId,
+        configPath,
+        locale: str("Locale to report on."),
+        waitMinutes: {
+          type: "number",
+          minimum: 0,
+          maximum: 15,
+          description:
+            "After a submission: keep re-checking for up to this many minutes while the version is in review. " +
+            "Review usually takes hours; call again later rather than waiting long.",
+        },
+      }),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
+        if (args.waitMinutes > 0) {
+          const { report, timedOut, waitedMinutes } = await waitForReview(ctx, {
+            minutes: Math.min(args.waitMinutes, 15),
+          });
+          const note = timedOut ? `\n\nStill in review after ${waitedMinutes} min. Check again later.` : "";
+          return structured(renderReportMarkdown(report) + note, { ...report, timedOut, waitedMinutes });
+        }
         const report = await getReadinessReport(ctx, { locale: args.locale });
         return structured(renderReportMarkdown(report), report);
       },

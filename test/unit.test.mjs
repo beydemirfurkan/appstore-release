@@ -243,3 +243,19 @@ test("placeholder text and wasted keyword characters are flagged, as warnings", 
   assert.match(wasted?.detail ?? "", /1 space after commas/);
   assert.deepEqual(ids({ name: "Wellness", keywords: "sleep,mood,journal" }), [], "clean keywords pass");
 });
+
+test("version state reads appVersionState first, and translates the deprecated appStoreState names", async () => {
+  const { versionState, isCurrentVersionState } = await import("../src/core/status.mjs");
+  assert.equal(versionState({ attributes: { appVersionState: "PREPARE_FOR_SUBMISSION" } }), "PREPARE_FOR_SUBMISSION");
+  assert.equal(
+    versionState({ attributes: { appVersionState: "IN_REVIEW", appStoreState: "WAITING_FOR_REVIEW" } }),
+    "IN_REVIEW",
+    "the current attribute wins",
+  );
+  assert.equal(versionState({ attributes: { appStoreState: "READY_FOR_SALE" } }), "READY_FOR_DISTRIBUTION");
+  assert.equal(
+    versionState({ attributes: { appStoreState: "PROCESSING_FOR_APP_STORE" } }),
+    "PROCESSING_FOR_DISTRIBUTION",
+  );
+  assert.equal(isCurrentVersionState("ACCEPTED"), true, "approved versions are still the one being reported on");
+});

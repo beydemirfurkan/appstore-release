@@ -4,6 +4,7 @@
 // runbook derived from the findings. No other App Store Connect tool answers
 // "what do I do next, in order" — that is the whole point of this module.
 
+import { versionState, APPROVED_STATES } from "../core/status.mjs";
 import { Severity } from "../core/findings.mjs";
 import { getAppSnapshot } from "./snapshot.mjs";
 
@@ -76,7 +77,7 @@ export function buildReport({ snapshot, config = null, resolvePath, now }) {
       ? {
           id: snapshot.version.id,
           versionString: snapshot.version.attributes?.versionString,
-          state: snapshot.version.attributes?.appStoreState,
+          state: versionState(snapshot.version),
         }
       : null,
     build: {
@@ -118,12 +119,11 @@ function sectionState(findings) {
  * @returns {Verdict}
  */
 function verdictFor(snapshot, findings) {
-  const state = snapshot.version?.attributes?.appStoreState;
-  if (state === "PENDING_DEVELOPER_RELEASE") return "approved";
+  const state = versionState(snapshot.version);
+  if (APPROVED_STATES.includes(state)) return "approved";
   if (["WAITING_FOR_REVIEW", "IN_REVIEW"].includes(state)) return "in-review";
   if (["REJECTED", "METADATA_REJECTED"].includes(state)) return "rejected";
-  if (!snapshot.version && snapshot.versions?.[0]?.attributes?.appStoreState === "READY_FOR_DISTRIBUTION")
-    return "live";
+  if (!snapshot.version && versionState(snapshot.versions?.[0]) === "READY_FOR_DISTRIBUTION") return "live";
 
   const blockers = findings.filter((f) => f.severity === Severity.BLOCKER);
   if (blockers.some((f) => !f.uiOnly)) return "blocked";

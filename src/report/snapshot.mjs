@@ -27,7 +27,7 @@
  */
 
 import { localeCodes } from "../core/locales.mjs";
-import { isCurrentVersionState, pickEditableAppInfo } from "../core/status.mjs";
+import { isCurrentVersionState, pickEditableAppInfo, versionState } from "../core/status.mjs";
 
 /**
  * Gather everything the readiness checks need.
@@ -66,14 +66,14 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     "versions",
     () =>
       client.all(
-        `/v1/apps/${appId}/appStoreVersions?fields[appStoreVersions]=versionString,appStoreState,platform,copyright`,
+        `/v1/apps/${appId}/appStoreVersions?fields[appStoreVersions]=versionString,appStoreState,appVersionState,platform,copyright`,
         { limit: 50 },
       ),
     [],
   );
   // Deliberately null rather than "whatever came back first": targeting a live
   // version because no editable one exists is worse than reporting that fact.
-  const version = versions.find((v) => isCurrentVersionState(v.attributes.appStoreState)) ?? null;
+  const version = versions.find((v) => isCurrentVersionState(versionState(v))) ?? null;
 
   const build = version
     ? await section(

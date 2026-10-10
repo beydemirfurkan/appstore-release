@@ -1,7 +1,7 @@
 // Resource discovery / repository. Single responsibility: locate ASC resources for
 // an app by their natural keys so commands never hardcode ids. Depends only on AscClient.
 
-import { VersionStates, pickEditableAppInfo } from "../core/status.mjs";
+import { VersionStates, pickEditableAppInfo, versionState } from "../core/status.mjs";
 
 export class Discovery {
   /**
@@ -31,15 +31,15 @@ export class Discovery {
   editableVersion() {
     return this._once("editableVersion", async () => {
       const versions = await this.client.all(
-        `/v1/apps/${this.appId}/appStoreVersions?filter[platform]=IOS&fields[appStoreVersions]=versionString,appStoreState,platform`,
+        `/v1/apps/${this.appId}/appStoreVersions?filter[platform]=IOS&fields[appStoreVersions]=versionString,appStoreState,appVersionState,platform`,
         { limit: 50 },
       );
-      const editable = versions.find((v) => VersionStates.EDITABLE.includes(v.attributes.appStoreState));
+      const editable = versions.find((v) => VersionStates.EDITABLE.includes(versionState(v)));
       if (editable) return editable;
-      const inFlight = versions.find((v) => VersionStates.IN_FLIGHT.includes(v.attributes.appStoreState));
+      const inFlight = versions.find((v) => VersionStates.IN_FLIGHT.includes(versionState(v)));
       throw new Error(
         inFlight
-          ? `v${inFlight.attributes.versionString} is ${inFlight.attributes.appStoreState} and cannot be edited`
+          ? `v${inFlight.attributes.versionString} is ${versionState(inFlight)} and cannot be edited`
           : "no editable version — every version is live; run `appstore-release new-version` first",
       );
     });

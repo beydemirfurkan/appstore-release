@@ -25,7 +25,7 @@ import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { Severity } from "../core/findings.mjs";
-import { Status } from "../core/status.mjs";
+import { Status, versionState } from "../core/status.mjs";
 
 // Input schemas are plain JSON Schema. That is what goes on the wire anyway —
 // zod existed only to be converted into this — and it means the same validator
@@ -208,7 +208,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         const lines = [
           `# ${snapshot.app?.attributes?.name ?? "app"} (${snapshot.app?.attributes?.bundleId ?? "?"})`,
           "",
-          `Editable version: ${snapshot.version ? `${snapshot.version.attributes.versionString} (${snapshot.version.attributes.appStoreState})` : "none"}`,
+          `Editable version: ${snapshot.version ? `${snapshot.version.attributes.versionString} (${versionState(snapshot.version)})` : "none"}`,
           `Attached build: ${snapshot.build?.attributes?.version ?? "none"}`,
           `Price schedule: ${snapshot.pricing.hasSchedule ? "set" : "not set"}`,
           `Screenshot sets: ${snapshot.screenshotSets.map((s) => `${s.displayType} (${s.screenshots.length})`).join(", ") || "none"}`,
@@ -399,7 +399,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       description:
         "Write a subscription's localizations, price and App Review paywall screenshot, so it leaves " +
         "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends it with the app version — unless it is the " +
-          "app's first subscription, which Apple requires to be submitted from the website.",
+        "app's first subscription, which Apple requires to be submitted from the website.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {

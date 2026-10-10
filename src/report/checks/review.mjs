@@ -1,12 +1,14 @@
 // App Review contact details, the submission itself, and the one thing Apple has
 // never exposed through an API.
 
+import { versionState, APPROVED_STATES } from "../../core/status.mjs";
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 
 export const section = { id: "review", title: "Review and submission" };
 
 const CONTACT_FIELDS = ["contactFirstName", "contactLastName", "contactPhone", "contactEmail"];
-const SUBMITTED_STATES = ["WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE", "READY_FOR_SALE"];
+/** Past the point where App Privacy could still block it. */
+const SUBMITTED_STATES = ["WAITING_FOR_REVIEW", "IN_REVIEW", ...APPROVED_STATES, "READY_FOR_DISTRIBUTION"];
 
 /**
  * App Privacy: every appDataUsages* path 404s. This is not a gap in this tool —
@@ -76,7 +78,7 @@ export function check({ snapshot, config }) {
     );
   }
 
-  const state = snapshot.version.attributes.appStoreState;
+  const state = versionState(snapshot.version);
   if (!SUBMITTED_STATES.includes(state)) out.push(privacyFinding(config));
 
   if (["REJECTED", "METADATA_REJECTED"].includes(state)) {
@@ -124,14 +126,18 @@ export function check({ snapshot, config }) {
     );
   }
 
-  if (state === "PENDING_DEVELOPER_RELEASE") {
+  if (APPROVED_STATES.includes(state)) {
     out.push(
       finding({
         id: "submission.approved",
         severity: Severity.INFO,
         category: Category.ASC_STATE,
-        title: "Approved — waiting for you to release it",
-        detail: "The release type is manual, so the version goes live when you release it.",
+        title:
+          state === "PENDING_DEVELOPER_RELEASE" ? "Approved — waiting for you to release it" : `Approved (${state})`,
+        detail:
+          state === "PENDING_DEVELOPER_RELEASE"
+            ? "The release type is manual, so the version goes live when you release it."
+            : "Apple approved it; it goes live on its own schedule.",
         fixOwner: FixOwner.UI,
         fix: "Release it in App Store Connect when you are ready.",
         fixClicks: ["App Store Connect", "your app", "the version", "Release This Version"],

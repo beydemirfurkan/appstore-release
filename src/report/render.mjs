@@ -2,6 +2,7 @@
 // raw object for --json and MCP structuredContent. Computed once, shown three
 // ways — so the CLI and an agent can never disagree about what is wrong.
 
+import { versionState } from "../core/status.mjs";
 import { Severity } from "../core/findings.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { PLAIN } from "../cli/style.mjs";
@@ -220,7 +221,7 @@ export function renderSnapshotText(s) {
     "Versions",
     (s.versions ?? []).map(
       (v) =>
-        `  v${v.attributes.versionString} · ${v.attributes.appStoreState}` +
+        `  v${v.attributes.versionString} · ${versionState(v)}` +
         ` · copyright:${v.attributes.copyright ? "yes" : "no"}` +
         (v.id === s.version?.id ? "  ← editable" : ""),
     ),

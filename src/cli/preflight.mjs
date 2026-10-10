@@ -42,7 +42,10 @@ export function preflightCommand({ stdout, stderr, cwd, env, flags }) {
   let expoConfig;
   if (flags["expo-config"]) {
     try {
-      const out = execFileSync("npx", ["expo", "config", "--type", "public", "--json"], {
+      // npx is npx.cmd on Windows, which only runs through a shell; the arguments are fixed.
+      const windows = process.platform === "win32";
+      const out = execFileSync(windows ? "npx.cmd" : "npx", ["expo", "config", "--type", "public", "--json"], {
+        shell: windows,
         cwd: projectDir,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],

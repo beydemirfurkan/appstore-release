@@ -15,7 +15,9 @@ jobs:
       matrix:
         # macOS is not optional: the credentials operation shells out to the
         # system openssl, whose -legacy support differs between platforms.
-        os: [ubuntu-latest, macos-latest]
+        # Windows: the CLI and MCP server are plain Node, and the docs say they
+        # run there; this is what keeps that true.
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [20, 22, 24]
     runs-on: ${{ matrix.os }}
     steps:

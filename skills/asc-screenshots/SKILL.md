@@ -10,6 +10,10 @@ metadata:
 
 # App Store screenshots
 
+> **You say:** _"Upload my new screenshots, including iPhone Duo."_ · _"Why are my screenshots rejected?"_
+>
+> **It does:** Checks every PNG against Apple's exact sizes, sorts any exported folder into iPhone, iPad and Duo sets, and uploads through the App Asset Library — re-running sends only what changed.
+
 Two jobs: **produce** images Apple accepts, and **deliver** them to the right device slots without re-uploading what is already there.
 
 ## Running the CLI

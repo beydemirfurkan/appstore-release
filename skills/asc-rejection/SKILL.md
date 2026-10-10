@@ -10,6 +10,10 @@ metadata:
 
 # Rejection → fix → resubmit
 
+> **You say:** _"Apple rejected my app — what now?"_ · _"Resubmit after fixing guideline 2.1."_
+>
+> **It does:** Reads the rejection with you, maps the guideline to the layer that needs fixing — listing, screenshots, rating, products or binary — applies the fix, and resubmits.
+
 A rejection is a to-do list from App Review. The loop: **read it → classify it → fix the right layer → reply → resubmit**. Never resubmit unchanged hoping for a different reviewer.
 
 ## Running the CLI

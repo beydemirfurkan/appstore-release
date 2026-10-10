@@ -10,6 +10,10 @@ metadata:
 
 # Subscriptions
 
+> **You say:** _"Add a monthly plan with a one-week free trial."_ · _"Sell a lifetime unlock for $49.99."_
+>
+> **It does:** Creates subscription plans and one-time purchases from your config, prices them, localizes them, uploads the review screenshot, and submits them with your version.
+
 A subscription leaves `MISSING_METADATA` only when four things exist: a **group localization** (display name), a **subscription localization** (name and description), a **price**, and a **review screenshot** of the paywall. Then it goes to review with an app version. The app's **first** subscription is submitted from the App Store Connect website together with the binary — Apple's rule; every later one can be submitted by `asc submit`.
 
 ## Running the CLI

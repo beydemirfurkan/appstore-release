@@ -10,7 +10,11 @@ metadata:
 
 # App Store Release
 
-Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — today that is one thing, the App Privacy questionnaire.
+> **You say:** _"Publish my app for review."_ · _"Why can't I submit this version?"_
+>
+> **It does:** Reads the app from App Store Connect, lists what blocks App Review in the order to fix it, fixes everything the API allows — build, metadata in every language, screenshots, price, age rating, subscriptions — and submits only when nothing is in the way. For the two things Apple keeps in its web UI, it gives the exact clicks.
+
+Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — the App Privacy questionnaire, and submitting an app's first subscription or in-app purchase.
 
 ## Operating principle
 

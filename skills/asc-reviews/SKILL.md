@@ -10,6 +10,10 @@ metadata:
 
 # Customer reviews
 
+> **You say:** _"Answer my one-star reviews."_ · _"What are people saying about the app?"_
+>
+> **It does:** Finds unanswered and low-rated reviews, reads Apple's summary, drafts each reply in the reviewer's language within Apple's rules — and publishes only the replies you approve, one by one.
+
 Replies are **public**, posted under the developer's name on the App Store, and most readers are not the reviewer — they are the next person deciding whether to install. So: you read and draft; the user approves; then you post. **One review, one approved reply, one call.** Never reply in bulk, never post a draft the user has not seen word for word.
 
 ## Running the CLI

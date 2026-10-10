@@ -3,6 +3,7 @@
 
 import { versionState, APPROVED_STATES } from "../../core/status.mjs";
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
+import { APP_PRIVACY_CLICKS } from "../../asc/refusals.mjs";
 
 export const section = { id: "review", title: "Review and submission" };
 
@@ -43,7 +44,7 @@ function privacyFinding(config) {
     fix: attested
       ? "Nothing, if the label is published."
       : 'Declare the data types matching the app\'s privacy manifest, press Publish, then set "review": { "privacyPublished": true }.',
-    fixClicks: ["App Store Connect", "your app", "App Privacy", "Get Started / Edit", "Publish"],
+    fixClicks: APP_PRIVACY_CLICKS,
     docs: "references/gotchas.md#app-privacy-ui-only",
   });
 }

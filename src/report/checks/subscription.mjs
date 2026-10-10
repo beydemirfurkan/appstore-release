@@ -2,21 +2,10 @@
 // whether it exists, whether it is complete, and how it reaches review.
 
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
-import { isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../../core/products.mjs";
+import { FIRST_PRODUCT_CLICKS, isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../../core/products.mjs";
 import { resolveLocales } from "../../core/locales.mjs";
 
 export const section = { id: "subscription", title: "Purchases" };
-
-/** Where App Store Connect's web UI attaches a first product to the version. */
-const FIRST_PRODUCT_CLICKS = (/** @type {string} */ productId) => [
-  "the version page",
-  "In-App Purchases and Subscriptions",
-  "Select",
-  productId,
-  "Done",
-  "Add for Review",
-  "Submit to App Review",
-];
 
 /** Apple's standard EULA, which any listing may link to instead of its own terms. */
 const STANDARD_EULA = "apple.com/legal/internet-services/itunes/dev/stdeula";
@@ -97,8 +86,8 @@ export function check({ snapshot, config }) {
   ];
 
   for (const k of kinds) {
-    // Apple: an app's first subscription — and first in-app purchase — goes to
-    // review with the binary, from the website. Later ones go by API.
+    // An app's first subscription — and first in-app purchase — goes to review
+    // with an app version. submit sends it by API in the same submission.
     const first = isFirstProduct(k.remote);
     for (const product of k.configured) {
       const { productId } = product;
@@ -143,16 +132,15 @@ export function check({ snapshot, config }) {
       } else if (remote.state === "READY_TO_SUBMIT" && first) {
         out.push(
           finding({
-            id: `${k.kind}.first.ui-only${suffix}`,
-            severity: Severity.BLOCKER,
+            id: `${k.kind}.first.with-version${suffix}`,
+            severity: Severity.INFO,
             category: Category.ASC_STATE,
-            title: `The first ${k.label.toLowerCase()} is submitted from App Store Connect`,
+            title: `${productId} is the app's first ${k.label.toLowerCase()}; it goes to review with the version`,
             detail:
-              `${productId} is ready, and it is the app's first ${k.label.toLowerCase()}. Apple requires the first ` +
-              "one to go to review together with the app version, from the website; later ones can be submitted here.",
-            fixOwner: FixOwner.UI,
-            uiOnly: true,
-            fix: "Attach it to the version and submit both, in App Store Connect.",
+              `submit adds it to the same review submission as the app version. If App Store Connect will not take ` +
+              "a first product by API, nothing is submitted, it is taken back out, and the website's clicks are shown.",
+            fix: "Nothing; submit includes it. To send the app alone: submit --submit --skip-products.",
+            fixCommand: "appstore-release submit --submit",
             fixClicks: FIRST_PRODUCT_CLICKS(productId),
             docs: "references/gotchas.md#subscriptions--iaps",
           }),

@@ -445,8 +445,8 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       description:
         "Create any missing subscription plans and one-time purchases from the config, then write their " +
         "localizations, prices, introductory offers and App Review screenshots, so they leave " +
-        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends them with the app version — except the " +
-        "app's first subscription and first in-app purchase, which Apple requires to be submitted from the website.",
+        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends them with the app version — the app's " +
+        "first subscription and first in-app purchase included, with the website's clicks as the fallback.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
@@ -463,8 +463,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       name: "asc_submit_for_review",
       title: "Submit for review",
       description:
-        "Submit the app version to App Review. This is the irreversible one. It computes the readiness report " +
-        "first and refuses if anything is blocking, unless force is set.",
+        "Submit the app version to App Review, with the configured subscriptions and in-app purchases. " +
+        "This is the irreversible one. It computes the readiness report first and refuses if anything is blocking, " +
+        "unless force is set. An app's first product is sent by API with the version; if App Store Connect refuses " +
+        "it, nothing is submitted and the result is MANUAL with the clicks — or call again with skipProducts: true " +
+        "to send the app alone. After a submission, follow it with asc_readiness_report or check --wait.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       inputSchema: input(
         {
@@ -473,6 +476,10 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           force: bool("Submit even though blockers remain. Apple will reject it.", false),
           resolved: bool(
             "After a rejection: the user has addressed what App Review asked for in Resolution Center. Resubmits.",
+            false,
+          ),
+          skipProducts: bool(
+            "Submit the app version alone; configured subscriptions and in-app purchases wait for a later version.",
             false,
           ),
           confirm,
@@ -507,11 +514,22 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           submit: true,
           force: Boolean(args.force),
           resolved: Boolean(args.resolved),
+          skipProducts: Boolean(args.skipProducts),
         });
         // Only a CHANGED result means the PATCH went through; an OK can be "already
         // in review" and an ERROR is a refusal — neither is a submission.
         const submitted = res.status === Status.CHANGED;
-        return structured(`${res.status.toUpperCase()} — ${res.message}`, { submitted, result: res, report });
+        const clicks = (res.findings ?? [])
+          .filter((f) => f.fixClicks?.length)
+          .map((f) => `- ${f.title}: ${f.fixClicks?.join(" → ")}`);
+        const text = [
+          `${res.status.toUpperCase()} — ${res.message}`,
+          ...(clicks.length ? ["", ...clicks] : []),
+          ...(submitted
+            ? ["", "Follow it: call asc_readiness_report later, or run `appstore-release check --wait 30`."]
+            : []),
+        ].join("\n");
+        return structured(text, { submitted, result: res, report });
       },
     },
 

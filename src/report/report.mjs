@@ -6,6 +6,7 @@
 
 import { versionState, APPROVED_STATES } from "../core/status.mjs";
 import { Severity } from "../core/findings.mjs";
+import { writesToAppStoreConnect } from "../core/mutating.mjs";
 import { getAppSnapshot } from "./snapshot.mjs";
 import { runPreflight } from "../preflight/index.mjs";
 
@@ -36,7 +37,8 @@ export const CHECKS = [app, version, store, metadata, screenshots, subscription,
  * @property {import("../core/findings.mjs").Finding[]} findings
  * @property {{blockers: number, warnings: number, uiOnly: number, checked: number}} summary
  * @property {Verdict} verdict
- * @property {Array<{order: number, kind: "run"|"human"|"wait", label: string, command?: string, clicks?: string[], findingIds: string[]}>} nextActions
+ * @property {Array<{order: number, kind: "run"|"human"|"wait", label: string, command?: string, mutates?: boolean, clicks?: string[], findingIds: string[]}>} nextActions
+ *           `mutates`: the command writes to App Store Connect, so an agent asks before running it
  * @property {string[]} errors     sections of App Store Connect we could not read
  * @property {{ projectDir: string, found: boolean, kind: string|null, notes: string[], manualChecks: string[] } | null} preflight
  *           what the offline read of the app could and could not see, and what to test by hand
@@ -176,6 +178,7 @@ function nextActions(findings) {
       kind: "run",
       label: entry.command ? `Run ${entry.command}` : entry.label,
       command: entry.command,
+      mutates: writesToAppStoreConnect(entry.command),
       findingIds: entry.findingIds,
     });
   }

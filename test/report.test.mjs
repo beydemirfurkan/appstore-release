@@ -7,6 +7,7 @@ import { createContext } from "../src/core/context.mjs";
 import { runOperation } from "../src/index.mjs";
 import { Severity } from "../src/core/findings.mjs";
 import { isFirstVersion } from "../src/core/status.mjs";
+import { renderReportMarkdown } from "../src/report/render.mjs";
 import { createMockAsc, readyToPrepareRoutes, testCredentials } from "./helpers/mock-asc.mjs";
 
 /** A snapshot with everything in order; each test spoils one thing. */
@@ -185,22 +186,24 @@ test("reserved-but-uncommitted screenshots are reported, not counted as present"
   assert.ok(ids(report).includes("screenshots.upload.incomplete"));
 });
 
-test("a first subscription goes through App Store Connect; a later one travels with the version", () => {
+test("a first subscription travels with the version too, and says what happens if Apple refuses", () => {
   const config = {
     locale: "en-US",
     subscription: { productId: "com.example.pro" },
     review: { privacyPublished: true },
   };
 
-  // Apple: the app's FIRST subscription is submitted with the binary from the website.
+  // The app's FIRST subscription goes in the same submission; the clicks are the fallback.
   const first = buildReport({
     snapshot: healthySnapshot({ subscriptions: [{ id: "s", productId: "com.example.pro", state: "READY_TO_SUBMIT" }] }),
     config,
   });
-  const uiOnly = first.findings.find((f) => f.id === "subscription.first.ui-only");
-  assert.equal(uiOnly?.uiOnly, true);
-  assert.equal(uiOnly?.severity, "blocker");
-  assert.equal(first.verdict, "needs-human");
+  const withVersion = first.findings.find((f) => f.id === "subscription.first.with-version");
+  assert.equal(withVersion?.severity, "info");
+  assert.equal(withVersion?.uiOnly, false);
+  assert.ok(withVersion?.fixClicks?.includes("Add for Review"));
+  assert.match(withVersion?.fix ?? "", /--skip-products/);
+  assert.equal(first.verdict, "ready");
 
   // With an approved plan already on sale, a new one is submitted by API.
   const later = buildReport({
@@ -213,7 +216,7 @@ test("a first subscription goes through App Store Connect; a later one travels w
     config,
   });
   assert.equal(
-    later.findings.find((f) => f.id === "subscription.first.ui-only"),
+    later.findings.find((f) => f.id === "subscription.first.with-version"),
     undefined,
   );
   assert.equal(later.findings.find((f) => f.id === "subscription.ready-to-submit")?.severity, "info");
@@ -392,4 +395,14 @@ test("a subscription needs a Terms of Use link, unless a custom EULA is set or n
   assert.equal(terms({ eula: { custom: false } }, config("Terms of Use: https://example.com/terms")), undefined);
   assert.equal(terms({ eula: { custom: true } }, config("Plan your meals.")), undefined);
   assert.equal(terms({ eula: null }, config("Plan your meals.")), undefined, "unknown is not missing");
+});
+
+test("next actions say which commands write to App Store Connect", () => {
+  const report = buildReport({
+    snapshot: healthySnapshot({ pricing: { hasSchedule: false } }),
+    config: { locale: "en-US" },
+  });
+  const pricing = report.nextActions.find((a) => a.command === "appstore-release pricing");
+  assert.equal(pricing?.mutates, true);
+  assert.match(renderReportMarkdown(report), /`appstore-release pricing` \(writes to App Store Connect\)/);
 });

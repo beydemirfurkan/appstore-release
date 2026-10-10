@@ -14,7 +14,7 @@ metadata:
 >
 > **It does:** Reads the app from App Store Connect, lists what blocks App Review in the order to fix it, fixes everything the API allows — build, metadata in every language, screenshots, price, age rating, subscriptions — and submits only when nothing is in the way. For the two things Apple keeps in its web UI, it gives the exact clicks.
 
-Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — the App Privacy questionnaire, and submitting an app's first subscription or in-app purchase.
+Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — the App Privacy questionnaire, and, if App Store Connect refuses it by API, an app's first subscription or in-app purchase.
 
 ## Operating principle
 
@@ -125,7 +125,7 @@ Screenshots from a generator? Point `"screenshots": { "from": "./exports" }` at 
 
 The API cannot verify this flag — only set it when the user confirms. If Publish is greyed out, see "NSUserTracking conflict" in [references/gotchas.md](references/gotchas.md#app-privacy-ui-only).
 
-**The app's first subscription** (`subscription.first.ui-only`). Apple requires an app's first subscription to go to review together with the version, from the website. `check` gives the clicks: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Once one subscription has been approved, later ones are submitted by `asc submit`.
+**The app's first subscription or in-app purchase** (`subscription.first.with-version`, INFO). It goes to review with the version, and `asc submit` sends it by API in the same submission. If App Store Connect refuses, `submit` exits 5 with nothing submitted and the clicks: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Relay them — or, if the user prefers, `asc submit --submit --skip-products` sends the app alone and the products wait for the next version.
 
 ### 7. Submit
 
@@ -134,7 +134,7 @@ asc check
 asc submit --submit
 ```
 
-**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. A configured subscription is submitted together with the version when the app already has an approved one; a first subscription is submitted from the website (step 6). If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`.
+**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. Configured subscriptions and in-app purchases are submitted together with the version, first ones included (step 6). Show the user the list from `asc submit --submit --dry-run` before the real one. If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`. A queued submission is not an approval: report what you can verify, nothing more.
 
 To follow the review: `asc check --wait 30` re-checks while the version is in review (exit `0` approved, `5` rejected, `8` still waiting). Review usually takes hours — prefer checking again later over waiting long.
 

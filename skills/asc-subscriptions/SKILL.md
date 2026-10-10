@@ -82,9 +82,9 @@ asc check          # subscription.missing-metadata should be gone; state READY_T
 asc submit --submit      # ask the user first — this is irreversible
 ```
 
-**First subscription of the app?** `check` reports `subscription.first.ui-only`. Apple requires it to be submitted from the website with the binary: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Do not try to work around it.
+**First subscription of the app?** `check` reports `subscription.first.with-version` (INFO): `submit` sends it by API with the version. If App Store Connect refuses, nothing is submitted, the product items are removed from the draft, and `submit` exits 5 with the clicks: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Or `submit --submit --skip-products` sends the app alone.
 
-**Any later subscription or in-app purchase:** `submit` adds its version (`subscriptionVersion`, `inAppPurchaseVersion` — the versioned model from ASC API 4.4.1) to the same review submission as the `appStoreVersion`, then submits. The app's **first in-app purchase** follows the same rule as its first subscription: website, with the binary (`iap.first.ui-only`).
+**Any later subscription or in-app purchase:** `submit` adds its version (`subscriptionVersion`, `inAppPurchaseVersion` — the versioned model from ASC API 4.4.1) to the same review submission as the `appStoreVersion`, then submits. The app's **first in-app purchase** follows the same path as its first subscription (`iap.first.with-version`).
 
 Afterwards `asc status` should show the version and the subscription as `WAITING_FOR_REVIEW`.
 

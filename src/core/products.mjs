@@ -109,11 +109,27 @@ export function missingProductFields(product, kind, index) {
 const SHIPPED_STATES = ["APPROVED", "DEVELOPER_REMOVED_FROM_SALE", "REMOVED_FROM_SALE"];
 
 /**
- * Apple sends an app's FIRST subscription — and its first in-app purchase — to
- * review together with the binary, from appstoreconnect.apple.com. Later ones
- * go through the API.
+ * An app's FIRST subscription — and its first in-app purchase — goes to review
+ * together with an app version. Apple's help describes doing it from the
+ * website; `submit` sends it by API in the same submission, and falls back to
+ * the website's clicks if App Store Connect refuses.
  *
  * @param {Array<{ state?: string, attributes?: { state?: string } }>} products  every product of that kind
  */
 export const isFirstProduct = (products) =>
   !products.some((p) => SHIPPED_STATES.includes(p.state ?? p.attributes?.state ?? ""));
+
+/**
+ * Where App Store Connect's web UI attaches a first product to the version: the
+ * way that always works, shown when App Store Connect will not take it by API.
+ * @param {string} productId
+ */
+export const FIRST_PRODUCT_CLICKS = (productId) => [
+  "the version page",
+  "In-App Purchases and Subscriptions",
+  "Select",
+  productId,
+  "Done",
+  "Add for Review",
+  "Submit to App Review",
+];

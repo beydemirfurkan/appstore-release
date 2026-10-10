@@ -322,3 +322,51 @@ test("listing lints: short keywords, a subtitle that repeats the name, other pla
   assert.equal(android?.guideline, "2.3.10");
   assert.equal(lint({ description: "Works on iPhone and iPad." }).has("description.other-platform"), false);
 });
+
+test("MUTATING_COMMANDS is exactly the registry's writers, plus release", async () => {
+  const { MUTATING_COMMANDS, writesToAppStoreConnect } = await import("../src/core/mutating.mjs");
+  const { OPERATIONS } = await import("../src/ops/registry.mjs");
+  const writers = Object.entries(OPERATIONS)
+    .filter(([, op]) => op.meta.mutates)
+    .map(([id]) => id);
+  assert.deepEqual([...MUTATING_COMMANDS].sort(), ["release", ...writers].sort());
+  assert.equal(writesToAppStoreConnect("appstore-release submit --submit"), true);
+  assert.equal(writesToAppStoreConnect("appstore-release check"), false);
+  assert.equal(writesToAppStoreConnect(undefined), false);
+});
+
+test("Apple's refusals: nested reasons read, known ones mapped, product ones kept verbatim", async () => {
+  const { explainRefusal } = await import("../src/asc/refusals.mjs");
+  const error = {
+    errors: [
+      {
+        detail: "reviewSubmissions with id 'rs-1' cannot be submitted.",
+        meta: {
+          associatedErrors: {
+            "/v1/apps/1": [{ detail: "You must provide a value for the attribute 'contentRightsDeclaration'." }],
+            "/v1/appStoreVersions/v1": [
+              { detail: "You must have published answers to your app's data usages." },
+              { detail: "A screenshot for one of the following types is required: APP_IPHONE_67." },
+            ],
+            "/v1/subscriptions/s1": [{ detail: "The subscription review screenshot is missing." }],
+          },
+        },
+      },
+      { detail: "Something new Apple says." },
+    ],
+  };
+  const { lines, findings, productRelated } = explainRefusal(error);
+  assert.equal(lines.length, 5, "the generic wrapper line is dropped for the reasons under it");
+  assert.equal(productRelated, true);
+  const byId = new Map(findings.map((f) => [f.id, f]));
+  assert.equal(byId.get("refusal.content-rights")?.fixCommand, "appstore-release content-rights");
+  assert.equal(byId.get("refusal.app-privacy")?.uiOnly, true);
+  assert.equal(byId.get("refusal.screenshots")?.fixCommand, "appstore-release screenshots");
+  // The subscription's screenshot is not the app's screenshots.
+  const verbatim = findings.filter((f) => f.id.startsWith("refusal.unrecognised"));
+  assert.deepEqual(
+    verbatim.map((f) => f.detail),
+    ["The subscription review screenshot is missing.", "Something new Apple says."],
+  );
+  assert.deepEqual(explainRefusal(null), { lines: [], findings: [], productRelated: false });
+});

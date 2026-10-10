@@ -43,7 +43,7 @@ The demo runs against a local stand-in for App Store Connect, so nothing leaves 
 
 **`submit`** sends the version with any new plans and purchases, and refuses unless `check` says ready. `check --wait` then follows the review to its outcome.
 
-Apple keeps two things in its web UI: the App Privacy label and an app's first subscription or in-app purchase. For those, `check` tells you exactly where to click.
+Apple keeps the App Privacy label in its web UI; `check` tells you exactly where to click. An app's first subscription or in-app purchase goes with the version by API — and if App Store Connect will not take it, nothing is submitted and you get the clicks instead.
 
 Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they are.
 

@@ -65,7 +65,7 @@ What no API exposes, and the skills therefore cover as guidance: builds must use
 ## What Apple keeps in the UI
 
 1. **App Privacy → Data Collection.** Every `appDataUsages*` endpoint returns 404. `check` blocks with the exact clicks until you publish the label in App Store Connect and set `"review": { "privacyPublished": true }`. That records your word for it; it is not presented as verified.
-2. **An app's first subscription.** Apple: _"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com. For subsequent subscriptions, submit using the API endpoints."_ `check` reports it with the clicks; every later subscription is submitted by `submit`.
+2. **Maybe: an app's first subscription or in-app purchase.** Apple's 4.4.1 notes say _"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com"_, while teams submit it by API in the same review submission as the version. `submit` does the latter; if App Store Connect refuses, nothing is submitted, the product items are removed from the draft, and the result is `manual` (exit 5) with the website's clicks. `submit --submit --skip-products` sends the app alone. Not yet confirmed on a live account either way.
 
 ## Quick start with a real app
 

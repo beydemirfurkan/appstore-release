@@ -139,12 +139,15 @@ function planLines(report, s) {
   const pipelineOnly =
     run.length > 1 && run.every((a) => PIPELINE.includes(String(a.command).replace(/^appstore-release /, "")));
   if (pipelineOnly) {
-    steps.push([`$ appstore-release release`, `fixes all ${run.reduce((n, a) => n + a.findingIds.length, 0)}`]);
+    steps.push([
+      `$ appstore-release release`,
+      `fixes all ${run.reduce((n, a) => n + a.findingIds.length, 0)} · writes`,
+    ]);
   } else {
-    for (const a of run) steps.push([`$ ${a.command}`, `${a.findingIds.length} to fix`]);
+    for (const a of run) steps.push([`$ ${a.command}`, `${a.findingIds.length} to fix${a.mutates ? " · writes" : ""}`]);
   }
   for (const a of human) steps.push([`you: ${a.label}`, a.clicks?.join(" → ") ?? ""]);
-  if (report.verdict === "ready") steps.push([`$ appstore-release submit --submit`, "send it to App Review"]);
+  if (report.verdict === "ready") steps.push([`$ appstore-release submit --submit`, "send it to App Review · writes"]);
   if (wait && !steps.length) return [`${s.dim("Next")}  nothing to do but wait`];
   if (!steps.length) return [];
 
@@ -202,7 +205,11 @@ export function renderReportMarkdown(report) {
   if (report.nextActions.length) {
     out.push("", "## Do this next, in order", "");
     for (const a of report.nextActions) {
-      const suffix = a.command ? ` — \`${a.command}\`` : a.clicks?.length ? ` — ${a.clicks.join(" → ")}` : "";
+      const suffix = a.command
+        ? ` — \`${a.command}\`${a.mutates ? " (writes to App Store Connect)" : ""}`
+        : a.clicks?.length
+          ? ` — ${a.clicks.join(" → ")}`
+          : "";
       out.push(`${a.order}. ${a.label}${suffix}`);
     }
   }

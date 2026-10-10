@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.2.0
+
+### Added
+
+- **App previews** (`previews`, and a new `previews` step in `release`): videos through the App Asset Library, placed as `APP_PREVIEW`, grouped by pixel size into device groups from Apple's own catalog, with a locale subfolder replacing the folder for that locale. Every file's size and length are read from the file itself — a zero-dependency MP4/QuickTime reader that honours a quarter-turn rotation and fragmented files — and checked before a byte is uploaded, as is Apple's per-device limit. A changed `posterFrame` updates the video in place. `placementGroup` only settles a size that fits several groups. An empty locale subfolder means no previews in that locale. `--prune` removes placed previews with no local file and never touches screenshots (nor `screenshots --prune` previews).
+- **Custom product pages** (`customProductPages`, and a `custom-product-pages` step): a page per campaign with its own promotional text, deep link, screenshots and previews, per locale. An approved page version cannot change, so a new version is created only when the config differs from it — text, deep link, a locale added or removed, any screenshot or preview, a device group emptied — and nothing is written otherwise; while a version is in review, nothing is attempted. A removed locale or emptied device group is removed from an editable version. `visible` is applied once a version is approved. `submit` sends an editable page version (one with at least one locale) in the same review submission as the app; if App Store Connect refuses a page, its items are taken back out and nothing is submitted, and `submit --submit --skip-pages` (MCP `skipPages`) sends the rest.
+
+### Changed
+
+- The App Asset Library reconciliation behind screenshots now also serves previews (videos) and custom product page localizations, with a check-only mode. Screenshots behave exactly as before; placements are now always filtered by placement type, so previews and screenshots in the same device group never mistake each other for orphans.
+
+### Not yet
+
+- Previews and custom product pages are built from Apple's OpenAPI specification (4.5.1) and tested against the fake; not yet run against a live account. The preview frame time code is passed through as written: its format is not documented in the specification.
+
 ## 4.1.0
 
 ### Added

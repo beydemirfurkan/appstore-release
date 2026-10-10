@@ -23,6 +23,8 @@ import * as newVersion from "./new-version.mjs";
 import * as releaseOptions from "./release-options.mjs";
 import * as accessibility from "./accessibility.mjs";
 import * as offerCodes from "./offer-codes.mjs";
+import * as previews from "./previews.mjs";
+import * as customProductPages from "./custom-product-pages.mjs";
 
 /**
  * @typedef {Object} OperationMeta
@@ -57,6 +59,8 @@ export const OPERATIONS = {
   "review-info": reviewInfo,
   "release-options": releaseOptions,
   screenshots,
+  previews,
+  "custom-product-pages": customProductPages,
   subscription,
   "in-app-purchases": inAppPurchases,
   "offer-codes": offerCodes,
@@ -80,6 +84,8 @@ export const PIPELINE = Object.freeze([
   "review-info",
   "release-options",
   "screenshots",
+  "previews",
+  "custom-product-pages",
   "subscription",
   "in-app-purchases",
 ]);

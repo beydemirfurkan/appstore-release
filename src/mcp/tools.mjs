@@ -482,6 +482,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
             "Submit the app version alone; configured subscriptions and in-app purchases wait for a later version.",
             false,
           ),
+          skipPages: bool("Leave custom product pages out of this submission.", false),
           confirm,
         },
         ["confirm"],
@@ -512,6 +513,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           force: Boolean(args.force),
           resolved: Boolean(args.resolved),
           skipProducts: Boolean(args.skipProducts),
+          skipPages: Boolean(args.skipPages),
         });
         // Only a CHANGED result means the PATCH went through; an OK can be "already
         // in review" and an ERROR is a refusal — neither is a submission.

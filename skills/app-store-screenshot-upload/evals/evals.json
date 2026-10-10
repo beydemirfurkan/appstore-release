@@ -10,5 +10,9 @@
   {
     "prompt": "Replace the old screenshots and delete the ones I removed locally.",
     "expects": ["asc screenshots --prune"]
+  },
+  {
+    "prompt": "Upload our 25-second app preview video for iPhone.",
+    "expects": ["asc previews --dry-run", "asc previews"]
   }
 ]

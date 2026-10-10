@@ -18,6 +18,8 @@ export const MUTATING_COMMANDS = Object.freeze([
   "review-info",
   "release-options",
   "screenshots",
+  "previews",
+  "custom-product-pages",
   "subscription",
   "in-app-purchases",
   "offer-codes",

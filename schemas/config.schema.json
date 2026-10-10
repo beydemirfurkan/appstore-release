@@ -1495,6 +1495,82 @@
           }
         }
       }
+    },
+    "previews": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dir"],
+      "description": "App previews (videos), through the App Asset Library. Files are grouped by pixel size into device groups; a locale subfolder replaces the folder for that locale.",
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "dir": {
+          "type": "string",
+          "description": "Folder of .mov / .mp4 / .m4v previews, shown in file-name order."
+        },
+        "placementGroup": {
+          "type": "string",
+          "description": "Only when a size fits several groups: which one (see `appstore-release screenshots --list-groups`)."
+        },
+        "posterFrame": {
+          "type": "string",
+          "description": "The frame shown before playback, as a time code, e.g. 00:00:05:00."
+        }
+      }
+    },
+    "customProductPages": {
+      "type": "array",
+      "description": "Custom product pages: alternative product pages with their own URL, text and media. Matched by name; a new page version is created only when the config differs from the approved one. submit sends an editable page version with the app.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "locales"],
+        "properties": {
+          "$comment": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Reference name, shown only in App Store Connect; how this config finds the page again."
+          },
+          "deepLink": {
+            "type": "string",
+            "description": "Where the app opens from this page, e.g. myapp://ramadan.",
+            "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:\\S+$"
+          },
+          "visible": {
+            "type": "boolean",
+            "description": "Whether the page's URL is live. Default: App Store Connect's."
+          },
+          "locales": {
+            "type": "object",
+            "description": "Per locale: promotional text and folders of screenshots and previews (grouped by pixel size).",
+            "propertyNames": {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,4})?$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "promotionalText": {
+                  "type": "string",
+                  "maxLength": 170
+                },
+                "screenshots": {
+                  "type": "string",
+                  "description": "Folder of exact-size PNG screenshots."
+                },
+                "previews": {
+                  "type": "string",
+                  "description": "Folder of .mov / .mp4 previews."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.3.1
+
+### Fixed
+
+- **`sales` and `analytics` with a key that cannot read reports** — found on a live account, where an App Manager key is refused with a bare 403. Both now say that reports need a key with access to Sales and Reports (for example Admin or Finance) and where to create one.
+
 ## 4.3.0
 
 ### Added

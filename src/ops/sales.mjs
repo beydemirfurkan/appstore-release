@@ -12,6 +12,12 @@ import { dirname } from "node:path";
 
 import { Status } from "../core/status.mjs";
 
+/** What a 403 on a report endpoint means, as a live App Manager key showed. */
+export const REPORTS_ROLE =
+  "this API key's role cannot read reports — App Store Connect allows them for keys with access to " +
+  "Sales and Reports (for example Admin or Finance); an App Manager key is refused. Create such a key in " +
+  "Users and Access → Integrations, or run this with one";
+
 /** reportType → { sub-type, frequencies, version } */
 export const REPORTS = Object.freeze({
   SALES: { subType: "SUMMARY", frequencies: ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"], version: "1_0" },
@@ -113,6 +119,7 @@ export async function run(ctx, args = {}) {
   const res = await client.get(`/v1/salesReports?${query.join("&")}`, { binary: true, throwOnError: false });
   if ("error" in res) {
     // No sales that day is a 404 with a sentence, not a failure.
+    if (res.error?.status === 403) return { status: Status.ERROR, message: REPORTS_ROLE };
     if (res.error?.status === 404) {
       return {
         status: Status.OK,

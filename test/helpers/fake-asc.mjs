@@ -119,7 +119,7 @@ function spec(shortName, width, height) {
  * many downloads of a one-time-code batch fail before its CSV is ready, as
  * Apple generates batches in the background.
  *
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number, offerCodeValuesStatus?: number, refusePages?: boolean }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number, offerCodeValuesStatus?: number, refusePages?: boolean, reportsForbidden?: boolean }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
@@ -134,6 +134,7 @@ export function createFakeAsc({
   offerCodeValuesAfter = 0,
   offerCodeValuesStatus = 0,
   refusePages = false,
+  reportsForbidden = false,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -1316,7 +1317,21 @@ export function createFakeAsc({
   );
 
   // Sales reports: gzipped, tab-separated, as Apple sends them.
+  const forbidden = () => ({
+    status: 403,
+    body: {
+      errors: [
+        {
+          status: "403",
+          code: "FORBIDDEN_ERROR",
+          title: "This request is forbidden for security reasons",
+          detail: "The API key in use does not allow this request",
+        },
+      ],
+    },
+  });
   on("GET", `/v1/salesReports`, (_m, { url }) => {
+    if (reportsForbidden) return forbidden();
     for (const f of ["vendorNumber", "reportType", "reportSubType", "frequency"]) {
       if (!url.searchParams.get(`filter[${f}]`))
         return conflict("PARAMETER_ERROR.REQUIRED", `filter[${f}] is required`);
@@ -1355,7 +1370,9 @@ export function createFakeAsc({
   });
 
   // Analytics: request → reports → instances → segments behind signed URLs.
-  on("GET", `/v1/apps/${appId}/analyticsReportRequests`, () => ok(all("analyticsReportRequests")));
+  on("GET", `/v1/apps/${appId}/analyticsReportRequests`, () =>
+    reportsForbidden ? forbidden() : ok(all("analyticsReportRequests")),
+  );
   on("POST", `/v1/analyticsReportRequests`, (_m, { body }) => {
     const req = put("analyticsReportRequests", nextId("arr"), {
       accessType: body.data.attributes.accessType,

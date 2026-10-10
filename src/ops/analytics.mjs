@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { Status } from "../core/status.mjs";
-import { unpack } from "./sales.mjs";
+import { REPORTS_ROLE, unpack } from "./sales.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -46,9 +46,16 @@ export async function run(ctx, args = {}) {
   if (!["DAILY", "WEEKLY", "MONTHLY"].includes(String(args.granularity ?? "DAILY").toUpperCase())) {
     return { status: Status.ERROR, message: `granularity is DAILY, WEEKLY or MONTHLY, not ${args.granularity}` };
   }
-  const requests = await client.all(`/v1/apps/${discovery.appId}/analyticsReportRequests?filter[accessType]=ONGOING`, {
-    limit: 50,
-  });
+  let requests;
+  try {
+    requests = await client.all(`/v1/apps/${discovery.appId}/analyticsReportRequests?filter[accessType]=ONGOING`, {
+      limit: 50,
+    });
+  } catch (e) {
+    // Seen on a live account: an App Manager key is refused here. Say what to do.
+    if (/** @type {any} */ (e)?.status === 403) return { status: Status.ERROR, message: REPORTS_ROLE };
+    throw e;
+  }
   let request = requests.find((r) => !r.attributes?.stoppedDueToInactivity);
   const stopped = requests.find((r) => r.attributes?.stoppedDueToInactivity);
 

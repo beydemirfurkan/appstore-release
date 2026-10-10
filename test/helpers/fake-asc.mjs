@@ -600,9 +600,20 @@ export function createFakeAsc({
     `/v1/reviewSubmissions`,
     create("reviewSubmissions", "rs", { state: "READY_FOR_REVIEW", submitted: false }),
   );
-  on("GET", `/v1/reviewSubmissions/:id/items`, (m) =>
-    ok(all("reviewSubmissionItems").filter((i) => rel(i, "reviewSubmission")?.id === m[1])),
-  );
+  // As Apple does: relationship data only for what `include` asks for.
+  on("GET", `/v1/reviewSubmissions/:id/items`, (m, { url }) => {
+    const included = (url.searchParams.get("include") ?? "").split(",").filter(Boolean);
+    const items = all("reviewSubmissionItems")
+      .filter((i) => rel(i, "reviewSubmission")?.id === m[1])
+      .map((i) => ({
+        ...i,
+        relationships: Object.fromEntries(
+          Object.entries(i.relationships ?? {}).map(([k, v]) => [k, included.includes(k) ? v : { links: {} }]),
+        ),
+      }));
+    return ok(items);
+  });
+  on("PATCH", `/v1/reviewSubmissionItems/:id`, patch("reviewSubmissionItems"));
   on("POST", `/v1/reviewSubmissionItems`, (_m, { body }) => {
     const rels = body.data.relationships;
     const submission = /** @type {Resource} */ (get("reviewSubmissions", rels.reviewSubmission.data.id));
@@ -681,4 +692,18 @@ export function createFakeAsc({
     get,
     all,
   };
+}
+
+/**
+ * Apple's side of a rejection: the version goes back to REJECTED, the open
+ * submission to UNRESOLVED_ISSUES, and its items to REJECTED, unresolved.
+ *
+ * @param {ReturnType<typeof createFakeAsc>} fake
+ */
+export function rejectSubmission(fake) {
+  const version = fake.get("appStoreVersions", "ver-1");
+  if (version) version.attributes.appStoreState = "REJECTED";
+  for (const s of fake.all("reviewSubmissions")) s.attributes = { ...s.attributes, state: "UNRESOLVED_ISSUES" };
+  for (const i of fake.all("reviewSubmissionItems"))
+    i.attributes = { ...i.attributes, state: "REJECTED", resolved: false };
 }

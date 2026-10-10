@@ -20,6 +20,7 @@ import { runOperation, runPipeline } from "../index.mjs";
 import { getAppSnapshot } from "../report/snapshot.mjs";
 import { getReadinessReport } from "../report/report.mjs";
 import { waitForReview } from "../report/wait.mjs";
+import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { renderReportMarkdown } from "../report/render.mjs";
 import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
@@ -425,6 +426,10 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           appId,
           configPath,
           force: bool("Submit even though blockers remain. Apple will reject it.", false),
+          resolved: bool(
+            "After a rejection: the user has addressed what App Review asked for in Resolution Center. Resubmits.",
+            false,
+          ),
           confirm,
         },
         ["confirm"],
@@ -436,7 +441,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         // The guardrail a generic API wrapper structurally cannot offer: we know
         // what "ready" means, so we can decline to waste a review cycle.
         const report = await getReadinessReport(ctx);
-        if (report.verdict !== "ready" && !args.force) {
+        const resubmit =
+          report.verdict === "rejected" &&
+          args.resolved &&
+          !report.findings.some((f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id));
+        if (report.verdict !== "ready" && !args.force && !resubmit) {
           return structured(
             [
               `Refusing to submit: the readiness verdict is **${report.verdict}**.`,
@@ -449,7 +458,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           );
         }
 
-        const res = await runOperation("submit", ctx, { submit: true, force: Boolean(args.force) });
+        const res = await runOperation("submit", ctx, {
+          submit: true,
+          force: Boolean(args.force),
+          resolved: Boolean(args.resolved),
+        });
         // Only a CHANGED result means the PATCH went through; an OK can be "already
         // in review" and an ERROR is a refusal — neither is a submission.
         const submitted = res.status === Status.CHANGED;

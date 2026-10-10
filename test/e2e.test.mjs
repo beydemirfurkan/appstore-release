@@ -408,3 +408,25 @@ test("an app's first in-app purchase stops at needs-human, like its first subscr
   assert.equal(verdictOf(release.json), "needs-human");
   assert.ok(release.json.findings.some((f) => f.id === "iap.first.ui-only" && f.uiOnly));
 });
+
+test("rejected → fixed → resubmitted: the same submission goes back, its items marked resolved", async () => {
+  const { fake, cli } = setup();
+  const { rejectSubmission } = await import("./helpers/fake-asc.mjs");
+  await cli("release");
+  await cli("submit", "--submit");
+  rejectSubmission(fake);
+
+  const rejected = await cli("check");
+  assert.equal(verdictOf(rejected.json), "rejected");
+  assert.equal(rejected.code, Exit.NEEDS_HUMAN, "the reviewer's message is only in App Store Connect");
+
+  const refused = await cli("submit", "--submit");
+  assert.match(refused.json.results[0].message, /read Resolution Center, fix it, then submit --submit --resolved/);
+
+  const again = await cli("submit", "--submit", "--resolved");
+  assert.equal(again.code, Exit.OK, JSON.stringify(again.json.results, null, 2));
+  assert.equal(fake.all("reviewSubmissions").length, 1, "no second submission");
+  assert.ok(fake.all("reviewSubmissionItems").every((i) => i.attributes.resolved === true));
+  assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
+  assert.deepEqual(fake.unhandled, []);
+});

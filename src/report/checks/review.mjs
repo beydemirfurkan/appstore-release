@@ -6,6 +6,9 @@ import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 
 export const section = { id: "review", title: "Review and submission" };
 
+/** The findings a rejection itself raises — what `submit --resolved` answers. */
+export const REJECTION_FINDINGS = Object.freeze(["submission.rejected", "submission.unresolved-issues"]);
+
 const CONTACT_FIELDS = ["contactFirstName", "contactLastName", "contactPhone", "contactEmail"];
 /** Past the point where App Privacy could still block it. */
 const SUBMITTED_STATES = ["WAITING_FOR_REVIEW", "IN_REVIEW", ...APPROVED_STATES, "READY_FOR_DISTRIBUTION"];

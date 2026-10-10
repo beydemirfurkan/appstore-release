@@ -9,6 +9,7 @@
 // Apple says so in as many words — so it is never added by this operation.
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
+import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
 
 /** A draft submission we may add items to and finalize. */
@@ -36,6 +37,11 @@ export const meta = {
       type: "boolean",
       default: false,
       description: "submit even though the readiness report still has blockers",
+    },
+    resolved: {
+      type: "boolean",
+      default: false,
+      description: "after a rejection: you have addressed what App Review asked for — resubmit",
     },
   },
 };
@@ -65,10 +71,22 @@ export async function run(ctx, args = {}) {
   // Only checked when actually finalizing — preparing is harmless.
   if (args.submit && !args.force) {
     const report = await getReadinessReport(ctx);
-    if (report.verdict !== "ready") {
+    // A rejected version is resubmittable once the user says the reviewer's
+    // points are addressed — the API cannot read Resolution Center to check —
+    // and nothing else is still in the way.
+    const othersBlocking = report.findings.filter(
+      (f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id),
+    );
+    const resubmit = report.verdict === "rejected" && args.resolved && !othersBlocking.length;
+    if (report.verdict !== "ready" && !resubmit) {
       return {
         status: Status.ERROR,
-        message: `not ready to submit (${report.verdict}); pass --force to submit anyway`,
+        message:
+          report.verdict === "rejected"
+            ? othersBlocking.length
+              ? `rejected, and ${othersBlocking.length} other blocker(s) remain — run release, then submit --submit --resolved`
+              : "Apple rejected this version: read Resolution Center, fix it, then submit --submit --resolved"
+            : `not ready to submit (${report.verdict}); pass --force to submit anyway`,
         details: report,
         findings: report.findings,
       };
@@ -147,6 +165,18 @@ export async function run(ctx, args = {}) {
       message: `prepared submission ${submission.id} with ${contents} (pass --submit to finalize)`,
       details: { submissionId: submission.id, items: wanted.map((i) => i.label) },
     };
+  }
+
+  // After a rejection the submission sits in UNRESOLVED_ISSUES with its items
+  // unresolved. Marking them resolved is the API's "Resubmit to App Review" —
+  // do it only when actually submitting, once the fixes are in.
+  if (submission.attributes?.state === "UNRESOLVED_ISSUES") {
+    const items = await client.all(`/v1/reviewSubmissions/${submission.id}/items`, { limit: 50 });
+    for (const item of items.filter((i) => i.attributes?.resolved === false || i.attributes?.state === "REJECTED")) {
+      await client.patch(`/v1/reviewSubmissionItems/${item.id}`, {
+        data: { type: "reviewSubmissionItems", id: item.id, attributes: { resolved: true } },
+      });
+    }
   }
 
   const done = await client.patch(
@@ -270,7 +300,13 @@ async function draftVersion(client, parentType, parentId) {
 async function existingItemIds(client, submissionId) {
   const ids = new Set();
   if (submissionId.startsWith("dry:")) return ids; // planned under --dry-run; nothing to read
-  const items = await client.all(`/v1/reviewSubmissions/${submissionId}/items`, { limit: 50 });
+  // Relationship ids come back only for what is included — without it every
+  // item looks empty, and a re-run adds the same version again (409).
+  const items = await client.all(
+    `/v1/reviewSubmissions/${submissionId}/items` +
+      `?include=appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion`,
+    { limit: 50 },
+  );
   for (const item of items) {
     for (const rel of Object.values(item.relationships ?? {})) {
       const id = /** @type {any} */ (rel)?.data?.id;

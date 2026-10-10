@@ -430,3 +430,49 @@ test("rejected → fixed → resubmitted: the same submission goes back, its ite
   assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
   assert.deepEqual(fake.unhandled, []);
 });
+
+test("testflight: compliance, What to Test, groups, testers and beta review — and nothing on a second run", async () => {
+  const { fake, run } = await productsProject({}, (config) => ({
+    ...config,
+    testflight: {
+      whatToTest: "The new streaks screen.",
+      groups: [{ name: "Team", internal: true }, "Beta"],
+      testers: [{ email: "tester@example.com", group: "Beta" }],
+      description: "Wellness helps you keep small habits.",
+      feedbackEmail: "beta@example.com",
+      usesNonExemptEncryption: false,
+    },
+  }));
+
+  const first = await run("testflight");
+  assert.equal(first.code, Exit.OK, JSON.stringify(first.json.results, null, 2));
+  assert.equal(fake.get("builds", "build-7")?.attributes.usesNonExemptEncryption, false);
+  assert.equal(fake.all("betaBuildLocalizations")[0]?.attributes.whatsNew, "The new streaks screen.");
+  assert.deepEqual(
+    fake
+      .all("betaGroups")
+      .map((g) => [g.attributes.name, g.attributes.isInternalGroup, g.relationships?.builds?.data?.length]),
+    [
+      ["Team", true, 1],
+      ["Beta", false, 1],
+    ],
+  );
+  assert.equal(fake.all("betaTesters")[0]?.attributes.email, "tester@example.com");
+  assert.equal(fake.all("betaAppReviewSubmissions").length, 1, "an external group means beta review");
+  assert.equal(fake.get("betaAppReviewDetails", "1234567890")?.attributes.contactEmail, "review@example.com");
+
+  const writes = fake.mutations().length;
+  const second = await run("testflight");
+  assert.equal(second.json.results[0].status, "ok");
+  assert.equal(fake.mutations().length, writes, "a second run sends nothing");
+  assert.deepEqual(fake.unhandled, []);
+});
+
+test("testflight refuses to guess an export compliance answer", async () => {
+  const { run } = await productsProject({}, (config) => ({
+    ...config,
+    testflight: { groups: [{ name: "Team", internal: true }] },
+  }));
+  const res = await run("testflight");
+  assert.match(res.json.results[0].message, /export compliance/);
+});

@@ -131,6 +131,11 @@ export function createFakeAsc({
     processingState: "VALID",
     expired: false,
     uploadedDate: "2026-10-09T18:00:00Z",
+    usesNonExemptEncryption: null,
+  });
+  put("buildBetaDetails", "build-7", {
+    internalBuildState: "READY_FOR_BETA_TESTING",
+    externalBuildState: "READY_FOR_BETA_SUBMISSION",
   });
   put("ageRatingDeclarations", "age-1", {});
   put(
@@ -588,6 +593,66 @@ export function createFakeAsc({
     return ok(s);
   });
   on("DELETE", `/v1/inAppPurchaseAppStoreReviewScreenshots/:id`, remove("inAppPurchaseAppStoreReviewScreenshots"));
+
+  // TestFlight
+  on("GET", `/v1/builds/:id`, (m) => (get("builds", m[1]) ? ok(get("builds", m[1])) : notFound()));
+  on("PATCH", `/v1/builds/:id`, patch("builds"));
+  on("GET", `/v1/betaBuildLocalizations`, (_m, { url }) => {
+    const build = url.searchParams.get("filter[build]");
+    return ok(all("betaBuildLocalizations").filter((l) => rel(l, "build")?.id === build));
+  });
+  on("POST", `/v1/betaBuildLocalizations`, create("betaBuildLocalizations", "bbloc"));
+  on("PATCH", `/v1/betaBuildLocalizations/:id`, patch("betaBuildLocalizations"));
+  on("GET", `/v1/betaAppLocalizations`, () => ok(all("betaAppLocalizations")));
+  on("POST", `/v1/betaAppLocalizations`, create("betaAppLocalizations", "baloc"));
+  on("PATCH", `/v1/betaAppLocalizations/:id`, patch("betaAppLocalizations"));
+  on("GET", `/v1/apps/${appId}/betaAppReviewDetail`, () =>
+    ok(get("betaAppReviewDetails", appId) ?? put("betaAppReviewDetails", appId, {})),
+  );
+  on("PATCH", `/v1/betaAppReviewDetails/:id`, patch("betaAppReviewDetails"));
+  on("GET", `/v1/apps/${appId}/betaGroups`, () => ok(all("betaGroups")));
+  on("POST", `/v1/betaGroups`, create("betaGroups", "bg"));
+  on("GET", `/v1/betaGroups/:id/relationships/builds`, (m) =>
+    ok(get("betaGroups", m[1])?.relationships?.builds?.data ?? []),
+  );
+  on("POST", `/v1/betaGroups/:id/relationships/builds`, (m, { body }) => {
+    const g = get("betaGroups", m[1]);
+    if (!g) return notFound();
+    g.relationships = {
+      ...g.relationships,
+      builds: { data: [...(g.relationships?.builds?.data ?? []), ...body.data] },
+    };
+    return noContent();
+  });
+  on("GET", `/v1/betaTesters`, (_m, { url }) => {
+    const email = url.searchParams.get("filter[email]");
+    return ok(all("betaTesters").filter((t) => t.attributes.email === email));
+  });
+  on("POST", `/v1/betaTesters`, create("betaTesters", "tester", { state: "INVITED" }));
+  on("POST", `/v1/betaGroups/:id/relationships/betaTesters`, (_m, { body }) => {
+    for (const d of body.data) {
+      const t = get("betaTesters", d.id);
+      if (t)
+        t.relationships = {
+          ...t.relationships,
+          betaGroups: { data: [...(t.relationships?.betaGroups?.data ?? []), { type: "betaGroups", id: _m[1] }] },
+        };
+    }
+    return noContent();
+  });
+  on("GET", `/v1/builds/:id/buildBetaDetail`, (m) => ok(get("buildBetaDetails", m[1])));
+  on("POST", `/v1/betaAppReviewSubmissions`, (_m, { body }) => {
+    const detail = get("buildBetaDetails", body.data.relationships.build.data.id);
+    if (detail) detail.attributes.externalBuildState = "WAITING_FOR_BETA_REVIEW";
+    return created(
+      put(
+        "betaAppReviewSubmissions",
+        nextId("bars"),
+        { betaReviewState: "WAITING_FOR_REVIEW" },
+        body.data.relationships,
+      ),
+    );
+  });
 
   // Review submissions
   on("GET", `/v1/reviewSubmissions`, (_m, { url }) => {

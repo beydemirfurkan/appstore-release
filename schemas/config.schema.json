@@ -705,6 +705,100 @@
           }
         }
       }
+    },
+    "testflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What `appstore-release testflight` does with the newest build: notes, groups, testers, beta review.",
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "whatToTest": {
+          "description": "What to Test: one string for the config's locale, or an object keyed by locale.",
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 4000
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            }
+          ]
+        },
+        "groups": {
+          "type": "array",
+          "description": "Beta groups to put the build in; created when missing. A string is an external group.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "internal": {
+                    "type": "boolean",
+                    "description": "Internal groups need App Store Connect users and no beta review."
+                  },
+                  "publicLink": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "testers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["email", "group"],
+            "properties": {
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "group": {
+                "type": "string"
+              },
+              "firstName": {
+                "type": "string"
+              },
+              "lastName": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Beta app description — required before external testing."
+        },
+        "feedbackEmail": {
+          "type": "string",
+          "format": "email"
+        },
+        "usesNonExemptEncryption": {
+          "type": "boolean",
+          "description": "Export compliance answer, when the build does not carry ITSAppUsesNonExemptEncryption."
+        },
+        "submitForReview": {
+          "type": "boolean",
+          "description": "Send the build to beta app review when an external group has it. Defaults to true."
+        }
+      }
     }
   },
   "$defs": {

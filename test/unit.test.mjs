@@ -433,5 +433,8 @@ test("refusal memory: one file per app, the latest per product and version, neve
     ["v:b", "w:c"],
   );
   assert.deepEqual(readState(dir, "2"), { refusals: [] }, "apps do not share a file");
-  assert.equal(recordRefusals("/dev/null/not-a-dir", "1", [r("a")]), false, "a failed write is not a crash");
+  // A directory under a file cannot be created, on any platform.
+  const file = join(dir, "a-file");
+  writeFileSync(file, "");
+  assert.equal(recordRefusals(join(file, "state"), "1", [r("a")]), false, "a failed write is not a crash");
 });

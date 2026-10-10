@@ -394,6 +394,14 @@ test("a subscription needs a Terms of Use link, unless a custom EULA is set or n
   assert.equal(terms({ eula: { custom: false } }, config(`Plan your meals.\n${standard}`)), undefined);
   assert.equal(terms({ eula: { custom: false } }, config("Terms of Use: https://example.com/terms")), undefined);
   assert.equal(terms({ eula: { custom: true } }, config("Plan your meals.")), undefined);
+  // From a real listing: Turkish wording, and a bare "Terms:" label.
+  assert.equal(terms({ eula: { custom: false } }, config("Kullanım Şartları: https://example.com/terms")), undefined);
+  assert.equal(terms({ eula: { custom: false } }, config("Terms: https://example.com/legal")), undefined);
+  assert.equal(terms({ eula: { custom: false } }, config("Read more: https://example.com/eula")), undefined);
+  assert.ok(
+    terms({ eula: { custom: false } }, config("Our terms are fair.\nSupport: https://example.com/help")),
+    "a word and a URL on different lines are not a terms link",
+  );
   assert.equal(terms({ eula: null }, config("Plan your meals.")), undefined, "unknown is not missing");
 });
 

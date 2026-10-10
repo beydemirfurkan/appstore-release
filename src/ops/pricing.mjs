@@ -88,10 +88,10 @@ export async function run({ client, discovery, config }) {
           },
         ],
       });
-      changes.push(price.free ? "free price" : `price ${target.customerPrice} ${price.baseTerritory}${nearestNote}`);
+      changes.push(price.free ? "free" : `${target.customerPrice} ${price.baseTerritory}${nearestNote}`);
     }
   }
 
-  if (!changes.length) return { status: Status.OK, message: "copyright + price already set" };
-  return { status: Status.CHANGED, message: changes.join(" + ") };
+  if (!changes.length) return { status: Status.OK, message: "already set" };
+  return { status: Status.CHANGED, message: changes.join(" · ") };
 }

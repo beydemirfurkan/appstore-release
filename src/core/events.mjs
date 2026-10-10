@@ -12,6 +12,7 @@ export const EventType = Object.freeze({
   RESULT: "result", // an operation finished
   REQUEST: "request", // an HTTP call completed (verbose/telemetry)
   CHANGE: "change", // a mutation was applied, or planned under dry run
+  REPORT: "report", // a readiness report, for a human renderer to lay out
 });
 
 /**
@@ -63,6 +64,11 @@ export function createLog({ onEvent = null } = {}) {
     info: (message) => emit({ type: EventType.INFO, message }),
     /** @param {string} message */
     warn: (message) => emit({ type: EventType.WARN, message }),
+    /**
+     * A readiness report as data; how it looks is the sink's business.
+     * @param {any} report @param {{ compact?: boolean }} [options]
+     */
+    report: (report, options = {}) => emit({ type: EventType.REPORT, report, ...options }),
 
     /** @param {Partial<OperationResult> & {id: string, title: string, status: any}} r */
     result(r) {

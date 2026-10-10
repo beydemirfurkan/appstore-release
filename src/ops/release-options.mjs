@@ -110,6 +110,6 @@ export async function run({ client, discovery, config }) {
     changes.push("phased release off");
   }
 
-  if (!changes.length) return { status: Status.OK, message: "release timing already set", findings };
+  if (!changes.length) return { status: Status.OK, message: "already set", findings };
   return { status: Status.CHANGED, message: changes.join(", "), findings, details: { ...wanted } };
 }

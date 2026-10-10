@@ -89,7 +89,14 @@ export async function run(ctx, args = {}) {
     ).data;
   }
 
-  const wanted = [{ relationship: "appStoreVersion", type: "appStoreVersions", id: version.id, label: "app version" }];
+  const wanted = [
+    {
+      relationship: "appStoreVersion",
+      type: "appStoreVersions",
+      id: version.id,
+      label: `v${version.attributes.versionString}`,
+    },
+  ];
   wanted.push(...(await subscriptionItems(ctx, config?.subscription?.productId)));
 
   const present = await existingItemIds(client, submission.id);
@@ -138,7 +145,7 @@ export async function run(ctx, args = {}) {
   if (done.error) return { status: Status.ERROR, message: done.error.message, findings: done.error.hints ?? [] };
   return {
     status: Status.CHANGED,
-    message: `submitted ${contents} to App Review`,
+    message: `sent to App Review · ${contents}`,
     details: { submissionId: submission.id, items: wanted.map((i) => i.label) },
   };
 }
@@ -171,7 +178,7 @@ async function subscriptionItems({ client, discovery }, productId) {
       relationship: "subscriptionVersion",
       type: "subscriptionVersions",
       id: subVersion.id,
-      label: `subscription ${productId}`,
+      label: "subscription",
     });
   }
   return items;

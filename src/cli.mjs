@@ -21,6 +21,7 @@ import { runOperation, runPipeline } from "./index.mjs";
 import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry.mjs";
 import { parseArgs, splitFlags, kebab, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
+import { createStyle } from "./cli/style.mjs";
 import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
 import { buildTools } from "./mcp/tools.mjs";
 import { RESOURCES } from "./mcp/resources.mjs";
@@ -116,7 +117,11 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   // Under --json, stdout carries exactly one JSON document and nothing else;
   // every human-readable byte goes to stderr. That is what makes `| jq` work.
   const humanStream = globals.json ? stderr : stdout;
-  const sink = createTextSink(humanStream, { verbose: globals.verbose, quiet: globals.quiet });
+  const sink = createTextSink(humanStream, {
+    verbose: globals.verbose,
+    quiet: globals.quiet,
+    style: createStyle(humanStream, env),
+  });
 
   let ctx;
   try {
@@ -151,9 +156,11 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   if (globals.dryRun) ctx.log.info("dry run — no changes will be sent to App Store Connect");
 
   if (isPipeline) {
-    ctx.log.section("App Store Release — listing pipeline");
+    ctx.log.section("Release");
     await runPipeline(PIPELINE, ctx);
-    await runOperation("check", ctx, {});
+    // The ten steps above already say what happened; the report after them
+    // only needs the verdict and what is left.
+    await runOperation("check", ctx, { compact: true });
   } else {
     await runOperation(command, ctx, opArgs);
   }

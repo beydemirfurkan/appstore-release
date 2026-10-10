@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.1.0
+
+### Added
+
+- **Promotional offers and offer codes** on a subscription, from the config (`promotionalOffers`, `offerCodes` with `customCodes`). Created when missing as part of `subscription` and `release`, with prices inline in the territories you name. Apple does not let an offer's terms change once created, so a difference is reported (`subscription.promotional-offer.changed.*`, `subscription.offer-code.changed.*`) instead of being written. The one thing it allows is kept in step: a promotional offer's prices. `"active": false` deactivates an offer code or a custom code (and no new custom codes go to one that is off); nothing is deleted.
+- **`appstore-release offer-codes`** generates batches of one-time codes (`oneTimeCodes`) and writes each to a CSV file (mode 600), once; two batches with the same count and expiry are two batches. Never part of `release`: a batch spends Apple's code quota. `--dry-run` writes no file. If Apple is still generating a batch, it says so; a download it refuses outright (a key's role) is an error, not an endless wait. It warns when the file is not ignored by git.
+- **Accessibility Nutrition Labels** (`accessibility`, and a new `accessibility` step in `release`): one declaration per device, features the config leaves out declared as not supported, drafts until `"publish": true`, plus the app's accessibility URL.
+- **A refused first product is remembered.** App Store Connect keeps no record of a refused attempt; `submit` now keeps one in a small per-app file outside the project (`APPSTORE_RELEASE_STATE_DIR`, else `~/.cache/appstore-release/state`). `check` then shows the product as UI-only with the clicks (`*.first.refused`) for that version, instead of "ready", and `submit --submit --skip-products` still sends the app alone. A product that `release` changes afterwards is tried by API again. The CLI and the MCP tool now share one submit gate, and `--skip-products` never submits a version that is in review, approved or live.
+- The config schema accepts `format: date`, `minItems` and `uniqueItems`; an impossible date such as `2027-02-30` is refused offline.
+
+### Not yet
+
+- Win-back offers: Apple's API 4.5.1 does not document how to price one.
+- Offers and offer codes are built from Apple's OpenAPI specification (4.5.1) and tested against the fake; not yet run against a live account.
+
 ## 4.0.2
 
 ### Fixed

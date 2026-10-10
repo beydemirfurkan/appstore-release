@@ -11,6 +11,7 @@ import { resolveCredentials } from "./credentials.mjs";
 import { findConfigPath, loadConfig } from "./config.mjs";
 import { createLog } from "./events.mjs";
 import { repositoryBoundary, resolveProjectPath } from "./paths.mjs";
+import { stateDir } from "./state.mjs";
 import { createTokenProvider } from "../asc/jwt.mjs";
 import { AscClient, DEFAULT_BASE_URL } from "../asc/client.mjs";
 import { readExpoProject } from "./eas.mjs";
@@ -43,6 +44,7 @@ import { AssetUploader } from "../asc/assets.mjs";
  * @property {import("./events.mjs").Log} log
  * @property {import("./findings.mjs").Finding[]} findings
  * @property {(rel: string, purpose?: string) => string} resolvePath
+ * @property {string} stateDir     where what App Store Connect does not remember is kept (core/state.mjs)
  */
 
 /**
@@ -105,6 +107,7 @@ export async function createContext(options = {}) {
     credentials: /** @type {any} */ (credentials),
     appId,
     projectRoot,
+    stateDir: stateDir(env),
     configPath,
     config,
     client,

@@ -88,9 +88,11 @@ function spec(shortName, width, height) {
  * refuses the final submit the way App Store Connect does when the App Privacy
  * answers were never published; both reasons are returned together when both
  * apply. `refuseProductIds` refuses those products' review items outright, as
- * App Store Connect does for an incomplete product.
+ * App Store Connect does for an incomplete product. `offerCodeValuesAfter`: how
+ * many downloads of a one-time-code batch fail before its CSV is ready, as
+ * Apple generates batches in the background.
  *
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[] }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number, offerCodeValuesStatus?: number }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
@@ -102,6 +104,8 @@ export function createFakeAsc({
   firstProductPolicy = "accept",
   appPrivacyPublished = true,
   refuseProductIds = [],
+  offerCodeValuesAfter = 0,
+  offerCodeValuesStatus = 0,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -567,6 +571,201 @@ export function createFakeAsc({
   );
   on("POST", `/v1/subscriptionIntroductoryOffers`, create("subscriptionIntroductoryOffers", "offer"));
 
+  // Promotional offers and offer codes (API 4.5.1). Prices arrive inline, in
+  // `included`, referenced from relationships.prices by local id.
+  /** @param {any} body @param {string} type @param {string} mode */
+  const inlinePrices = (body, type, mode) => {
+    const refs = body.data.relationships?.prices?.data ?? [];
+    const included = body.included ?? [];
+    if (!refs.length) return "prices: at least one territory is required";
+    for (const r of refs) {
+      const item = included.find((i) => i.type === type && i.id === r.id);
+      if (!item) return `prices: ${r.id} is not in included`;
+      if (!item.relationships?.territory?.data?.id) return `prices: ${r.id} has no territory`;
+      if (mode !== "FREE_TRIAL" && !item.relationships?.subscriptionPricePoint?.data?.id) {
+        return `prices: ${r.id} needs a subscriptionPricePoint for ${mode}`;
+      }
+    }
+    return null;
+  };
+  on("GET", `/v1/subscriptions/:id/promotionalOffers`, (m) =>
+    ok(all("subscriptionPromotionalOffers").filter((o) => rel(o, "subscription")?.id === m[1])),
+  );
+  on("POST", `/v1/subscriptionPromotionalOffers`, (_m, { body }) => {
+    const a = body.data.attributes;
+    const problem = inlinePrices(body, "subscriptionPromotionalOfferPrices", a.offerMode);
+    if (problem) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", problem);
+    const subId = body.data.relationships.subscription.data.id;
+    const clash = all("subscriptionPromotionalOffers").some(
+      (o) => rel(o, "subscription")?.id === subId && o.attributes.offerCode === a.offerCode,
+    );
+    if (clash) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE", `offerCode ${a.offerCode} is already used`);
+    const offer = put(
+      "subscriptionPromotionalOffers",
+      nextId("promo"),
+      { ...a },
+      { subscription: ref("subscriptions", subId) },
+    );
+    storeOfferPrices(offer.id, body.included);
+    return created(offer);
+  });
+  /** Inline prices become price resources of the offer, replacing any it had. @param {string} offerId @param {any[]} included */
+  const storeOfferPrices = (offerId, included) => {
+    for (const old of all("subscriptionPromotionalOfferPrices").filter((x) => rel(x, "offer")?.id === offerId)) {
+      table("subscriptionPromotionalOfferPrices").delete(old.id);
+    }
+    for (const item of included ?? []) {
+      put(
+        "subscriptionPromotionalOfferPrices",
+        nextId("pprice"),
+        {},
+        {
+          ...item.relationships,
+          offer: ref("subscriptionPromotionalOffers", offerId),
+        },
+      );
+    }
+  };
+  on("GET", `/v1/subscriptionPromotionalOffers/:id/prices`, (m) =>
+    ok(all("subscriptionPromotionalOfferPrices").filter((x) => rel(x, "offer")?.id === m[1])),
+  );
+  on("PATCH", `/v1/subscriptionPromotionalOffers/:id`, (m, { body }) => {
+    const offer = get("subscriptionPromotionalOffers", m[1]);
+    if (!offer) return notFound();
+    if (Object.keys(body.data.attributes ?? {}).length) {
+      return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", "attributes cannot change");
+    }
+    const problem = inlinePrices(body, "subscriptionPromotionalOfferPrices", offer.attributes.offerMode);
+    if (problem) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", problem);
+    storeOfferPrices(offer.id, body.included);
+    return ok(offer);
+  });
+  on("GET", `/v1/subscriptions/:id/offerCodes`, (m) =>
+    ok(all("subscriptionOfferCodes").filter((o) => rel(o, "subscription")?.id === m[1])),
+  );
+  on("POST", `/v1/subscriptionOfferCodes`, (_m, { body }) => {
+    const a = body.data.attributes;
+    if (!a.customerEligibilities?.length) return conflict("ENTITY_ERROR.ATTRIBUTE.REQUIRED", "customerEligibilities");
+    if (!["STACK_WITH_INTRO_OFFERS", "REPLACE_INTRO_OFFERS"].includes(a.offerEligibility)) {
+      return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", "offerEligibility");
+    }
+    const problem = inlinePrices(body, "subscriptionOfferCodePrices", a.offerMode);
+    if (problem) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", problem);
+    return created(
+      put(
+        "subscriptionOfferCodes",
+        nextId("ocode"),
+        { ...a, active: true },
+        {
+          subscription: ref("subscriptions", body.data.relationships.subscription.data.id),
+        },
+      ),
+    );
+  });
+  /** PATCH that accepts only `active`, as Apple's update requests for codes do. */
+  const activeOnly =
+    (/** @type {string} */ type) =>
+    (/** @type {RegExpMatchArray} */ m, /** @type {any} */ { body }) => {
+      const r = get(type, m[1]);
+      if (!r) return notFound();
+      const keys = Object.keys(body.data.attributes ?? {});
+      if (keys.some((k) => k !== "active")) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", "only active can change");
+      r.attributes.active = body.data.attributes.active;
+      return ok(r);
+    };
+  on("PATCH", `/v1/subscriptionOfferCodes/:id`, activeOnly("subscriptionOfferCodes"));
+  on("GET", `/v1/subscriptionOfferCodes/:id/customCodes`, (m) =>
+    ok(all("subscriptionOfferCodeCustomCodes").filter((c) => rel(c, "offerCode")?.id === m[1])),
+  );
+  on("POST", `/v1/subscriptionOfferCodeCustomCodes`, (_m, { body }) => {
+    const a = body.data.attributes;
+    const taken = all("subscriptionOfferCodeCustomCodes").some(
+      (c) => String(c.attributes.customCode).toUpperCase() === String(a.customCode).toUpperCase(),
+    );
+    if (taken) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE", `customCode ${a.customCode} is taken`);
+    return created(
+      put(
+        "subscriptionOfferCodeCustomCodes",
+        nextId("ccode"),
+        { ...a, active: true },
+        {
+          offerCode: ref("subscriptionOfferCodes", body.data.relationships.offerCode.data.id),
+        },
+      ),
+    );
+  });
+  on("PATCH", `/v1/subscriptionOfferCodeCustomCodes/:id`, activeOnly("subscriptionOfferCodeCustomCodes"));
+  on("GET", `/v1/subscriptionOfferCodes/:id/oneTimeUseCodes`, (m) =>
+    ok(all("subscriptionOfferCodeOneTimeUseCodes").filter((c) => rel(c, "offerCode")?.id === m[1])),
+  );
+  on("POST", `/v1/subscriptionOfferCodeOneTimeUseCodes`, (_m, { body }) => {
+    const a = body.data.attributes;
+    return created(
+      put(
+        "subscriptionOfferCodeOneTimeUseCodes",
+        nextId("otc"),
+        { ...a, environment: a.environment ?? "PRODUCTION", active: true, downloads: 0 },
+        { offerCode: ref("subscriptionOfferCodes", body.data.relationships.offerCode.data.id) },
+      ),
+    );
+  });
+  on("GET", `/v1/subscriptionOfferCodeOneTimeUseCodes/:id/values`, (m) => {
+    const batch = get("subscriptionOfferCodeOneTimeUseCodes", m[1]);
+    if (!batch) return notFound();
+    batch.attributes.downloads += 1;
+    if (offerCodeValuesStatus) {
+      return {
+        status: offerCodeValuesStatus,
+        body: {
+          errors: [
+            {
+              status: String(offerCodeValuesStatus),
+              code: "FORBIDDEN_ERROR",
+              title: "This request is forbidden for security reasons",
+            },
+          ],
+        },
+      };
+    }
+    if (batch.attributes.downloads <= offerCodeValuesAfter)
+      return conflict("STATE_ERROR", "The codes are being generated.");
+    const rows = Array.from(
+      { length: batch.attributes.numberOfCodes },
+      (_, i) => `CODE${String(i + 1).padStart(6, "0")}`,
+    );
+    return { status: 200, raw: `${rows.join("\n")}\n`, contentType: "text/csv" };
+  });
+
+  // Accessibility Nutrition Labels. What REPLACED means is not documented; the
+  // fake takes it to be "an older published declaration of the same device".
+  on("GET", `/v1/apps/${appId}/accessibilityDeclarations`, () => ok(all("accessibilityDeclarations")));
+  on("POST", `/v1/accessibilityDeclarations`, (_m, { body }) =>
+    created(put("accessibilityDeclarations", nextId("a11y"), { ...body.data.attributes, state: "DRAFT" })),
+  );
+  on("PATCH", `/v1/accessibilityDeclarations/:id`, (m, { body }) => {
+    const d = get("accessibilityDeclarations", m[1]);
+    if (!d) return notFound();
+    const { publish, deviceFamily, ...rest } = body.data.attributes ?? {};
+    if (deviceFamily) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", "deviceFamily cannot change");
+    if (d.attributes.state !== "DRAFT" && Object.keys(rest).length) {
+      return conflict("STATE_ERROR", "Only a draft declaration can be edited.");
+    }
+    Object.assign(d.attributes, rest);
+    if (publish) {
+      for (const other of all("accessibilityDeclarations")) {
+        if (
+          other !== d &&
+          other.attributes.deviceFamily === d.attributes.deviceFamily &&
+          other.attributes.state === "PUBLISHED"
+        ) {
+          other.attributes.state = "REPLACED";
+        }
+      }
+      d.attributes.state = "PUBLISHED";
+    }
+    return ok(d);
+  });
+
   // One-time in-app purchases (API 4.4.1 shapes)
   on("GET", `/v1/apps/${appId}/inAppPurchasesV2`, (_m, { url }) => {
     const productId = url.searchParams.get("filter[productId]");
@@ -905,6 +1104,12 @@ export function createFakeAsc({
       const match = url.pathname.match(re);
       if (!match) continue;
       const res = handler(match, { url, body });
+      if (res.raw !== undefined) {
+        return new Response(res.raw, {
+          status: res.status,
+          headers: { "content-type": res.contentType ?? "text/plain" },
+        });
+      }
       return new Response(res.status === 204 || res.body == null ? null : JSON.stringify(res.body), {
         status: res.status,
         headers: { "content-type": "application/json" },

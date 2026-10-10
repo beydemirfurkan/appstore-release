@@ -418,3 +418,23 @@ test("config paths may reach the enclosing repository, never beyond it", async (
   const loose = mkdtempSync(join(tmpdir(), "asr-loose-"));
   assert.equal(repositoryBoundary(loose), loose);
 });
+
+test("refusal memory: one file per app, the latest per product and version, never fatal", async () => {
+  const { readState, recordRefusals, stateDir } = await import("../src/core/state.mjs");
+  assert.equal(stateDir({ APPSTORE_RELEASE_STATE_DIR: "/x" }), "/x");
+  assert.equal(stateDir({ XDG_CACHE_HOME: "/c" }), join("/c", "appstore-release", "state"));
+  const dir = mkdtempSync(join(tmpdir(), "asr-state-"));
+  assert.deepEqual(readState(dir, "1"), { refusals: [] });
+  const r = (/** @type {string} */ at) => ({ productId: "p", versionId: "v", at, reasons: [at] });
+  assert.equal(recordRefusals(dir, "1", [r("a")]), true);
+  recordRefusals(dir, "1", [r("b"), { ...r("c"), versionId: "w" }]);
+  assert.deepEqual(
+    readState(dir, "1").refusals.map((x) => `${x.versionId}:${x.at}`),
+    ["v:b", "w:c"],
+  );
+  assert.deepEqual(readState(dir, "2"), { refusals: [] }, "apps do not share a file");
+  // A directory under a file cannot be created, on any platform.
+  const file = join(dir, "a-file");
+  writeFileSync(file, "");
+  assert.equal(recordRefusals(join(file, "state"), "1", [r("a")]), false, "a failed write is not a crash");
+});

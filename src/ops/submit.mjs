@@ -15,6 +15,7 @@ import { getReadinessReport } from "../report/report.mjs";
 import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { FIRST_PRODUCT_CLICKS, isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
 import { explainRefusal, isProductLine, refusedKinds } from "../asc/refusals.mjs";
+import { recordRefusals } from "../core/state.mjs";
 
 /** Review submission item relationships that carry a product rather than the app. */
 const PRODUCT_RELATIONSHIPS = ["subscriptionGroupVersion", "subscriptionVersion", "inAppPurchaseVersion"];
@@ -61,6 +62,44 @@ export const meta = {
   },
 };
 
+/** A finding about a subscription or in-app purchase rather than the app. @param {string} id */
+const isProductFinding = (id) => /^(subscription|iap|product)\./.test(id);
+
+/**
+ * Whether the readiness report lets a submission through, and if not, what to
+ * say. One rule for the CLI and the MCP tool:
+ *
+ *   - `ready` goes;
+ *   - a rejected version goes again once the user says it is fixed (`resolved`)
+ *     and nothing else blocks it — the API cannot read Resolution Center;
+ *   - with `skipProducts`, the products' own findings are not in the way, and a
+ *     version that is blocked only by them goes alone. Never one that is in
+ *     review, approved or live.
+ *
+ * @param {import("../report/report.mjs").ReadinessReport} report
+ * @param {{ resolved?: boolean, skipProducts?: boolean }} [args]
+ * @returns {{ ok: true } | { ok: false, message: string }}
+ */
+export function submitGate(report, { resolved = false, skipProducts = false } = {}) {
+  const blocking = report.findings.filter((f) => f.severity === "blocker" && !(skipProducts && isProductFinding(f.id)));
+  const others = blocking.filter((f) => !REJECTION_FINDINGS.includes(f.id));
+  const onlyProducts = !skipProducts && others.length > 0 && others.every((f) => isProductFinding(f.id));
+  const alone = onlyProducts ? " — or send the app alone with --skip-products" : "";
+
+  if (report.verdict === "ready") return { ok: true };
+  if (report.verdict === "rejected") {
+    if (resolved && !others.length) return { ok: true };
+    return {
+      ok: false,
+      message: others.length
+        ? `rejected, and ${others.length} other blocker(s) remain — run release, then submit --submit --resolved${alone}`
+        : "Apple rejected this version: read Resolution Center, fix it, then submit --submit --resolved",
+    };
+  }
+  if (skipProducts && ["blocked", "needs-human"].includes(report.verdict) && !blocking.length) return { ok: true };
+  return { ok: false, message: `not ready to submit (${report.verdict}); pass --force to submit anyway${alone}` };
+}
+
 /**
  * @typedef {Object} Item
  * @property {"appStoreVersion"|"subscriptionGroupVersion"|"subscriptionVersion"|"inAppPurchaseVersion"} relationship
@@ -97,25 +136,9 @@ export async function run(ctx, args = {}) {
   // Only checked when actually finalizing — preparing is harmless.
   if (args.submit && !args.force) {
     const report = await getReadinessReport(ctx);
-    // A rejected version is resubmittable once the user says the reviewer's
-    // points are addressed — the API cannot read Resolution Center to check —
-    // and nothing else is still in the way.
-    const othersBlocking = report.findings.filter(
-      (f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id),
-    );
-    const resubmit = report.verdict === "rejected" && args.resolved && !othersBlocking.length;
-    if (report.verdict !== "ready" && !resubmit) {
-      return {
-        status: Status.ERROR,
-        message:
-          report.verdict === "rejected"
-            ? othersBlocking.length
-              ? `rejected, and ${othersBlocking.length} other blocker(s) remain — run release, then submit --submit --resolved`
-              : "Apple rejected this version: read Resolution Center, fix it, then submit --submit --resolved"
-            : `not ready to submit (${report.verdict}); pass --force to submit anyway`,
-        details: report,
-        findings: report.findings,
-      };
+    const gate = submitGate(report, { resolved: args.resolved, skipProducts: args.skipProducts });
+    if (!gate.ok) {
+      return { status: Status.ERROR, message: gate.message, details: report, findings: report.findings };
     }
   }
 
@@ -180,7 +203,7 @@ export async function run(ctx, args = {}) {
     if (res.error) {
       // No 409 is swallowed: a duplicate was already filtered out above, so a
       // conflict here means Apple will not review this item, and it says why.
-      if (item.product) return refuseProducts(ctx, { submission, products, present, error: res.error, item });
+      if (item.product) return refuseProducts(ctx, { submission, products, present, error: res.error, item, version });
       const { findings } = explainRefusal(res.error);
       return {
         status: Status.ERROR,
@@ -252,7 +275,7 @@ export async function run(ctx, args = {}) {
     const explained = explainRefusal(done.error);
     // About a product: take the products out so the app is not held hostage to them.
     if (explained.productRelated && [...present.values()].some((v) => PRODUCT_RELATIONSHIPS.includes(v.relationship))) {
-      return refuseProducts(ctx, { submission, products, present, error: done.error });
+      return refuseProducts(ctx, { submission, products, present, error: done.error, version });
     }
     // About the app (App Privacy, price, screenshots…): the draft stays as it is —
     // the next submit reuses it — and each reason says what to do.
@@ -283,9 +306,12 @@ export async function run(ctx, args = {}) {
  * when nothing else stands in the way.
  *
  * @param {import("../core/context.mjs").Context} ctx
- * @param {{ submission: any, products: Item[], present: Map<string, { itemId: string, relationship: string }>, error: any, item?: Item }} input
+ * @param {{ submission: any, products: Item[], present: Map<string, { itemId: string, relationship: string }>, error: any, item?: Item, version: any }} input
  */
-async function refuseProducts({ client }, { submission, products, present, error, item }) {
+async function refuseProducts(
+  { client, discovery, stateDir },
+  { submission, products, present, error, item, version },
+) {
   const { removed, stuck } = await removeProductItems(client, present);
   const { lines, findings } = explainRefusal(error);
   const appFindings = findings.filter((f) => !isProductLine(f.detail));
@@ -321,6 +347,17 @@ async function refuseProducts({ client }, { submission, products, present, error
       details: { submissionId: submission.id, refused: lines, removed, stuck },
       findings,
     };
+  }
+
+  // App Store Connect keeps no record of this; remember it, so the next check
+  // says "only you can do this" instead of "ready".
+  if (stateDir) {
+    const at = new Date().toISOString();
+    recordRefusals(
+      stateDir,
+      discovery.appId,
+      firsts.map((productId) => ({ productId, versionId: version.id, at, reasons: lines })),
+    );
   }
 
   return {

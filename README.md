@@ -41,7 +41,7 @@ The demo runs against a local stand-in for App Store Connect, so nothing leaves 
 
 **`check`** reads the whole app and returns a verdict with an ordered plan. Each finding says whether the tool can fix it or only you can.
 
-**`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscriptions and in-app purchases. It is idempotent; a second run sends nothing.
+**`release`** writes the listing: build, metadata in every locale, price, age rating, accessibility labels, screenshots, subscriptions with their offers and offer codes, and in-app purchases. It is idempotent; a second run sends nothing.
 
 **`submit`** sends the version with any new plans and purchases, and refuses unless `check` says ready. `check --wait` then follows the review to its outcome.
 

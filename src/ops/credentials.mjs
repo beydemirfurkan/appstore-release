@@ -9,6 +9,7 @@
 
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
+import { isGitIgnored } from "../core/git.mjs";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { join } from "node:path";
 
@@ -285,16 +286,6 @@ function chmod600(path) {
 function supportsLegacyPkcs12() {
   try {
     return /OpenSSL 3/.test(execFileSync("openssl", ["version"], { encoding: "utf8" }));
-  } catch {
-    return false;
-  }
-}
-
-/** Ask git, rather than reimplementing .gitignore semantics. */
-function isGitIgnored(path, cwd) {
-  try {
-    execFileSync("git", ["check-ignore", "-q", path], { cwd, stdio: "ignore" });
-    return true;
   } catch {
     return false;
   }

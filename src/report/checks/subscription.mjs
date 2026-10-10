@@ -138,6 +138,38 @@ export function check({ snapshot, config }) {
             evidence: { resource: k.kind, id: remote.id, actual: remote.state },
           }),
         );
+      } else if (
+        remote.state === "READY_TO_SUBMIT" &&
+        first &&
+        (snapshot.refusals ?? []).some(
+          (/** @type {any} */ r) => r.productId === productId && r.versionId === snapshot.version?.id,
+        )
+      ) {
+        // App Store Connect refused it by API with this version, and keeps no
+        // record of that: submit remembered it, so the plan stops saying "ready".
+        const refusal = (snapshot.refusals ?? []).find(
+          (/** @type {any} */ r) => r.productId === productId && r.versionId === snapshot.version?.id,
+        );
+        out.push(
+          finding({
+            id: `${k.kind}.first.refused${suffix}`,
+            severity: Severity.BLOCKER,
+            category: Category.ASC_STATE,
+            title: `App Store Connect would not take ${productId} by API — submit it from the website`,
+            detail:
+              `On ${String(refusal.at).slice(0, 10)}: "${(refusal.reasons ?? []).join(" · ")}". ` +
+              "Nothing was submitted then. Attach it to the version and submit both in App Store Connect, " +
+              "or send the app alone with submit --submit --skip-products.",
+            fixOwner: FixOwner.UI,
+            uiOnly: true,
+            fix:
+              "Attach it to the version and submit both, in App Store Connect — or submit --submit --skip-products. " +
+              "If the refusal named something to fix in the product, fix it in the config and run release: " +
+              "a changed product is tried by API again.",
+            fixClicks: FIRST_PRODUCT_CLICKS(productId),
+            docs: "references/gotchas.md#subscriptions--iaps",
+          }),
+        );
       } else if (remote.state === "READY_TO_SUBMIT" && first) {
         out.push(
           finding({

@@ -24,6 +24,7 @@
  * @property {any} submission
  * @property {string|null} locale       the primary locale the report is about
  * @property {string[]} locales         every locale the config describes
+ * @property {import("../core/state.mjs").Refusal[]} refusals  first products App Store Connect refused by API, remembered locally
  * @property {{ custom: boolean } | null} eula   whether a custom EULA is set; null when not asked (nothing sold) or unreadable
  * @property {string[]} errors          sections we could not read, by name
  * @property {import("../preflight/index.mjs").PreflightResult} [preflight]  the app on disk, read offline (set by getReadinessReport)
@@ -31,6 +32,7 @@
 
 import { localeCodes } from "../core/locales.mjs";
 import { subscriptionConfigs } from "../core/products.mjs";
+import { readState } from "../core/state.mjs";
 import { isCurrentVersionState, pickEditableAppInfo, versionState } from "../core/status.mjs";
 
 /**
@@ -316,6 +318,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     screenshotSets,
     placements,
     eula,
+    refusals: ctx.stateDir ? readState(ctx.stateDir, appId).refusals : [],
     pricing,
     subscriptions,
     inAppPurchases,

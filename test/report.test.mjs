@@ -428,3 +428,33 @@ test("sign-in without a demo account or a word about it in the notes is a warnin
   assert.equal(demo({}, { findings: [], signals: { ...signals, signIn: false } }), undefined);
   assert.equal(demo({}, null), undefined, "no preflight, no guess");
 });
+
+test("submitGate: one rule for the CLI and the MCP tool", async () => {
+  const { submitGate } = await import("../src/ops/submit.mjs");
+  const blocker = (/** @type {string} */ id, uiOnly = false) => ({ id, severity: "blocker", uiOnly });
+  const report = (/** @type {string} */ verdict, /** @type {any[]} */ findings = []) =>
+    /** @type {any} */ ({ verdict, findings });
+
+  assert.equal(submitGate(report("ready")).ok, true);
+  assert.equal(submitGate(report("needs-human", [blocker("subscription.first.refused", true)])).ok, false);
+  const hint = submitGate(report("needs-human", [blocker("subscription.first.refused", true)]));
+  assert.match(hint.ok ? "" : hint.message, /--skip-products/);
+  assert.equal(
+    submitGate(report("needs-human", [blocker("subscription.first.refused", true)]), { skipProducts: true }).ok,
+    true,
+  );
+  assert.equal(
+    submitGate(report("blocked", [blocker("metadata.description.missing")]), { skipProducts: true }).ok,
+    false,
+    "an app blocker still blocks the app alone",
+  );
+  for (const verdict of ["approved", "live", "in-review"]) {
+    assert.equal(submitGate(report(verdict), { skipProducts: true }).ok, false, verdict);
+  }
+  const rejected = report("rejected", [
+    blocker("submission.rejected", true),
+    blocker("subscription.first.refused", true),
+  ]);
+  assert.equal(submitGate(rejected, { resolved: true }).ok, false);
+  assert.equal(submitGate(rejected, { resolved: true, skipProducts: true }).ok, true);
+});

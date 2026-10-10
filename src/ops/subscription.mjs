@@ -6,9 +6,11 @@
 // Submitting is submit's job, the app's first subscription included (see
 // submit.mjs for what happens if App Store Connect will not take it by API).
 import { Status } from "../core/status.mjs";
+import { forgetRefusals } from "../core/state.mjs";
 import { AssetUploader } from "../asc/assets.mjs";
 import { nearestPricePoint } from "../core/price.mjs";
 import { subscriptionConfigs, productTexts, missingProductFields } from "../core/products.mjs";
+import { completeOffers } from "./offers.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -37,6 +39,8 @@ export async function run(ctx) {
 
   /** @type {Array<{ productId: string, changes: string[] }>} */
   const done = [];
+  /** @type {import("../core/findings.mjs").Finding[]} */
+  const offerFindings = [];
   for (const product of products) {
     const changes = [];
     let sub = subs.find((s) => s.attributes.productId === product.productId);
@@ -85,8 +89,11 @@ export async function run(ctx) {
       changes.push("created");
     }
 
-    await completeSubscription(ctx, product, sub, group, changes);
+    offerFindings.push(...(await completeSubscription(ctx, product, sub, group, changes)));
     done.push({ productId: product.productId, changes });
+    // A product that just changed may now be acceptable: forget an earlier refusal.
+    if (changes.length && !ctx.dryRun && ctx.stateDir)
+      forgetRefusals(ctx.stateDir, discovery.appId, [product.productId]);
   }
 
   const changed = done.filter((d) => d.changes.length);
@@ -94,6 +101,7 @@ export async function run(ctx) {
     return {
       status: Status.OK,
       message: products.length === 1 ? "already complete" : `${products.length} plans complete`,
+      findings: offerFindings,
     };
   }
   return {
@@ -101,12 +109,14 @@ export async function run(ctx) {
     message:
       products.length === 1 ? summarize(changed[0].changes) : `${changed.length} of ${products.length} plans updated`,
     details: { products: done },
+    findings: offerFindings,
   };
 }
 
 /**
- * Localizations, price, review screenshot and introductory offer for one plan.
- * Each part writes only what differs.
+ * Localizations, price, review screenshot, introductory offer, promotional
+ * offers and offer codes for one plan. Each part writes only what differs; what
+ * Apple will not let change comes back as findings.
  *
  * @param {import("../core/context.mjs").Context} ctx
  * @param {import("../core/products.mjs").SubscriptionConfig} product
@@ -114,7 +124,8 @@ export async function run(ctx) {
  * @param {any} group
  * @param {string[]} changes
  */
-async function completeSubscription({ client, uploader, config, resolvePath }, product, sub, group, changes) {
+async function completeSubscription(ctx, product, sub, group, changes) {
+  const { client, uploader, config, resolvePath } = ctx;
   // A plan created a moment ago under --dry-run has a placeholder id; there is
   // nothing to read about it yet, only things it would get.
   const planned = String(sub.id).startsWith("dry:");
@@ -229,6 +240,8 @@ async function completeSubscription({ client, uploader, config, resolvePath }, p
     const offer = await introOffer(client, product, sub, planned);
     if (offer) changes.push(offer);
   }
+
+  return completeOffers(ctx, product, sub, planned, changes);
 }
 
 /**

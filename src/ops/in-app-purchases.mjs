@@ -10,6 +10,7 @@
 // Submitting is submit's job, the app's first in-app purchase included (see
 // submit.mjs for what happens if App Store Connect will not take it by API).
 import { Status } from "../core/status.mjs";
+import { forgetRefusals } from "../core/state.mjs";
 import { AssetUploader } from "../asc/assets.mjs";
 import { nearestPricePoint } from "../core/price.mjs";
 import { purchaseConfigs, productTexts, missingProductFields } from "../core/products.mjs";
@@ -70,6 +71,9 @@ export async function run(ctx) {
     }
     await completePurchase(ctx, product, iap, changes);
     done.push({ productId: product.productId, changes });
+    // A product that just changed may now be acceptable: forget an earlier refusal.
+    if (changes.length && !ctx.dryRun && ctx.stateDir)
+      forgetRefusals(ctx.stateDir, discovery.appId, [product.productId]);
   }
 
   const changed = done.filter((d) => d.changes.length);

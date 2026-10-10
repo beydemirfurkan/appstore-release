@@ -99,6 +99,8 @@ appstore-release submit --submit     # refuses unless the verdict is ready
 | Several subscription plans              | `subscriptions: [{ productId, name, period, group, … }]`           | created when missing; `subscription` (one) still works              |
 | A free trial or intro price             | `introOffer: { type, duration, periods?, priceAmount? }` on a plan | `FREE_TRIAL`, `PAY_AS_YOU_GO`, `PAY_UP_FRONT`                       |
 | A lifetime unlock                       | `inAppPurchases: [{ productId, name, … }]`                         | `NON_CONSUMABLE` by default                                         |
+| Accessibility labels                    | `accessibility: { iphone: { voiceover: true, … }, publish }`       | a feature left out is not claimed                                   |
+| Promotional offers, offer codes         | `promotionalOffers: [...]`, `offerCodes: [...]` on a plan          | created once; one-time codes only with `offer-codes`                |
 | TestFlight                              | `testflight: { whatToTest, groups, testers, … }`                   | run with `appstore-release testflight`                              |
 | Release timing                          | `release: { type, earliestDate?, phased? }`                        | `MANUAL`, `AFTER_APPROVAL`, `SCHEDULED`                             |
 | A preflight finding that does not apply | `preflight: { ignore: [{ id, reason }] }`                          | stays in the report as info, with its reason                        |
@@ -122,11 +124,13 @@ Every key is in the [JSON Schema](../schemas/config.schema.json), and the [templ
 | `content-rights`           | third-party content declaration                                                                                                                  |
 | `age-rating`               | the full age-rating declaration                                                                                                                  |
 | `category`                 | primary and secondary category                                                                                                                   |
+| `accessibility`            | Accessibility Nutrition Labels per device, drafted and (with `publish`) published                                                                |
 | `review-info`              | App Review contact and demo account; `--draft-notes` drafts the notes for the reviewer                                                           |
 | `release-options`          | manual, after approval, scheduled, phased release                                                                                                |
 | `screenshots`              | diff, then upload; `--list-groups`, `--no-prune`                                                                                                 |
 | `subscription`             | plans (created when missing), localizations, price, intro offer, review screenshot                                                               |
 | `in-app-purchases`         | one-time purchases (created when missing): localizations, availability, price, review screenshot                                                 |
+| `offer-codes`              | generate one-time offer code batches and write them to CSV; never part of `release`                                                              |
 | `submit --submit`          | submit the version with any plans and purchases that need review; `--resolved` after a rejection, `--skip-products` for the app alone            |
 | `reviews`                  | customer reviews, newest first; `--rating 1,2`, `--unanswered`, `--territory`, `--summary`                                                       |
 | `reply <reviewId>`         | publish a reply (`--text`) or remove it (`--delete`); the same text twice is a no-op                                                             |

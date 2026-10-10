@@ -1,11 +1,12 @@
 ---
-name: asc-age-rating
+name: app-store-age-rating
 description: Answer Apple's App Store age-rating questionnaire (the 2025–2026 version with 13+, 16+ and 18+ tiers, age assurance, and the social media questions required since September 2026) and write it through the App Store Connect API in one complete, valid declaration. Use when the user asks "what age rating will my app get", "fill out the age rating", "content descriptions", "social media questions", "age assurance", "rating is 409ing", or when an App Store readiness check reports rating.* findings.
 license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager).
 metadata:
   author: Furkan Beydemir
   version: "3.2.0"
+  guidelines: "2026-06-08"
 ---
 
 # Age rating
@@ -79,3 +80,5 @@ Tell the user the resulting tier. App Store Connect shows it per territory (App 
 | 409 on `ageRatingOverride` and `ageRatingOverrideV2` | Something else sent the old key. This tool only sends V2.                              |
 | 404 on `appStoreVersions/{id}/ageRatingDeclaration`  | That path was removed in API 4.3; the declaration lives on `appInfos`.                 |
 | Rating higher than expected                          | Check `unrestrictedWebAccess`, `gambling` and `override` first.                        |
+
+_Checked against the App Store Review Guidelines of June 8, 2026._

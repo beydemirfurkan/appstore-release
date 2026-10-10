@@ -19,14 +19,14 @@ import { Status, Exit } from "./core/status.mjs";
 import { Severity } from "./core/findings.mjs";
 import { runOperation, runPipeline } from "./index.mjs";
 import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry.mjs";
-import { parseArgs, splitFlags, kebab, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
+import { parseArgs, splitFlags, kebab, GLOBAL_FLAGS, LOCAL_COMMANDS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
 import { createStyle } from "./cli/style.mjs";
 import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
 import { buildTools } from "./mcp/tools.mjs";
 import { RESOURCES } from "./mcp/resources.mjs";
 import { doctorCommand } from "./cli/doctor.mjs";
-import { preflightCommand, PREFLIGHT_FLAGS } from "./cli/preflight.mjs";
+import { preflightCommand } from "./cli/preflight.mjs";
 
 const version = createRequire(import.meta.url)("../package.json").version;
 
@@ -57,7 +57,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   try {
     const command = parseArgs(argv, {}, { lenient: true }).command;
     const op = command ? getOperation(command) : null;
-    parsed = parseArgs(argv, command === "preflight" ? PREFLIGHT_FLAGS : (op?.meta.args ?? {}));
+    parsed = parseArgs(argv, op?.meta.args ?? (command ? LOCAL_COMMANDS[command] : undefined) ?? {});
     if (op && parsed.positionals.length) {
       // An operation may name one positional (`new-version 1.2.0`); anything else
       // is a mistake worth stopping for rather than silently ignoring.

@@ -1,0 +1,14 @@
+[
+  {
+    "prompt": "EAS build fails: Provisioning Profile has expired.",
+    "expects": ["asc credentials --dry-run", "asc credentials"]
+  },
+  {
+    "prompt": "Set up iOS signing for EAS without creating a new distribution certificate.",
+    "expects": ["asc credentials --dry-run", "asc credentials"]
+  },
+  {
+    "prompt": "We hit the certificate limit. Revoke the old distribution certificate.",
+    "expects": ["asc credentials --revoke"]
+  }
+]

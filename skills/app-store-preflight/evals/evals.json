@@ -1,0 +1,18 @@
+[
+  {
+    "prompt": "Will Apple reject my app? It's an Expo app in this folder.",
+    "expects": ["asc preflight"]
+  },
+  {
+    "prompt": "Check my iOS project for missing permission strings and privacy manifest problems before I upload.",
+    "expects": ["asc preflight --json"]
+  },
+  {
+    "prompt": "Preflight says app.account-deletion but we delete accounts on our website. Make it stop flagging that.",
+    "expects": ["preflight.ignore", "reason"]
+  },
+  {
+    "prompt": "My app has a dynamic app.config.ts — check that too.",
+    "expects": ["asc preflight --expo-config"]
+  }
+]

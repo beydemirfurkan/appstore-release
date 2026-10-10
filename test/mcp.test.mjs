@@ -355,3 +355,9 @@ test("the transport can be driven over any stream pair", async () => {
   await new Promise((r) => setTimeout(r, 50));
   assert.deepEqual(JSON.parse(written[0]), { jsonrpc: "2.0", id: 1, result: { pong: true } });
 });
+
+test("a resource URI saved under a skill's 3.x name still reads", async () => {
+  const res = await connect({}).read("appstore-release://skills/asc-rejection");
+  assert.equal(res.contents[0].uri, "appstore-release://skills/app-store-rejection");
+  assert.match(res.contents[0].text, /^---\nname: app-store-rejection/);
+});

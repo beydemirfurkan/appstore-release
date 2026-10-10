@@ -4,28 +4,28 @@
   "groupings": [
     {
       "title": "Start here",
-      "description": "Say “publish my app for review”. It checks what blocks App Review, fixes it over the App Store Connect API, and submits when nothing is left. iOS 27 ready, no dependencies.",
-      "skills": ["appstore-release"]
+      "description": "Say “publish my app for review”. It checks the app itself for what App Review rejects, fixes everything App Store Connect's API allows, and submits when nothing is left. iOS 27 ready, no dependencies.",
+      "skills": ["appstore-release", "app-store-preflight"]
     },
     {
       "title": "Get the listing right",
       "description": "Screenshots at Apple's exact sizes — iPhone 6.9\", iPad, iPhone Duo — and the 2026 age-rating questionnaire, written for you.",
-      "skills": ["asc-screenshots", "asc-age-rating"]
+      "skills": ["app-store-screenshot-upload", "app-store-age-rating"]
     },
     {
       "title": "Sell",
       "description": "Subscription plans, free trials and lifetime unlocks: created, priced, localized and submitted with your version.",
-      "skills": ["asc-subscriptions"]
+      "skills": ["app-store-subscriptions"]
     },
     {
       "title": "Test and ship",
       "description": "Builds to TestFlight testers with notes and beta review, and EAS signing that never burns a certificate slot by accident.",
-      "skills": ["asc-testflight", "asc-credentials"]
+      "skills": ["app-store-testflight", "ios-code-signing"]
     },
     {
       "title": "After review",
       "description": "Turn a rejection into a resubmission, and answer customer reviews — each reply published only after you approve it.",
-      "skills": ["asc-rejection", "asc-reviews"]
+      "skills": ["app-store-rejection", "app-store-customer-reviews"]
     }
   ]
 }

@@ -1,0 +1,14 @@
+[
+  {
+    "prompt": "Upload my new screenshots, including iPhone Duo.",
+    "expects": ["asc screenshots --dry-run", "asc screenshots"]
+  },
+  {
+    "prompt": "App Store Connect says my screenshot is the wrong size. Which sizes do I need?",
+    "expects": ["asc screenshots --list-groups"]
+  },
+  {
+    "prompt": "Replace the old screenshots and delete the ones I removed locally.",
+    "expects": ["asc screenshots --prune"]
+  }
+]

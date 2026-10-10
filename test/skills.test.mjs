@@ -10,7 +10,14 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-import { checkSkills, parseFrontmatter, relativeLinks } from "../scripts/check-skills.mjs";
+import {
+  checkSkills,
+  cliSurface,
+  commandProblems,
+  parseFrontmatter,
+  relativeLinks,
+  unknownCommands,
+} from "../scripts/check-skills.mjs";
 import { isCheckout, resolveLocal, VERSION } from "../scripts/skill-launcher.mjs";
 import { RESOURCES } from "../src/mcp/resources.mjs";
 
@@ -30,15 +37,58 @@ test("every shipped skill passes the skill gate", () => {
   const { skills, errors } = checkSkills(ROOT);
   assert.deepEqual(errors, []);
   assert.deepEqual(skills.sort(), [
+    "app-store-age-rating",
+    "app-store-customer-reviews",
+    "app-store-preflight",
+    "app-store-rejection",
+    "app-store-screenshot-upload",
+    "app-store-subscriptions",
+    "app-store-testflight",
     "appstore-release",
-    "asc-age-rating",
-    "asc-credentials",
-    "asc-rejection",
-    "asc-reviews",
-    "asc-screenshots",
-    "asc-subscriptions",
-    "asc-testflight",
+    "ios-code-signing",
   ]);
+});
+
+test("the gate holds every `asc` command and flag in the skills to the CLI", () => {
+  const surface = cliSurface();
+  assert.deepEqual(commandProblems("asc check --wait 30", surface), []);
+  assert.deepEqual(commandProblems("asc screenshots --no-prune", surface), [], "--no-<boolean> is a negation");
+  assert.deepEqual(commandProblems('asc reply rev-1 --text "fixed --soon"', surface), [], "quoted values are values");
+  assert.deepEqual(commandProblems("asc preflight --expo-config --project-root ./app", surface), []);
+  assert.deepEqual(commandProblems("asc release → reply → asc submit --submit --resolved", surface), []);
+  assert.deepEqual(commandProblems("asc publish", surface), ["`asc publish` is not a command"]);
+  assert.deepEqual(commandProblems("asc submit --skip-product", surface), [
+    "`asc submit --skip-product`: no such flag",
+  ]);
+  assert.deepEqual(commandProblems("node scripts/asc.mjs check", surface), [], "the launcher path is not a command");
+  assert.deepEqual(
+    unknownCommands(
+      "Run `asc chek`.\n\n```bash\nasc release --dryrun\n```\n\nIn prose, asc whatever is fine.",
+      surface,
+    ),
+    ["`asc release --dryrun`: no such flag", "`asc chek` is not a command"],
+  );
+});
+
+test("skills renamed in 4.0.0 still resolve under their old MCP resource URIs", async () => {
+  const { currentUri, RENAMED_SKILLS } = await import("../src/mcp/resources.mjs");
+  for (const [old, now] of Object.entries(RENAMED_SKILLS)) {
+    assert.equal(currentUri(`appstore-release://skills/${old}`), `appstore-release://skills/${now}`);
+    assert.ok(
+      RESOURCES.some((r) => r.uri === `appstore-release://skills/${now}`),
+      now,
+    );
+    assert.equal(
+      RESOURCES.some((r) => r.uri === `appstore-release://skills/${old}`),
+      false,
+      "not listed twice",
+    );
+  }
+  assert.equal(
+    currentUri("appstore-release://skills/asc-rejection/references/guidelines.md"),
+    "appstore-release://skills/app-store-rejection/references/guidelines.md",
+  );
+  assert.equal(currentUri("appstore-release://gotchas"), "appstore-release://gotchas");
 });
 
 test("every skill is stamped with the package version and carries the launcher at that version", () => {
@@ -154,7 +204,7 @@ test("CLAUDE_PLUGIN_ROOT is used when it is this package, ignored when it is ano
 test("inside a checkout, the launcher walks up to it", () => {
   const found = resolveLocal({
     env: { XDG_CACHE_HOME: scratch() },
-    from: join(ROOT, "skills/asc-screenshots/scripts"),
+    from: join(ROOT, "skills/app-store-screenshot-upload/scripts"),
   });
   assert.deepEqual(found, { root: ROOT, source: "enclosing checkout" });
 });
@@ -171,8 +221,8 @@ test("outside a checkout, a pinned cache entry is used and nothing is cloned", (
 
 test("an installed copy of a skill runs the CLI through its launcher", () => {
   // What `npx skills add` produces: the skill directory alone, somewhere else.
-  const installed = join(scratch(), "asc-screenshots");
-  cpSync(join(ROOT, "skills/asc-screenshots"), installed, { recursive: true });
+  const installed = join(scratch(), "app-store-screenshot-upload");
+  cpSync(join(ROOT, "skills/app-store-screenshot-upload"), installed, { recursive: true });
   try {
     /** @type {Record<string, string | undefined>} */
     const env = { ...process.env, APPSTORE_RELEASE_HOME: ROOT };
@@ -201,7 +251,7 @@ test("every skill and every reference is an MCP resource, and the v2 URIs still 
   const uris = new Set(RESOURCES.map((r) => r.uri));
   assert.equal(uris.size, RESOURCES.length, "URIs are unique");
   for (const name of skillNames()) assert.ok(uris.has(`appstore-release://skills/${name}`), name);
-  assert.ok(uris.has("appstore-release://skills/asc-screenshots/references/sizes.md"));
+  assert.ok(uris.has("appstore-release://skills/app-store-screenshot-upload/references/sizes.md"));
   for (const legacy of [
     "gotchas",
     "runbook",

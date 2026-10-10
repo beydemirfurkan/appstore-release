@@ -1,0 +1,5 @@
+[
+  { "prompt": "Answer my one-star reviews.", "expects": ["asc reviews --rating 1 --unanswered", "asc reply"] },
+  { "prompt": "What are people saying about the app lately?", "expects": ["asc reviews --summary"] },
+  { "prompt": "Delete the reply I posted to review rev-123.", "expects": ["asc reply rev-123 --delete"] }
+]

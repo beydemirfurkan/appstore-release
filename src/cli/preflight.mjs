@@ -13,14 +13,6 @@ import { findConfigPath, loadConfig } from "../core/config.mjs";
 import { runPreflight } from "../preflight/index.mjs";
 import { createStyle } from "./style.mjs";
 
-/** Flags of this command, beside the global ones (`--project-root`, `--config`, `--json`, `--exit-zero`). */
-export const PREFLIGHT_FLAGS = Object.freeze({
-  "expo-config": {
-    type: /** @type {const} */ ("boolean"),
-    description: "evaluate app.config.js/ts with `npx expo config` (runs the project's config code)",
-  },
-});
-
 /**
  * @param {{ stdout: any, stderr: any, cwd: string, env: Record<string, string|undefined>, flags: Record<string, any> }} io
  * @returns {number}

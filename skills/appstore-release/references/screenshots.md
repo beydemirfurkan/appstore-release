@@ -1,6 +1,6 @@
 # Screenshots — essentials
 
-The full guide (every size, iPhone Duo, the App Asset Library, how to produce the images) is in the **asc-screenshots** skill. The short version:
+The full guide (every size, iPhone Duo, the App Asset Library, how to produce the images) is in the **app-store-screenshot-upload** skill. The short version:
 
 - **Exact pixel sizes, no alpha channel, PNG or JPEG.** Filename order is display order.
 - **iPhone:** one 6.9" set covers every iPhone — 1320×2868 (also 1290×2796 or 1260×2736). From April 2027, apps built with the iOS 27.1 SDK also need an **iPhone Duo** set: outer display 1398×2034, inner display 2007×2853.

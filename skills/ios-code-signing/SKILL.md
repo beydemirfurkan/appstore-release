@@ -1,11 +1,12 @@
 ---
-name: asc-credentials
+name: ios-code-signing
 description: Fix iOS code-signing for EAS/Expo builds through the App Store Connect API — reuse or issue an Apple Distribution certificate, create an App Store provisioning profile, and write credentials.json for local EAS credentials, without spending Apple's three-certificate limit by accident. Use when eas build fails with "Provisioning Profile has expired", "No certificate exists with serial", "Distribution certificate … not found", "too many certificates", or when the user says "fix my iOS credentials", "regenerate the provisioning profile", or "EAS signing is broken".
 license: MIT
 compatibility: Node.js 20.11+, openssl on PATH, and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager or Admin). The config needs bundleId.
 metadata:
   author: Furkan Beydemir
   version: "3.2.0"
+  guidelines: "2026-06-08"
 ---
 
 # iOS credentials for EAS
@@ -81,3 +82,5 @@ Ask first, and say which builds or teammates might be using it. A revoked certif
 - The bundle id must be registered (Certificates, Identifiers & Profiles → Identifiers) and match `config.bundleId` exactly.
 - Builds made with the iOS 27 SDK need a launch screen and the scene lifecycle; from April 2027 Xcode 27 is mandatory for uploads. A signing fix will not help a build that fails review for those.
 - `ITSAppUsesNonExemptEncryption = false` in Info.plist answers export compliance once instead of on every build.
+
+_Checked against the App Store Review Guidelines of June 8, 2026._

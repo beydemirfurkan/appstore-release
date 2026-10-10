@@ -23,19 +23,19 @@
 <text x="134" y="135" class="m c ac" text-anchor="middle">appstore-release</text>
 <text x="236" y="135" class="s c mu" text-anchor="start">router: check → fix → submit</text>
 <rect x="44" y="158" width="134" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="111.0" y="173" class="m c" text-anchor="middle">asc-screenshots</text>
+<text x="111.0" y="173" class="m c" text-anchor="middle">app-store-screenshot-upload</text>
 <rect x="188.0" y="158" width="126" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="251.2" y="173" class="m c" text-anchor="middle">asc-age-rating</text>
+<text x="251.2" y="173" class="m c" text-anchor="middle">app-store-age-rating</text>
 <rect x="324.4" y="158" width="149" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="399.0" y="173" class="m c" text-anchor="middle">asc-subscriptions</text>
+<text x="399.0" y="173" class="m c" text-anchor="middle">app-store-subscriptions</text>
 <rect x="44" y="181" width="119" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="103.4" y="196" class="m c" text-anchor="middle">asc-rejection</text>
+<text x="103.4" y="196" class="m c" text-anchor="middle">app-store-rejection</text>
 <rect x="172.8" y="181" width="134" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="239.8" y="196" class="m c" text-anchor="middle">asc-credentials</text>
+<text x="239.8" y="196" class="m c" text-anchor="middle">ios-code-signing</text>
 <rect x="316.8" y="181" width="126" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="380.0" y="196" class="m c" text-anchor="middle">asc-testflight</text>
+<text x="380.0" y="196" class="m c" text-anchor="middle">app-store-testflight</text>
 <rect x="44" y="204" width="104" height="21" rx="6" fill="#0d1117" stroke="#30363d" stroke-width="1.25"/>
-<text x="95.8" y="219" class="m c" text-anchor="middle">asc-reviews</text>
+<text x="95.8" y="219" class="m c" text-anchor="middle">app-store-customer-reviews</text>
 <rect x="492" y="52" width="140" height="176" rx="12" fill="#161b22" stroke="#30363d" stroke-width="1.25"/>
 <text x="508" y="82" class="s h" text-anchor="start">MCP server</text>
 <text x="508" y="110" class="m c mu" text-anchor="start">13 tools</text>

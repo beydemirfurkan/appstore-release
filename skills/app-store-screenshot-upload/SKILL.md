@@ -1,11 +1,12 @@
 ---
-name: asc-screenshots
+name: app-store-screenshot-upload
 description: Produce and upload App Store screenshots at the exact pixel sizes Apple requires — iPhone 6.9", iPhone Duo (foldable, required from April 2027), 13" iPad — through the App Store Connect App Asset Library, with diff-then-upload idempotency. Use when the user says "make App Store screenshots", "upload screenshots", "screenshot sizes", "iPhone Duo screenshots", "iPad screenshots are missing", "wrong screenshot dimensions", or when an App Store readiness check reports screenshots.* findings.
 license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). Producing images optionally uses the iOS Simulator (macOS) or headless Chrome/Chromium.
 metadata:
   author: Furkan Beydemir
   version: "3.2.0"
+  guidelines: "2026-06-08"
 ---
 
 # App Store screenshots
@@ -36,6 +37,15 @@ Ask the user, then pick from [references/sizes.md](references/sizes.md):
 `asc screenshots --list-groups` prints the placement groups Apple offers right now, with their accepted sizes — read it rather than trusting a hard-coded table when a new device ships.
 
 ## 2. Produce the images
+
+**What to put on them.** A screenshot is an ad, not documentation. In search results only the first three show, so they carry the decision:
+
+- One idea per screenshot, in a caption of three to five words a line — the benefit, not the feature name.
+- Order: the outcome the user wants → what makes the app different → the main features → proof (a rating, a press quote, a number) → a closing call to action.
+- Real screens under the caption (guideline 2.3.3). Text in the image is read by Apple's search too, so use the words people search for.
+- The same story in every locale: translate the captions, do not just reuse the English images.
+
+If another skill or tool produces the images, point `screenshots.from` at its output folder (step 3) — this skill's part is getting them to Apple at the right sizes.
 
 Rules Apple enforces: exact pixel size, **no alpha channel**, PNG or JPEG, sRGB or P3, and the screenshots must show the real app (guideline 2.3.3 — marketing captions are fine, invented UI is not).
 
@@ -115,3 +125,5 @@ Placements can only be created while the version is editable (`PREPARE_FOR_SUBMI
 | `screenshots.upload.incomplete`                     | A previous run was interrupted. Re-run `asc screenshots`; it resumes.                                  |
 
 More: [references/sizes.md](references/sizes.md), [references/producing.md](references/producing.md).
+
+_Checked against the App Store Review Guidelines of June 8, 2026._

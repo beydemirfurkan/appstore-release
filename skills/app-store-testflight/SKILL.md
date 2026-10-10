@@ -1,11 +1,12 @@
 ---
-name: asc-testflight
+name: app-store-testflight
 description: Put an iOS build in front of TestFlight testers through the App Store Connect API — export compliance, What to Test notes, internal and external beta groups, inviting testers by email, the beta app description and beta review contact, and submitting for beta app review. Use when the user says "send it to TestFlight", "add testers", "invite beta testers", "create a beta group", "what to test", "external testing", "beta review", "missing export compliance", or wants a build tested before App Store review.
 license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager or Admin). The build must already be uploaded and processed (eas submit, Xcode or Transporter).
 metadata:
   author: Furkan Beydemir
   version: "3.2.0"
+  guidelines: "2026-06-08"
 ---
 
 # TestFlight
@@ -60,3 +61,5 @@ In order, it sets export compliance, writes What to Test, fills the external-tes
 | `no VALID build to test`             | Still processing, or not uploaded                        | Wait for processing; upload with `eas submit`                 |
 | Beta review rejected                 | Missing description, broken login, crash                 | Read the email from Apple, fix, upload a new build, run again |
 | Internal tester never gets an invite | Internal testers must be App Store Connect users         | Add them in Users and Access first, or use an external group  |
+
+_Checked against the App Store Review Guidelines of June 8, 2026._

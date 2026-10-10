@@ -6,6 +6,7 @@
 
 import { RpcError, ErrorCode } from "./jsonrpc.mjs";
 import { validateAgainstSchema } from "../core/schema.mjs";
+import { currentUri } from "./resources.mjs";
 
 /** Versions this server can speak, newest first. */
 export const SUPPORTED_PROTOCOL_VERSIONS = Object.freeze(["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]);
@@ -95,7 +96,7 @@ export function createHandlers({ name, version, instructions, tools, resources, 
     "resources/templates/list": () => ({ resourceTemplates: [] }),
 
     "resources/read"(params) {
-      const resource = byUri.get(params?.uri);
+      const resource = byUri.get(params?.uri) ?? byUri.get(currentUri(params?.uri));
       if (!resource) throw new RpcError(ErrorCode.InvalidParams, `Resource ${params?.uri} not found`);
       return { contents: [{ uri: resource.uri, mimeType: resource.mimeType, text: resource.load() }] };
     },

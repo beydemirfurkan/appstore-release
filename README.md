@@ -51,13 +51,13 @@ Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they
 
 `appstore-release` reads the plan and hands each finding to the skill that knows that area:
 
-- **asc-screenshots**: exact sizes, iPhone Duo, iPad
-- **asc-age-rating**: the 2026 questionnaire
-- **asc-subscriptions**: plans, free trials, lifetime purchases
-- **asc-rejection**: read the reviewer's message, fix, resubmit
-- **asc-credentials**: EAS certificates and provisioning profiles
-- **asc-testflight**: groups, testers, What to Test, beta review
-- **asc-reviews**: read customer reviews, draft replies, publish each after your OK
+- **app-store-screenshot-upload**: exact sizes, iPhone Duo, iPad
+- **app-store-age-rating**: the 2026 questionnaire
+- **app-store-subscriptions**: plans, free trials, lifetime purchases
+- **app-store-rejection**: read the reviewer's message, fix, resubmit
+- **ios-code-signing**: EAS certificates and provisioning profiles
+- **app-store-testflight**: groups, testers, What to Test, beta review
+- **app-store-customer-reviews**: read customer reviews, draft replies, publish each after your OK
 
 ## Also runs as
 

@@ -1,11 +1,12 @@
 ---
-name: asc-subscriptions
+name: app-store-subscriptions
 description: Get an iOS auto-renewable subscription ready for App Review and submitted with the app version through the App Store Connect API — group and subscription localizations, price at Apple's nearest price point, the paywall review screenshot, and submission — later subscriptions by API (versioned, ASC API 4.4.1), the app's first one from the App Store Connect website as Apple requires. Use when the user says "set up my subscription", "subscription is missing metadata", "submit the in-app purchase", "subscription stuck in READY_TO_SUBMIT", "paywall screenshot", "change subscription price", or when an App Store readiness check reports subscription.* findings.
 license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). The subscription product itself must already exist in App Store Connect.
 metadata:
   author: Furkan Beydemir
   version: "3.2.0"
+  guidelines: "2026-06-08"
 ---
 
 # Subscriptions
@@ -45,7 +46,7 @@ node <skill-dir>/scripts/asc.mjs <command> [flags]
 ```
 
 - `priceAmount` is matched to Apple's nearest price point in `priceTerritory`; the result is reported. Only that territory's price is set — Apple equalizes the others. Prices in other territories set by hand are left alone.
-- `reviewScreenshot` is a capture of the paywall (any iPhone screenshot size, no alpha). See the **asc-screenshots** skill for producing it.
+- `reviewScreenshot` is a capture of the paywall (any iPhone screenshot size, no alpha). See the **app-store-screenshot-upload** skill for producing it.
 - Localizations are written for the config's `locale` from `localeName` / `localeDescription` / `groupDisplayName`, and for every locale in `subscription.localizations` (`{ "tr": { "name": "…", "description": "…", "groupName": "…" } }`), which inherits what it leaves out. A changed name is updated, not only created.
 
 ### Several plans, a free trial, a lifetime unlock
@@ -88,6 +89,15 @@ asc submit --submit      # ask the user first — this is irreversible
 
 Afterwards `asc status` should show the version and the subscription as `WAITING_FOR_REVIEW`.
 
+## Before the first submission: the paywall
+
+App Review opens the paywall. Guideline 3.1.2 asks for all of this, in the app:
+
+- The price and billing period, most prominent; a free trial says how long it lasts and what is charged after.
+- That it renews automatically until cancelled, and how to cancel.
+- Links to the Terms of Use (EULA) and the privacy policy — on the paywall, **and** in the App Store metadata. `check` warns `subscription.terms-link.missing` when there is no custom EULA in App Store Connect and the description has no terms link; Apple's standard EULA (`https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`) is fine.
+- Restore Purchases, reachable without buying — `asc preflight` warns `app.subscription.restore` when nothing in the code restores.
+
 ## Common rejections
 
 | Guideline | What Apple says                                  | Fix                                                                                                                   |
@@ -103,3 +113,5 @@ Afterwards `asc status` should show the version and the subscription as `WAITING
 - Subscription changes after approval (price, localizations) go through review again with the next submission.
 - The old API had no `subscription` relationship on `reviewSubmissionItems` (409 _`'subscription' is not a relationship`_) — that is why older guides send people to the UI. The versioned model replaced it.
 - Introductory offers, promotional offers and offer codes are configured in App Store Connect; this tool does not manage them yet.
+
+_Checked against the App Store Review Guidelines of June 8, 2026._

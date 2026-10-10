@@ -10,22 +10,22 @@ Instructions for coding agents (Codex, Cursor, Copilot, Gemini, Claude Code and 
 
 Load the skill that matches the task. Each is self-contained under `skills/<name>/` and runs the CLI through its own `scripts/asc.mjs` launcher.
 
-| Skill                                                    | Use it for                                                                     |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [`appstore-release`](skills/appstore-release/SKILL.md)   | The whole submission: readiness check → fix → listing → submit. Start here.    |
-| [`asc-screenshots`](skills/asc-screenshots/SKILL.md)     | Sizes (6.9", iPhone Duo, 13" iPad), producing images, App Asset Library upload |
-| [`asc-age-rating`](skills/asc-age-rating/SKILL.md)       | The age-rating questionnaire, 13+/16+/18+ tiers, social media questions        |
-| [`asc-subscriptions`](skills/asc-subscriptions/SKILL.md) | Plans, free trials, lifetime purchases: metadata, price, review submission     |
-| [`asc-testflight`](skills/asc-testflight/SKILL.md)       | TestFlight: groups, testers, What to Test, beta review                         |
-| [`asc-reviews`](skills/asc-reviews/SKILL.md)             | Customer reviews: read, draft replies, publish each one after approval         |
-| [`asc-rejection`](skills/asc-rejection/SKILL.md)         | Rejection → guideline → fix → reply → resubmit                                 |
-| [`asc-credentials`](skills/asc-credentials/SKILL.md)     | EAS signing: distribution certificate and App Store profile                    |
+| Skill                                                                        | Use it for                                                                     |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`appstore-release`](skills/appstore-release/SKILL.md)                       | The whole submission: readiness check → fix → listing → submit. Start here.    |
+| [`app-store-screenshot-upload`](skills/app-store-screenshot-upload/SKILL.md) | Sizes (6.9", iPhone Duo, 13" iPad), producing images, App Asset Library upload |
+| [`app-store-age-rating`](skills/app-store-age-rating/SKILL.md)               | The age-rating questionnaire, 13+/16+/18+ tiers, social media questions        |
+| [`app-store-subscriptions`](skills/app-store-subscriptions/SKILL.md)         | Plans, free trials, lifetime purchases: metadata, price, review submission     |
+| [`app-store-testflight`](skills/app-store-testflight/SKILL.md)               | TestFlight: groups, testers, What to Test, beta review                         |
+| [`app-store-customer-reviews`](skills/app-store-customer-reviews/SKILL.md)   | Customer reviews: read, draft replies, publish each one after approval         |
+| [`app-store-rejection`](skills/app-store-rejection/SKILL.md)                 | Rejection → guideline → fix → reply → resubmit                                 |
+| [`ios-code-signing`](skills/ios-code-signing/SKILL.md)                       | EAS signing: distribution certificate and App Store profile                    |
 
 Install them into your agent:
 
 ```bash
 npx skills add beydemirfurkan/appstore-release            # all eight
-npx skills add beydemirfurkan/appstore-release -s asc-screenshots -a codex
+npx skills add beydemirfurkan/appstore-release -s app-store-screenshot-upload -a codex
 ```
 
 Or run the CLI straight from a checkout — there is no install step:

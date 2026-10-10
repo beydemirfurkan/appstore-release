@@ -1,0 +1,5 @@
+[
+  { "prompt": "Send the newest build to my TestFlight testers.", "expects": ["asc testflight"] },
+  { "prompt": "Put build 42 on TestFlight with notes on what to test.", "expects": ["asc testflight --build 42"] },
+  { "prompt": "Add tester@example.com to the Beta group.", "expects": ["asc testflight"] }
+]

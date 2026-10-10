@@ -327,3 +327,31 @@ test("refusals name their resources, so a test is only blamed when Apple names i
   assert.deepEqual(e.resources, ["/v1/appStoreVersions/1"]);
   assert.equal(/appStoreVersionExperiment/.test(e.resources.join()), false);
 });
+
+test("a key whose role cannot read reports is told which role can", async () => {
+  const root = mkdtempSync(join(tmpdir(), "asr-roles-"));
+  writeWellnessProject(root);
+  const fake = createFakeAsc({ reportsForbidden: true });
+  const env = {
+    ASC_KEY_ID: "ABCDE12345",
+    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+    ASC_P8: testPrivateKey(),
+    ASC_APP_ID: "1234567890",
+  };
+  const run = async (/** @type {string[]} */ ...argv) => {
+    const out = [];
+    await main([...argv, "--json"], {
+      stdout: { write: (s) => out.push(s) },
+      stderr: { write: () => {} },
+      env,
+      cwd: root,
+      fetchImpl: fake.fetchImpl,
+    });
+    return JSON.parse(out.join(""));
+  };
+  for (const argv of [["analytics"], ["sales", "--vendor", "1"]]) {
+    const json = await run(...argv);
+    assert.equal(json.results[0].status, "error");
+    assert.match(json.results[0].message, /Sales and Reports .* App Manager key is refused/, argv[0]);
+  }
+});

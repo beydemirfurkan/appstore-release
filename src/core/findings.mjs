@@ -20,6 +20,7 @@ export const Category = Object.freeze({
   ASC_STATE: "asc-state", // what App Store Connect currently holds
   BINARY: "binary", // the uploaded build itself
   ACCOUNT: "account", // API key, roles, agreements
+  APP: "app", // the app's own source and config: Info.plist, privacy manifest, code
 });
 
 /** Who is able to resolve it. */
@@ -43,6 +44,8 @@ export const FixOwner = Object.freeze({
  * @property {boolean} uiOnly           Apple exposes no API for this, ever
  * @property {string} [docs]            anchor into references/gotchas.md
  * @property {object} [evidence]        { expected, actual, resource, id }
+ * @property {string} [guideline]       App Store Review Guideline it answers to, e.g. "5.1.1(v)"
+ * @property {{ file: string, line?: number }} [location]  where in the project it was found
  * @property {boolean} blocksSubmission
  */
 

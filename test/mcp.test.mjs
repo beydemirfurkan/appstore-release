@@ -165,6 +165,20 @@ test("asc_validate_config needs neither credentials nor a network", async () => 
   assert.match(res.content[0].text, /emoji/i);
 });
 
+test("asc_validate_config with preflight reads the app itself, still offline", async () => {
+  const projectDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures/preflight/native-bad");
+  const res = await connect({}).call("asc_validate_config", {
+    config: { bundleId: "com.example.pantry", locale: "en-US" },
+    preflight: true,
+    projectDir,
+  });
+  assert.equal(res.structuredContent.valid, true);
+  assert.equal(res.structuredContent.preflight.kind, "native");
+  assert.match(res.content[0].text, /\*\*will be rejected:\*\* Invalid reason XXXX\.1/);
+  assert.match(res.content[0].text, /likely questioned: No NSLocationWhenInUseUsageDescription/);
+  assert.match(res.content[0].text, /\[app\.permission\.missing\.NSLocationWhenInUseUsageDescription\]/);
+});
+
 test("asc_generate_credentials stays off until the operator turns it on", async () => {
   const refused = await connect({}).call("asc_generate_credentials", { confirm: true });
   assert.match(refused.content[0].text, /APPSTORE_RELEASE_ALLOW_LOCAL_WRITES/);
@@ -341,4 +355,10 @@ test("the transport can be driven over any stream pair", async () => {
   serve({ input, output: { write: (s) => written.push(s) }, handlers: { ping: () => ({ pong: true }) } });
   await new Promise((r) => setTimeout(r, 50));
   assert.deepEqual(JSON.parse(written[0]), { jsonrpc: "2.0", id: 1, result: { pong: true } });
+});
+
+test("a resource URI saved under a skill's 3.x name still reads", async () => {
+  const res = await connect({}).read("appstore-release://skills/asc-rejection");
+  assert.equal(res.contents[0].uri, "appstore-release://skills/app-store-rejection");
+  assert.match(res.contents[0].text, /^---\nname: app-store-rejection/);
 });

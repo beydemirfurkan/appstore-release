@@ -24,10 +24,13 @@
  * @property {any} submission
  * @property {string|null} locale       the primary locale the report is about
  * @property {string[]} locales         every locale the config describes
+ * @property {{ custom: boolean } | null} eula   whether a custom EULA is set; null when not asked (nothing sold) or unreadable
  * @property {string[]} errors          sections we could not read, by name
+ * @property {import("../preflight/index.mjs").PreflightResult} [preflight]  the app on disk, read offline (set by getReadinessReport)
  */
 
 import { localeCodes } from "../core/locales.mjs";
+import { subscriptionConfigs } from "../core/products.mjs";
 import { isCurrentVersionState, pickEditableAppInfo, versionState } from "../core/status.mjs";
 
 /**
@@ -249,6 +252,21 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     [],
   );
 
+  // Only an app that sells subscriptions needs to know: Guideline 3.1.2 wants a
+  // Terms of Use link, and a custom EULA in App Store Connect is one way to give it.
+  const eula =
+    subscriptions.length || subscriptionConfigs(ctx.config).length
+      ? await section(
+          "eula",
+          async () => {
+            const r = await client.get(`/v1/apps/${appId}/endUserLicenseAgreement`, { throwOnError: false });
+            if (r.error && r.error.status !== 404) throw r.error;
+            return { custom: Boolean(!r.error && r.data) };
+          },
+          null,
+        )
+      : null;
+
   const reviewDetail = version
     ? await section(
         "reviewDetail",
@@ -297,6 +315,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     localizations,
     screenshotSets,
     placements,
+    eula,
     pricing,
     subscriptions,
     inAppPurchases,

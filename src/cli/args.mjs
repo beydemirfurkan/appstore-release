@@ -38,6 +38,30 @@ export const GLOBAL_FLAGS = Object.freeze({
 });
 
 /**
+ * Commands that are not operations — they run before any context is built — with
+ * their own flags beside the global ones. One list, so the CLI parser and the
+ * skill gate (which checks every `asc <command> --flag` the skills mention)
+ * cannot disagree.
+ *
+ * @type {Readonly<Record<string, Record<string, FlagSpec>>>}
+ */
+export const LOCAL_COMMANDS = Object.freeze({
+  init: {},
+  schema: {},
+  validate: {},
+  doctor: {},
+  mcp: {},
+  help: {},
+  release: {},
+  preflight: {
+    "expo-config": {
+      type: "boolean",
+      description: "evaluate app.config.js/ts with `npx expo config` (runs the project's config code)",
+    },
+  },
+});
+
+/**
  * Operations declare their flags in camelCase (`allowNewCert`) because that is
  * what reaches `run()`; users type kebab-case (`--allow-new-cert`). Both spellings
  * are accepted and the flag is stored under its declared name.

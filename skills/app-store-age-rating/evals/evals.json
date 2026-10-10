@@ -1,0 +1,8 @@
+[
+  { "prompt": "What age rating should my app get? It has a chat between users.", "expects": ["asc age-rating"] },
+  {
+    "prompt": "Fill out the age rating questionnaire in App Store Connect.",
+    "expects": ["asc age-rating --dry-run", "asc age-rating"]
+  },
+  { "prompt": "check says rating.declaration.incomplete — fix it.", "expects": ["asc age-rating"] }
+]

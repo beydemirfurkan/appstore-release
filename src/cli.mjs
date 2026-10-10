@@ -19,13 +19,14 @@ import { Status, Exit } from "./core/status.mjs";
 import { Severity } from "./core/findings.mjs";
 import { runOperation, runPipeline } from "./index.mjs";
 import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry.mjs";
-import { parseArgs, splitFlags, kebab, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
+import { parseArgs, splitFlags, kebab, GLOBAL_FLAGS, LOCAL_COMMANDS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
 import { createStyle } from "./cli/style.mjs";
 import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
 import { buildTools } from "./mcp/tools.mjs";
 import { RESOURCES } from "./mcp/resources.mjs";
 import { doctorCommand } from "./cli/doctor.mjs";
+import { preflightCommand } from "./cli/preflight.mjs";
 
 const version = createRequire(import.meta.url)("../package.json").version;
 
@@ -56,7 +57,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   try {
     const command = parseArgs(argv, {}, { lenient: true }).command;
     const op = command ? getOperation(command) : null;
-    parsed = parseArgs(argv, op?.meta.args ?? {});
+    parsed = parseArgs(argv, op?.meta.args ?? (command ? LOCAL_COMMANDS[command] : undefined) ?? {});
     if (op && parsed.positionals.length) {
       // An operation may name one positional (`new-version 1.2.0`); anything else
       // is a mistake worth stopping for rather than silently ignoring.
@@ -94,6 +95,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   if (command === "schema") return schemaCommand(stdout);
   if (command === "init") return initCommand({ stdout, stderr, cwd, target: parsed.positionals[0] });
   if (command === "validate") return validateCommand({ stdout, stderr, cwd, env, explicit: flags.config });
+  if (command === "preflight") return preflightCommand({ stdout, stderr, cwd, env, flags });
   if (command === "doctor") {
     return doctorCommand({ stdout, stderr, env, cwd, config: flags.config, appId: flags["app-id"] });
   }
@@ -171,9 +173,13 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   // The readiness report already printed its findings and its plan; printing
   // them again underneath is noise. Everything else an operation found still shows.
   const reported = new Set(results.filter((r) => r.id === "check").flatMap((r) => (r.findings ?? []).map((f) => f.id)));
+  // After a submission: how to follow it, once, under the result it follows.
+  const handoff = results.find((r) => r.details?.handoff)?.details?.handoff;
+  if (handoff) ctx.log.info(`Follow it: ${handoff.follow}`);
+
   const manual = results.filter((r) => r.status === Status.MANUAL && r.id !== "check");
   if (manual.length) {
-    ctx.log.section("Manual steps required (Apple has no API for these)");
+    ctx.log.section("Finish these in App Store Connect");
     manual.forEach((m, i) => ctx.log.info(`${i + 1}. ${m.title} — ${m.message}`));
   }
   renderFindings(
@@ -261,6 +267,7 @@ function writeHelp(stream) {
       `  init             scaffold appstore.config.json (no credentials needed)\n` +
       `  schema           print the config JSON Schema\n` +
       `  validate         check the config offline\n` +
+      `  preflight        check the app itself for likely rejections, offline\n` +
       `  doctor           verify credentials, tools and config; touches no app data\n` +
       `  mcp              run the MCP server on stdio (${MCP_TOOL_COUNT} tools, ${RESOURCES.length} resources)\n` +
       `  release          the ${PIPELINE.length}-step listing pipeline, then a readiness check\n` +

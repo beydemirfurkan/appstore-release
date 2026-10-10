@@ -60,7 +60,7 @@ const ALIASES = [
     title: "Producing App Store screenshots",
     description: "How to render exact-size, alpha-free images for each device, iPhone Duo included.",
     mimeType: "text/markdown",
-    load: () => read("skills/asc-screenshots/references/producing.md"),
+    load: () => read("skills/app-store-screenshot-upload/references/producing.md"),
   },
   {
     uri: "appstore-release://references/setup",
@@ -74,6 +74,30 @@ const ALIASES = [
 
 /** @type {Resource[]} */
 export const RESOURCES = [...ALIASES, ...skillResources()];
+
+/** Skills renamed in 4.0.0, old name → new. Their old URIs still resolve. */
+export const RENAMED_SKILLS = Object.freeze({
+  "asc-screenshots": "app-store-screenshot-upload",
+  "asc-age-rating": "app-store-age-rating",
+  "asc-subscriptions": "app-store-subscriptions",
+  "asc-rejection": "app-store-rejection",
+  "asc-credentials": "ios-code-signing",
+  "asc-testflight": "app-store-testflight",
+  "asc-reviews": "app-store-customer-reviews",
+});
+
+/**
+ * The current URI for one that used a skill's old name, or the URI unchanged.
+ * Not listed — resources/list shows each document once — only resolved, so a
+ * client that saved an old URI keeps working.
+ *
+ * @param {string} uri
+ */
+export function currentUri(uri) {
+  const m = /^appstore-release:\/\/skills\/([^/]+)(.*)$/.exec(String(uri ?? ""));
+  const renamed = m && /** @type {Record<string, string>} */ (RENAMED_SKILLS)[m[1]];
+  return renamed ? `appstore-release://skills/${renamed}${m[2]}` : uri;
+}
 
 /**
  * One resource per SKILL.md and per reference file:

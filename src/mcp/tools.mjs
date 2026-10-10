@@ -15,6 +15,8 @@
 // options. There is one job here — get an app through review — and it has one
 // shape.
 
+import { dirname } from "node:path";
+
 import { createContext } from "../core/context.mjs";
 import { runOperation, runPipeline } from "../index.mjs";
 import { getAppSnapshot } from "../report/snapshot.mjs";
@@ -26,6 +28,7 @@ import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { renderReportMarkdown } from "../report/render.mjs";
 import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
+import { runPreflight } from "../preflight/index.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { Severity } from "../core/findings.mjs";
 import { Status, versionState } from "../core/status.mjs";
@@ -258,30 +261,70 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
 
     {
       name: "asc_validate_config",
-      title: "Validate a config",
+      title: "Validate a config, and preflight the app",
       description:
         "Check a config against the schema and against the rules Apple enforces but does not document — " +
-        "emoji in the description, over-length keywords, whatsNew on a first version. " +
+        "emoji in the description, keywords over 100 bytes, whatsNew on a first version. " +
+        "With preflight: true, also read the app itself (Info.plist, privacy manifest, code) for what App Review " +
+        "rejects: missing or generic permission texts, invalid required-reason codes, login without an equivalent " +
+        "private option, no account deletion, no restore purchases. " +
         "Touches no network and needs no credentials, so it is safe to call while drafting.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: input({
         config: { type: "object", description: "The config object itself." },
         configPath: str("Or a path to read it from."),
+        preflight: bool("Also check the app's own project: Info.plist, privacy manifest and code.", false),
+        projectDir: str("The app's project directory, for preflight (default: the config's directory)."),
       }),
       async run(args) {
         let config = args.config ?? null;
+        let path = null;
         if (!config) {
-          const path = args.configPath ?? findConfigPath({ env });
-          if (!path) {
+          path = args.configPath ?? findConfigPath({ env });
+          if (path) ({ config } = loadConfig(path));
+          else if (!args.preflight) {
             return structured("No config given and none found on disk.", { valid: false, findings: [] });
           }
-          ({ config } = loadConfig(path));
         }
-        const { valid, findings } = validateConfig(config);
-        const text = valid
-          ? "Valid. Nothing in this config will be rejected by App Store Connect for shape or content."
-          : ["Problems found:", "", ...findings.map((f) => `- **${f.title}** — ${f.fix}`)].join("\n");
-        return structured(text, { valid, findings });
+        const { valid, findings } = config ? validateConfig(config) : { valid: false, findings: [] };
+        const lines = [
+          !config
+            ? "No config given and none found on disk."
+            : valid
+              ? "Valid. Nothing in this config will be rejected by App Store Connect for shape or content."
+              : ["Problems found:", "", ...findings.map((f) => `- **${f.title}** — ${f.fix}`)].join("\n"),
+        ];
+
+        if (!args.preflight) return structured(lines[0], { valid, findings });
+
+        const projectDir = args.projectDir ?? (path ? dirname(path) : process.cwd());
+        const preflight = runPreflight({ projectDir, config });
+        const shown = preflight.findings.filter((f) => f.severity !== Severity.INFO);
+        lines.push(
+          "",
+          `## App preflight (${preflight.kind ?? "no app found"} · ${projectDir})`,
+          "",
+          ...(shown.length
+            ? shown.map(
+                (f) =>
+                  `- ${f.severity === Severity.BLOCKER ? "**will be rejected:**" : "likely questioned:"} ${f.title}` +
+                  `${f.guideline ? ` (Guideline ${f.guideline})` : ""}${f.location ? ` \`${f.location.file}:${f.location.line ?? ""}\`` : ""}` +
+                  ` — ${f.fix} [${f.id}]`,
+              )
+            : [
+                preflight.found
+                  ? "Nothing App Review is certain or likely to reject."
+                  : "No Expo or Xcode project here.",
+              ]),
+          ...(preflight.manualChecks.length
+            ? [
+                "",
+                "Test on a device (a static read cannot prove these):",
+                ...preflight.manualChecks.map((m) => `- ${m}`),
+              ]
+            : []),
+        );
+        return structured(lines.join("\n"), { valid, findings, preflight });
       },
     },
 
@@ -402,8 +445,8 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       description:
         "Create any missing subscription plans and one-time purchases from the config, then write their " +
         "localizations, prices, introductory offers and App Review screenshots, so they leave " +
-        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends them with the app version — except the " +
-        "app's first subscription and first in-app purchase, which Apple requires to be submitted from the website.",
+        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends them with the app version — the app's " +
+        "first subscription and first in-app purchase included, with the website's clicks as the fallback.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
@@ -420,8 +463,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       name: "asc_submit_for_review",
       title: "Submit for review",
       description:
-        "Submit the app version to App Review. This is the irreversible one. It computes the readiness report " +
-        "first and refuses if anything is blocking, unless force is set.",
+        "Submit the app version to App Review, with the configured subscriptions and in-app purchases. " +
+        "This is the irreversible one. It computes the readiness report first and refuses if anything is blocking, " +
+        "unless force is set. An app's first product is sent by API with the version; if App Store Connect refuses " +
+        "it, nothing is submitted and the result is MANUAL with the clicks — or call again with skipProducts: true " +
+        "to send the app alone. After a submission, follow it with asc_readiness_report or check --wait.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
       inputSchema: input(
         {
@@ -430,6 +476,10 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           force: bool("Submit even though blockers remain. Apple will reject it.", false),
           resolved: bool(
             "After a rejection: the user has addressed what App Review asked for in Resolution Center. Resubmits.",
+            false,
+          ),
+          skipProducts: bool(
+            "Submit the app version alone; configured subscriptions and in-app purchases wait for a later version.",
             false,
           ),
           confirm,
@@ -464,11 +514,22 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           submit: true,
           force: Boolean(args.force),
           resolved: Boolean(args.resolved),
+          skipProducts: Boolean(args.skipProducts),
         });
         // Only a CHANGED result means the PATCH went through; an OK can be "already
         // in review" and an ERROR is a refusal — neither is a submission.
         const submitted = res.status === Status.CHANGED;
-        return structured(`${res.status.toUpperCase()} — ${res.message}`, { submitted, result: res, report });
+        const clicks = (res.findings ?? [])
+          .filter((f) => f.fixClicks?.length)
+          .map((f) => `- ${f.title}: ${f.fixClicks?.join(" → ")}`);
+        const text = [
+          `${res.status.toUpperCase()} — ${res.message}`,
+          ...(clicks.length ? ["", ...clicks] : []),
+          ...(submitted
+            ? ["", "Follow it: call asc_readiness_report later, or run `appstore-release check --wait 30`."]
+            : []),
+        ].join("\n");
+        return structured(text, { submitted, result: res, report });
       },
     },
 

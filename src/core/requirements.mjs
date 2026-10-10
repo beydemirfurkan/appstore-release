@@ -133,13 +133,48 @@ function checkLocaleRequirements(config) {
 
 const EMOJI_RE = /\p{Extended_Pictographic}/u;
 
-/** Per-listing limits, applied to every locale. */
+/**
+ * Per-listing limits, applied to every locale. Keywords are measured in UTF-8
+ * bytes: Apple's own wording is "up to 100 bytes", so a Turkish or Japanese list
+ * well under 100 characters can still be refused.
+ *
+ * @type {Array<{ field: string, max: number, unit: "characters"|"bytes" }>}
+ */
 const LIMITS = [
-  { field: "subtitle", max: 30 },
-  { field: "keywords", max: 100 },
-  { field: "promotionalText", max: 170 },
-  { field: "name", max: 30 },
+  { field: "subtitle", max: 30, unit: "characters" },
+  { field: "keywords", max: 100, unit: "bytes" },
+  { field: "promotionalText", max: 170, unit: "characters" },
+  { field: "name", max: 30, unit: "characters" },
 ];
+
+/** @param {string} value @param {"characters"|"bytes"} unit */
+const measure = (value, unit) => (unit === "bytes" ? Buffer.byteLength(value, "utf8") : [...value].length);
+
+/** Guideline 2.3.10: no other platform's name in the metadata. */
+const OTHER_PLATFORM_RE = /\b(android|google play|play store)\b/i;
+
+/** Too common to count as the subtitle repeating the name. */
+const STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "your",
+  "you",
+  "app",
+  "our",
+  "von",
+  "und",
+  "für",
+  "ile",
+  "için",
+  "les",
+  "des",
+  "pour",
+  "con",
+  "para",
+  "por",
+]);
 
 /**
  * Text App Review rejects as unfinished (Guideline 2.1). "Todo" alone is left
@@ -147,6 +182,12 @@ const LIMITS = [
  */
 const PLACEHOLDER_RE = /lorem ipsum|\bTBD\b|\bFIXME\b|\bTODO:|\bXXX\b|\[insert|\bplaceholder\b|coming soon/i;
 const TEXT_FIELDS = ["name", "subtitle", "description", "keywords", "promotionalText", "whatsNew"];
+
+/** Lowercased words of three letters or more that are not filler. @param {unknown} text */
+const termsOf = (text) =>
+  typeof text === "string"
+    ? [...new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u))].filter((w) => [...w].length > 2 && !STOPWORDS.has(w))
+    : [];
 
 /**
  * Advice rather than rules: none of these is an API error, so they are
@@ -176,8 +217,68 @@ function listingLints(metadata, keyFor) {
     );
   }
 
+  for (const field of TEXT_FIELDS) {
+    const value = metadata[field];
+    const hit = typeof value === "string" ? OTHER_PLATFORM_RE.exec(value) : null;
+    if (!hit) continue;
+    const path = keyFor(field);
+    out.push(
+      finding({
+        id: `config.${path}.other-platform`,
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: `config.${path} mentions "${hit[0]}"`,
+        detail:
+          "Guideline 2.3.10: metadata must not name other mobile platforms or their stores. App Review rejects it.",
+        fixOwner: FixOwner.CLI,
+        fix: `Remove "${hit[0]}" from config.${path}; say "on your phone" or name only Apple platforms.`,
+        guideline: "2.3.10",
+        docs: "references/metadata.md",
+      }),
+    );
+  }
+
+  const nameWords = termsOf(metadata.name);
+  const repeated = termsOf(metadata.subtitle).filter((w) => nameWords.includes(w));
+  if (repeated.length) {
+    const path = keyFor("subtitle");
+    out.push(
+      finding({
+        id: `config.${path}.repeats-name`,
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: `config.${path} repeats the name (${repeated.join(", ")})`,
+        detail:
+          "The name and subtitle are both searched; a word in both is indexed once. The subtitle's 30 characters " +
+          "reach further saying what the app does in new words.",
+        fixOwner: FixOwner.CLI,
+        fix: "Rewrite the subtitle without the name's words: the benefit, in the words people search for.",
+        docs: "references/metadata.md",
+      }),
+    );
+  }
+
   if (typeof metadata.keywords !== "string") return out;
   const path = keyFor("keywords");
+  const short = metadata.keywords
+    .split(",")
+    .map((w) => w.trim())
+    // Latin-script terms only: two CJK characters are a whole word.
+    .filter((w) => w && /^[\p{Script=Latin}\p{N}]{1,2}$/u.test(w));
+  if (short.length) {
+    out.push(
+      finding({
+        id: `config.${path}.short`,
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: `config.${path} has keywords of two characters or fewer (${short.join(", ")})`,
+        detail: 'Apple asks for keywords "each greater than two characters"; shorter ones rarely match a search.',
+        fixOwner: FixOwner.CLI,
+        fix: "Replace them with full words, or fold them into a longer term.",
+        docs: "references/metadata.md",
+      }),
+    );
+  }
   const words = metadata.keywords
     .split(",")
     .map((w) => w.trim().toLowerCase())
@@ -185,7 +286,7 @@ function listingLints(metadata, keyFor) {
   const seen = new Set();
   const duplicates = [...new Set(words.filter((w) => seen.has(w) || !seen.add(w)))];
   // Apple already indexes the name and subtitle; repeating their words in the
-  // keyword field spends the 100 characters on nothing.
+  // keyword field spends the 100 bytes on nothing.
   const indexed = new Set(`${metadata.name ?? ""} ${metadata.subtitle ?? ""}`.toLowerCase().split(/[^\p{L}\p{N}]+/u));
   const redundant = words.filter((w) => !w.includes(" ") && indexed.has(w));
   const spaces = (metadata.keywords.match(/,\s+/g) ?? []).reduce((n, m) => n + m.length - 1, 0);
@@ -201,7 +302,7 @@ function listingLints(metadata, keyFor) {
         severity: Severity.WARNING,
         category: Category.CONFIG,
         title: `config.${path} spends characters on nothing`,
-        detail: `${waste.join("; ")}. The keyword field is 100 characters; every one should be a new search term.`,
+        detail: `${waste.join("; ")}. The keyword field is 100 bytes; every one should be a new search term.`,
         fixOwner: FixOwner.CLI,
         fix: "Drop repeats and words from the name or subtitle, and separate with commas only.",
         docs: "references/metadata.md",
@@ -228,19 +329,26 @@ export function checkSemantics(config) {
     // is more than one to distinguish.
     const keyFor = (field) => (single ? `metadata.${field}` : `locales.${locale}.${field}`);
 
-    for (const { field, max } of LIMITS) {
+    for (const { field, max, unit } of LIMITS) {
       const value = metadata[field];
-      if (typeof value !== "string" || value.length <= max) continue;
+      if (typeof value !== "string") continue;
+      const size = measure(value, unit);
+      if (size <= max) continue;
       const path = keyFor(field);
+      const chars = [...value].length;
       out.push(
         finding({
           id: `config.${path}.too-long`,
           category: Category.CONFIG,
-          title: `config.${path} exceeds ${max} characters`,
-          detail: `It is ${value.length} characters. App Store Connect rejects the update with a 409.`,
+          title: `config.${path} exceeds ${max} ${unit}`,
+          detail:
+            unit === "bytes" && chars <= max
+              ? `It is ${size} bytes in UTF-8 (${chars} characters). Apple counts bytes: letters such as ç, ş, ü take two, ` +
+                `Japanese and Chinese three. App Store Connect rejects the update with a 409.`
+              : `It is ${size} ${unit}. App Store Connect rejects the update with a 409.`,
           fixOwner: FixOwner.CLI,
-          fix: `Shorten config.${path} to ${max} characters or fewer.`,
-          evidence: { expected: max, actual: value.length },
+          fix: `Shorten config.${path} to ${max} ${unit} or fewer.`,
+          evidence: { expected: max, actual: size },
           docs: "references/gotchas.md#metadata",
         }),
       );

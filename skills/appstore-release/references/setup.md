@@ -26,7 +26,7 @@ The app must already exist (Apps → **+**). It needs a registered bundle id mat
 
 - `eas.json` with a `production` build profile, and `eas login` done.
 - The team id (`appleTeamId`) is on the Apple Developer account and in the eas.json submit profile.
-- If EAS's stored iOS credentials are stale, see the **asc-credentials** skill (`asc credentials`, then `"credentialsSource": "local"`).
+- If EAS's stored iOS credentials are stale, see the **ios-code-signing** skill (`asc credentials`, then `"credentialsSource": "local"`).
 
 ## 4. The config file
 

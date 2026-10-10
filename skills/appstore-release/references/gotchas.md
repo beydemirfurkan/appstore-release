@@ -4,7 +4,7 @@ Read before the first run. Each one cost a round trip to discover. Headings are 
 
 ## Credentials / build
 
-- **Stale EAS distribution certificate.** `eas build` non-interactive fails: _"Provisioning Profile has expired … No certificate exists with serial …"_. EAS's stored certificate is out of sync with Apple (often because Xcode or a local prebuild created a new one). Fix: `asc credentials` issues or reuses a distribution certificate plus an `IOS_APP_STORE` profile and writes `credentials.json`; set `"credentialsSource": "local"` in the eas.json production profile. Details in the **asc-credentials** skill.
+- **Stale EAS distribution certificate.** `eas build` non-interactive fails: _"Provisioning Profile has expired … No certificate exists with serial …"_. EAS's stored certificate is out of sync with Apple (often because Xcode or a local prebuild created a new one). Fix: `asc credentials` issues or reuses a distribution certificate plus an `IOS_APP_STORE` profile and writes `credentials.json`; set `"credentialsSource": "local"` in the eas.json production profile. Details in the **ios-code-signing** skill.
 - **`.p12` must be openssl `-legacy`.** OpenSSL 3's default PBE is not readable by EAS/node; use `openssl pkcs12 -export -legacy …`. The `credentials` command already does.
 - **A local `ios/` directory wins.** If a native `ios/` directory exists, EAS uses it and _ignores_ app.json's `ios.bundleIdentifier` and `infoPlist`. Edit `ios/<app>/Info.plist` and `Images.xcassets/AppIcon.appiconset/`, not just app.json.
 - **EAS's own ASC key** comes from `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID`, `EXPO_ASC_ISSUER_ID`, plus `EXPO_APPLE_TEAM_ID` and `EXPO_APPLE_TEAM_TYPE` (`IN_HOUSE` | `COMPANY_OR_ORGANIZATION` | `INDIVIDUAL`; only `IN_HOUSE` changes behaviour).
@@ -31,7 +31,7 @@ Read before the first run. Each one cost a round trip to discover. Headings are 
 - `socialMedia` and `socialMediaAgeRestricted` are required for new apps and updates since September 2026; `ageAssurance` has been required since 2025. `false` is a valid answer — missing is not.
 - **Never send `ageRatingOverride` together with `ageRatingOverrideV2`** → 409. The old one is deprecated; this tool only sends V2, and only when `ageRating.override` is set.
 - `kidsAgeBand` is deprecated and no longer sent.
-- Details and the question each attribute answers: the **asc-age-rating** skill.
+- Details and the question each attribute answers: the **app-store-age-rating** skill.
 
 ## Pricing / availability
 
@@ -41,20 +41,20 @@ Read before the first run. Each one cost a round trip to discover. Headings are 
 
 ## Screenshots
 
-- **Exact sizes only**, no alpha channel, PNG or JPEG. Full table: the **asc-screenshots** skill.
+- **Exact sizes only**, no alpha channel, PNG or JPEG. Full table: the **app-store-screenshot-upload** skill.
 - **The set-based API is deprecated** (ASC API 4.5.1, October 2026) in favour of the **App Asset Library**: upload each image once, then create _placements_ per localization and device group. iPhone Duo screenshots exist **only** in the Asset Library. This tool uses the Asset Library by default (`screenshots.api: "auto"`).
 - Legacy (`screenshots.api: "legacy"`): the largest iPhone type is **`APP_IPHONE_67`** — there is no `APP_IPHONE_69` (409 lists the valid types). Upload is reserve (`POST /v1/appScreenshots`) → PUT each `uploadOperations` part → PATCH `{uploaded: true, sourceFileChecksum: md5}`. A screenshot that skips the commit stays invisible, with nothing in the UI to explain why.
 - Asset Library: commit takes `{uploaded: true}` alone. An asset with placements cannot be deleted (`STATE_ERROR.ASSET_HAS_PLACEMENTS`) — delete the placements first. A placement cannot be edited; replace it and reorder.
 
 ## App Privacy (UI-ONLY)
 
-- Every `appDataUsages*` API path 404s — Apple keeps the data-collection nutrition label UI-only. It must be completed and **Published** in App Store Connect before the version can be reviewed. It is one of the two things this tool cannot do; the other is submitting an app's first subscription. Once the user confirms it is published, set `review.privacyPublished: true`; the API cannot verify it, so never set it on your own.
+- Every `appDataUsages*` API path 404s — Apple keeps the data-collection nutrition label UI-only. It must be completed and **Published** in App Store Connect before the version can be reviewed. It is the one thing this tool cannot do. Once the user confirms it is published, set `review.privacyPublished: true`; the API cannot verify it, so never set it on your own.
 - **NSUserTracking conflict:** if the binary contains `NSUserTrackingUsageDescription` but every data type is declared "not used for tracking", **Publish is disabled** (_"you must indicate which data types are tracking users"_). If the app truly does not track, **remove the key** from app.json _and_ the native Info.plist, rebuild, upload — then Publish works.
 
 ## Subscriptions / IAPs
 
-- **An app's first subscription is submitted from the website.** Apple, in the 4.4.1 docs: _"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com. For subsequent subscriptions, submit using the API endpoints."_ `check` reports `subscription.first.ui-only` with the clicks, and `asc submit` never adds a first subscription. Once one subscription has been approved, later ones are versioned (`subscriptionVersion` items, API 4.4.1) and `asc submit` adds them to the same review submission as the version. The old 409 _`'subscription' is not a relationship`_ came from the pre-4.4.1 model.
-- A subscription leaves `MISSING_METADATA` only with: a group localization (display name), a subscription localization (name + description), a **price**, and a **review screenshot** of the paywall. Details: the **asc-subscriptions** skill.
+- **An app's first subscription or in-app purchase goes with the version.** Apple's 4.4.1 notes: _"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com. For subsequent subscriptions, submit using the API endpoints."_ Teams submit the first one by API in the same review submission, so `asc submit` tries that (`check` reports `subscription.first.with-version`, INFO). If App Store Connect refuses, nothing is submitted: the product items are deleted from the draft (`DELETE /v1/reviewSubmissionItems/{id}`), and the result is `manual` with the clicks — or `asc submit --submit --skip-products` sends the app alone. Once one subscription has been approved, later ones are versioned (`subscriptionVersion` items, API 4.4.1) and `asc submit` adds them to the same review submission as the version. The old 409 _`'subscription' is not a relationship`_ came from the pre-4.4.1 model.
+- A subscription leaves `MISSING_METADATA` only with: a group localization (display name), a subscription localization (name + description), a **price**, and a **review screenshot** of the paywall. Details: the **app-store-subscriptions** skill.
 
 ## Review submission
 
@@ -62,7 +62,7 @@ Read before the first run. Each one cost a round trip to discover. Headings are 
 - An empty or dangling submission may resist DELETE (403). Cancel a submitted one with PATCH `{canceled: true}` (state → CANCELING, then the version becomes `DEVELOPER_REJECTED`, editable again).
 - **App Review contact info** (name, phone, email) is required — `asc review-info`.
 - Export compliance: `ITSAppUsesNonExemptEncryption = false` in Info.plist avoids the encryption question on every build.
-- The rejection _text_ lives in App Store Connect (App Review → Messages); there is no API for it. See **asc-rejection**.
+- The rejection _text_ lives in App Store Connect (App Review → Messages); there is no API for it. See **app-store-rejection**.
 
 ## Handy
 

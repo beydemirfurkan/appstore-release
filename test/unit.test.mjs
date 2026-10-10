@@ -284,3 +284,118 @@ test("an EAS Metadata file translates into our config, and ours wins where both 
     metadata: { name: "B", subtitle: "S" },
   });
 });
+
+test("keywords are measured in UTF-8 bytes, as Apple counts them", async () => {
+  const { checkSemantics } = await import("../src/core/requirements.mjs");
+  const tooLong = (keywords) =>
+    checkSemantics({ locale: "tr", metadata: { keywords } }).find((f) => f.id === "config.metadata.keywords.too-long");
+
+  // Under the old character count, over Apple's byte limit.
+  const turkish = "çiçek,şeker,güneş,öğün,ılık,üzüm,çorba,şiş,ığdır,düğün,göçmen,ışık,süt,çay,böğürtlen";
+  assert.ok([...turkish].length <= 100 && Buffer.byteLength(turkish) > 100);
+  const f = tooLong(turkish);
+  assert.equal(f?.severity, Severity.BLOCKER);
+  assert.match(f?.detail ?? "", /bytes in UTF-8/);
+
+  const japanese = "天気,予報,雨雲,レーダー,台風,気温,週間,花粉,警報,地震,防災,傘,紫外線,湿度,風速,日の出";
+  assert.ok([...japanese].length <= 100 && Buffer.byteLength(japanese) > 100);
+  assert.ok(tooLong(japanese));
+
+  assert.equal(tooLong("weather,forecast,radar,rain,storm,temperature,pollen,alerts,uv,humidity,wind"), undefined);
+});
+
+test("listing lints: short keywords, a subtitle that repeats the name, other platforms", async () => {
+  const { checkSemantics } = await import("../src/core/requirements.mjs");
+  const lint = (metadata) =>
+    new Map(checkSemantics({ locale: "en-US", metadata }).map((f) => [f.id.replace("config.metadata.", ""), f]));
+
+  const short = lint({ keywords: "ai,tv,meal planner,天気" }).get("keywords.short");
+  assert.equal(short?.severity, Severity.WARNING);
+  assert.match(short?.title ?? "", /\(ai, tv\)/, "two CJK characters are a whole word, not flagged");
+
+  const repeats = lint({ name: "Pantry Planner", subtitle: "The pantry for your week" }).get("subtitle.repeats-name");
+  assert.match(repeats?.title ?? "", /\(pantry\)/);
+  assert.equal(lint({ name: "Pantry", subtitle: "Groceries for the week" }).has("subtitle.repeats-name"), false);
+
+  const android = lint({ description: "Also on Android and Google Play." }).get("description.other-platform");
+  assert.equal(android?.severity, Severity.WARNING);
+  assert.equal(android?.guideline, "2.3.10");
+  assert.equal(lint({ description: "Works on iPhone and iPad." }).has("description.other-platform"), false);
+});
+
+test("MUTATING_COMMANDS is exactly the registry's writers, plus release", async () => {
+  const { MUTATING_COMMANDS, writesToAppStoreConnect } = await import("../src/core/mutating.mjs");
+  const { OPERATIONS } = await import("../src/ops/registry.mjs");
+  const writers = Object.entries(OPERATIONS)
+    .filter(([, op]) => op.meta.mutates)
+    .map(([id]) => id);
+  assert.deepEqual([...MUTATING_COMMANDS].sort(), ["release", ...writers].sort());
+  assert.equal(writesToAppStoreConnect("appstore-release submit --submit"), true);
+  assert.equal(writesToAppStoreConnect("appstore-release check"), false);
+  assert.equal(writesToAppStoreConnect(undefined), false);
+});
+
+test("Apple's refusals: nested reasons read, known ones mapped, product ones kept verbatim", async () => {
+  const { explainRefusal } = await import("../src/asc/refusals.mjs");
+  const error = {
+    errors: [
+      {
+        detail: "reviewSubmissions with id 'rs-1' cannot be submitted.",
+        meta: {
+          associatedErrors: {
+            "/v1/apps/1": [{ detail: "You must provide a value for the attribute 'contentRightsDeclaration'." }],
+            "/v1/appStoreVersions/v1": [
+              { detail: "You must have published answers to your app's data usages." },
+              { detail: "A screenshot for one of the following types is required: APP_IPHONE_67." },
+            ],
+            "/v1/subscriptions/s1": [{ detail: "The subscription review screenshot is missing." }],
+          },
+        },
+      },
+      { detail: "Something new Apple says." },
+    ],
+  };
+  const { lines, findings, productRelated } = explainRefusal(error);
+  assert.equal(lines.length, 5, "the generic wrapper line is dropped for the reasons under it");
+  assert.equal(productRelated, true);
+  const byId = new Map(findings.map((f) => [f.id, f]));
+  assert.equal(byId.get("refusal.content-rights")?.fixCommand, "appstore-release content-rights");
+  assert.equal(byId.get("refusal.app-privacy")?.uiOnly, true);
+  assert.equal(byId.get("refusal.screenshots")?.fixCommand, "appstore-release screenshots");
+  // The subscription's screenshot is not the app's screenshots.
+  const verbatim = findings.filter((f) => f.id.startsWith("refusal.unrecognised"));
+  assert.deepEqual(
+    verbatim.map((f) => f.detail),
+    ["The subscription review screenshot is missing.", "Something new Apple says."],
+  );
+  assert.deepEqual(explainRefusal(null), { lines: [], findings: [], productRelated: false });
+});
+
+test("draft App Review notes: what the app does, and nothing guessed", async () => {
+  const { draftReviewNotes } = await import("../src/ops/review-info.mjs");
+  const notes = draftReviewNotes(
+    {
+      review: { notes: "Push notifications are optional." },
+      subscription: { productId: "com.example.pro.monthly", name: "Pro", period: "ONE_MONTH", priceAmount: 4.99 },
+    },
+    {
+      signIn: true,
+      logins: ["expo-apple-authentication"],
+      purchases: true,
+      permissions: [{ key: "NSCameraUsageDescription", text: "Scan a barcode to add it to your list." }],
+    },
+  );
+  assert.match(notes, /^Sign-in\n- \(The app has sign-in: add a demo account/);
+  assert.match(notes, /Sign-in options: expo-apple-authentication\./);
+  assert.match(notes, /How to reach key features\n- \(Two or three steps/);
+  assert.match(notes, /Permissions\n- Camera: "Scan a barcode to add it to your list\."/);
+  assert.match(notes, /Pro — com\.example\.pro\.monthly, auto-renewing one month, 4\.99 \(USA\)/);
+  assert.match(notes, /Notes\n- Push notifications are optional\./);
+
+  const plain = draftReviewNotes({ review: {} }, { signIn: false, logins: [], purchases: false, permissions: [] });
+  assert.equal(
+    plain,
+    "Sign-in\n- No sign-in is needed: every feature is available without an account.\n\n" +
+      "How to reach key features\n- (Two or three steps from launch to the main feature, in the app's own words.)",
+  );
+});

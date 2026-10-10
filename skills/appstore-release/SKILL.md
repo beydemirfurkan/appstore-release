@@ -1,20 +1,21 @@
 ---
 name: appstore-release
-description: Ship an iOS app to App Store review end to end over the App Store Connect API — build attach, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions and the review submission, driven by a readiness report that says what to do next. Use when the user says "publish/submit my app", "send it to App Review", "ship the iOS app", "release a new version", "fill out App Store Connect", "upload metadata", "why can't I submit", or "automate App Store Connect". Works for any app given an App Store Connect API key, an app id and a config file. Hands focused work to asc-screenshots, asc-age-rating, asc-subscriptions, asc-rejection and asc-credentials.
+description: Ship an iOS app to App Store review end to end over the App Store Connect API — build attach, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions and the review submission, driven by a readiness report that says what to do next. Use when the user says "publish/submit my app", "send it to App Review", "ship the iOS app", "release a new version", "fill out App Store Connect", "upload metadata", "why can't I submit", or "automate App Store Connect". Works for any app given an App Store Connect API key, an app id and a config file. Hands focused work to app-store-preflight, app-store-screenshot-upload, app-store-age-rating, app-store-subscriptions, app-store-testflight, app-store-rejection, app-store-customer-reviews and ios-code-signing.
 license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com. Needs an App Store Connect API key with the App Manager role. git is used once to fetch the CLI when the skill runs outside a checkout.
 metadata:
   author: Furkan Beydemir
-  version: "3.2.0"
+  version: "4.0.0"
+  guidelines: "2026-06-08"
 ---
 
 # App Store Release
 
 > **You say:** _"Publish my app for review."_ · _"Why can't I submit this version?"_
 >
-> **It does:** Reads the app from App Store Connect, lists what blocks App Review in the order to fix it, fixes everything the API allows — build, metadata in every language, screenshots, price, age rating, subscriptions — and submits only when nothing is in the way. For the two things Apple keeps in its web UI, it gives the exact clicks.
+> **It does:** Checks the app itself for what App Review rejects, reads it from App Store Connect, lists what blocks review in the order to fix it, fixes everything the API allows — build, metadata in every language, screenshots, price, age rating, subscriptions — and submits only when nothing is in the way. For what Apple keeps in its web UI, it gives the exact clicks.
 
-Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — the App Privacy questionnaire, and submitting an app's first subscription or in-app purchase.
+Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — the App Privacy questionnaire, and, if App Store Connect refuses it by API, an app's first subscription or in-app purchase.
 
 ## Operating principle
 
@@ -55,12 +56,22 @@ No config yet? `asc init` writes `appstore.config.json` with a `$schema`; fill i
 
 ## Runbook
 
+### 0. Preflight the app itself
+
+```bash
+asc preflight   # offline, no credentials: Info.plist, privacy manifest, code
+```
+
+Permission texts, required-reason codes, account deletion, Sign in with Apple, restore purchases — the rejections that live in the app, not the listing. Anything certain to be rejected needs a code change and a new build, so do this before building. Details: **app-store-preflight**.
+
 ### 1. Orient
 
 ```bash
 asc doctor      # credentials, openssl, config — touches no app data
 asc check       # the verdict and the ordered plan
 ```
+
+`check` includes the preflight findings as its first section, **App**.
 
 `verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `approved`, `rejected`, `live`. Exit codes: `0` ready · `4` blocked but fixable by this tool · `5` only a human in App Store Connect can finish · `8` still in review after `check --wait`.
 
@@ -70,13 +81,14 @@ Work through `nextActions` in order. When a finding belongs to a focused area, l
 
 | Finding ids / situation                                                | Skill or reference                                                       |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `screenshots.*`, "make screenshots", iPhone Duo, iPad sizes            | **asc-screenshots**                                                      |
-| `rating.*`, "what age rating", social media / loot box answers         | **asc-age-rating**                                                       |
-| `subscription.*`, `iap.*`, plans, free trials, lifetime unlock         | **asc-subscriptions**                                                    |
-| "send it to TestFlight", testers, beta groups, What to Test            | **asc-testflight**                                                       |
-| "reply to reviews", bad reviews, "what are people saying"              | **asc-reviews**                                                          |
-| verdict `rejected`, `submission.rejected`, "Apple rejected it"         | **asc-rejection**                                                        |
-| `version.build.*` with an EAS signing error, expired profile           | **asc-credentials**                                                      |
+| `app.*`, "will Apple reject it", permission texts, privacy manifest    | **app-store-preflight**                                                  |
+| `screenshots.*`, "make screenshots", iPhone Duo, iPad sizes            | **app-store-screenshot-upload**                                          |
+| `rating.*`, "what age rating", social media / loot box answers         | **app-store-age-rating**                                                 |
+| `subscription.*`, `iap.*`, plans, free trials, lifetime unlock         | **app-store-subscriptions**                                              |
+| "send it to TestFlight", testers, beta groups, What to Test            | **app-store-testflight**                                                 |
+| "reply to reviews", bad reviews, "what are people saying"              | **app-store-customer-reviews**                                           |
+| verdict `rejected`, `submission.rejected`, "Apple rejected it"         | **app-store-rejection**                                                  |
+| `version.build.*` with an EAS signing error, expired profile           | **ios-code-signing**                                                     |
 | `metadata.*`, `config.*.emoji`, `.too-long`, `.placeholder`, `.wasted` | [references/metadata.md](references/metadata.md)                         |
 | `account.credentials.*`, `config.missing`                              | [references/setup.md](references/setup.md)                               |
 | any 409 you do not recognise                                           | [references/gotchas.md](references/gotchas.md) — read it before guessing |
@@ -102,7 +114,7 @@ eas submit -p ios --profile production --id <buildId>
 asc attach-build                   # newest VALID build; or --build <number>
 ```
 
-Signing failures (_"Provisioning Profile has expired"_, _"No certificate exists with serial…"_) belong to **asc-credentials**. Builds made with the iOS 27 SDK must ship a launch screen (`UILaunchScreen` or a launch storyboard) and adopt the scene lifecycle, or Apple rejects them; from April 2027 every upload must be built with Xcode 27.
+Signing failures (_"Provisioning Profile has expired"_, _"No certificate exists with serial…"_) belong to **ios-code-signing**. Builds made with the iOS 27 SDK must ship a launch screen (`UILaunchScreen` or a launch storyboard) and adopt the scene lifecycle, or Apple rejects them; from April 2027 every upload must be built with Xcode 27.
 
 ### 5. Fill the listing
 
@@ -112,6 +124,8 @@ asc release              # apply it, then a fresh check
 ```
 
 `release` runs attach-build, metadata, pricing, content-rights, age-rating, category, review-info, release-options, screenshots, subscription and in-app-purchases — each one idempotent, each skipped when the config says nothing about it. Run any of them alone by name.
+
+**Notes for the reviewer.** `asc review-info --draft-notes` drafts them — sign-in, how to reach the main feature, the permissions and what they are for, the products — from the config and the app. It writes nothing. Show the draft to the user, fill in what it leaves in parentheses, put the result in `review.notes`, then `asc review-info`. `check` warns `review.demo.likely-needed` when the app has sign-in and App Review has no way in.
 
 Screenshots from a generator? Point `"screenshots": { "from": "./exports" }` at its output folder: every PNG is grouped into device sets by pixel size.
 
@@ -125,7 +139,7 @@ Screenshots from a generator? Point `"screenshots": { "from": "./exports" }` at 
 
 The API cannot verify this flag — only set it when the user confirms. If Publish is greyed out, see "NSUserTracking conflict" in [references/gotchas.md](references/gotchas.md#app-privacy-ui-only).
 
-**The app's first subscription** (`subscription.first.ui-only`). Apple requires an app's first subscription to go to review together with the version, from the website. `check` gives the clicks: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Once one subscription has been approved, later ones are submitted by `asc submit`.
+**Nothing else**, unless App Store Connect refuses a first product. **The app's first subscription or in-app purchase** (`subscription.first.with-version`, INFO). It goes to review with the version, and `asc submit` sends it by API in the same submission. If App Store Connect refuses, `submit` exits 5 with nothing submitted and the clicks: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Relay them — or, if the user prefers, `asc submit --submit --skip-products` sends the app alone and the products wait for the next version.
 
 ### 7. Submit
 
@@ -134,15 +148,15 @@ asc check
 asc submit --submit
 ```
 
-**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. A configured subscription is submitted together with the version when the app already has an approved one; a first subscription is submitted from the website (step 6). If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`.
+**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. Configured subscriptions and in-app purchases are submitted together with the version, first ones included (step 6). Show the user the list from `asc submit --submit --dry-run` before the real one. If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`. A queued submission is not an approval: report what you can verify, nothing more.
 
 To follow the review: `asc check --wait 30` re-checks while the version is in review (exit `0` approved, `5` rejected, `8` still waiting). Review usually takes hours — prefer checking again later over waiting long.
 
-On rejection, switch to **asc-rejection**: the fix, then `asc submit --submit --resolved`.
+On rejection, switch to **app-store-rejection**: the fix, then `asc submit --submit --resolved`.
 
 ## MCP
 
-The same core is an MCP server (`asc mcp`, 13 tools). Start with `asc_readiness_report`; every mutating tool needs `confirm: true`, and `asc_submit_for_review` refuses unless the report is `ready`.
+The same core is an MCP server (`asc mcp`, 13 tools). Start with `asc_readiness_report`; `asc_validate_config` with `preflight: true` checks the app offline. Every mutating tool needs `confirm: true`, and `asc_submit_for_review` refuses unless the report is `ready`. In `nextActions`, `mutates: true` marks a command that writes to App Store Connect — ask before running it.
 
 ## References
 
@@ -150,4 +164,6 @@ The same core is an MCP server (`asc mcp`, 13 tools). Start with `asc_readiness_
 - [references/metadata.md](references/metadata.md) — fields, limits, locales, what Apple rejects.
 - [references/gotchas.md](references/gotchas.md) — every pitfall hit in practice, with exact error text.
 - [references/config-template.json](references/config-template.json) — a complete config, validated against the published schema.
-- [references/screenshots.md](references/screenshots.md) — screenshot essentials (full guide in **asc-screenshots**).
+- [references/screenshots.md](references/screenshots.md) — screenshot essentials (full guide in **app-store-screenshot-upload**).
+
+_Checked against the App Store Review Guidelines of June 8, 2026._

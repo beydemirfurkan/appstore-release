@@ -7,8 +7,8 @@
 // in-app purchase *version*. The App Review screenshot still attaches to the
 // product itself (v1), which Apple documents as unchanged.
 //
-// An app's FIRST in-app purchase goes to review from the website with the
-// binary; later ones are submitted by `submit`.
+// Submitting is submit's job, the app's first in-app purchase included (see
+// submit.mjs for what happens if App Store Connect will not take it by API).
 import { Status } from "../core/status.mjs";
 import { AssetUploader } from "../asc/assets.mjs";
 import { nearestPricePoint } from "../core/price.mjs";

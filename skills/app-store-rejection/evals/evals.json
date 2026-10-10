@@ -1,0 +1,15 @@
+[
+  { "prompt": "Apple rejected my app under guideline 2.1 — what now?", "expects": ["asc check"] },
+  {
+    "prompt": "Metadata rejected for keywords. I fixed the config; resubmit.",
+    "expects": ["asc release --dry-run", "asc release", "asc submit --submit --resolved"]
+  },
+  {
+    "prompt": "Rejected for missing account deletion. I added it in build 44.",
+    "expects": ["asc preflight", "asc attach-build --build 44", "asc submit --submit --resolved"]
+  },
+  {
+    "prompt": "Help me write the reply to App Review in Resolution Center.",
+    "expects": ["UNDERSTANDING", "CHANGES MADE", "HOW TO VERIFY"]
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Pantry",
+    "slug": "pantry",
+    "plugins": ["expo-camera"],
+    "ios": {
+      "bundleIdentifier": "com.example.pantry",
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.9"]
+          }
+        ]
+      }
+    }
+  }
+}

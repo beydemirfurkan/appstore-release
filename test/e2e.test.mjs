@@ -194,40 +194,156 @@ test("screenshots.from takes any export folder and sorts it into device sets by 
   assert.equal(fake.mutations().length, writes, "and a second run sends nothing");
 });
 
-test("an app's first subscription stops at needs-human with the clicks, as Apple requires", async () => {
-  const root = mkdtempSync(join(tmpdir(), "asr-e2e-first-"));
-  writeWellnessProject(root);
-  const fake = createFakeAsc({ firstSubscription: true });
-  const env = {
-    ASC_KEY_ID: "ABCDE12345",
-    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
-    ASC_P8: testPrivateKey(),
-    ASC_APP_ID: "1234567890",
-  };
-  const run = async (/** @type {string[]} */ ...argv) => {
-    const out = [];
-    const io = {
-      stdout: { write: (s) => out.push(s) },
-      stderr: { write: () => {} },
-      env,
-      cwd: root,
-      fetchImpl: fake.fetchImpl,
-    };
-    return { code: await main([...argv, "--json"], io), json: JSON.parse(out.join("")) };
-  };
+/** The wellness project with a first subscription, against a fake with the given options. */
+async function firstSubscriptionProject(/** @type {Record<string, any>} */ options = {}) {
+  return productsProject({ firstSubscription: true, ...options }, (config) => config);
+}
 
+const productItems = (/** @type {any} */ fake) =>
+  fake
+    .all("reviewSubmissionItems")
+    .filter(
+      (/** @type {any} */ i) => i.relationships?.subscriptionVersion || i.relationships?.subscriptionGroupVersion,
+    );
+
+test("an app's first subscription goes to review with the version, by API", async () => {
+  const { fake, run } = await firstSubscriptionProject();
   const release = await run("release");
-  assert.equal(verdictOf(release.json), "needs-human");
-  assert.equal(release.code, Exit.NEEDS_HUMAN);
-  const first = release.json.findings.find((f) => f.id === "subscription.first.ui-only");
-  assert.ok(first?.fixClicks?.includes("Add for Review"));
+  assert.equal(verdictOf(release.json), "ready");
+  assert.ok(release.json.findings.some((f) => f.id === "subscription.first.with-version" && f.severity === "info"));
 
-  // Forced through, the version goes alone: the first subscription is never added by API.
-  await run("submit", "--submit", "--force");
-  assert.equal(
-    fake.all("reviewSubmissionItems").some((i) => i.relationships?.subscriptionVersion),
-    false,
+  const planned = await run("submit", "--submit", "--dry-run");
+  assert.match(
+    planned.json.results[0].message,
+    /^would submit: v1\.0 \+ subscription group \+ com\.example\.wellness\.monthly$/,
   );
+
+  const sent = await run("submit", "--submit");
+  assert.equal(sent.code, Exit.OK, JSON.stringify(sent.json.results, null, 2));
+  assert.equal(productItems(fake).length, 2, "the group and the plan, beside the version");
+  assert.deepEqual(sent.json.results[0].details.handoff.follow, "appstore-release check --wait 30");
+  assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
+  assert.deepEqual(fake.unhandled, []);
+});
+
+for (const policy of /** @type {const} */ (["refuse", "refuse-on-submit"])) {
+  test(`a first subscription App Store Connect will not take (${policy}): nothing submitted, items removed, clicks shown`, async () => {
+    const { fake, run } = await firstSubscriptionProject({ firstProductPolicy: policy });
+    await run("release");
+    const refused = await run("submit", "--submit");
+    assert.equal(refused.code, Exit.NEEDS_HUMAN);
+    const result = refused.json.results[0];
+    assert.equal(result.status, "manual");
+    assert.match(result.message, /Nothing was submitted/);
+    assert.match(result.message, /must be submitted with an app version/, "Apple's own words are kept");
+    const clicks = refused.json.findings.find((f) => f.id === "product.first.refused.com.example.wellness.monthly");
+    assert.equal(clicks?.uiOnly, true);
+    assert.ok(clicks?.fixClicks?.includes("Add for Review"));
+
+    assert.equal(productItems(fake).length, 0, "the product items are taken back out");
+    assert.equal(fake.all("reviewSubmissions")[0].attributes.state, "READY_FOR_REVIEW", "never submitted");
+    assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "PREPARE_FOR_SUBMISSION");
+
+    // The way out that needs no website: the app alone.
+    const alone = await run("submit", "--submit", "--skip-products");
+    assert.equal(alone.code, Exit.OK, JSON.stringify(alone.json.results, null, 2));
+    assert.match(alone.json.results[0].message, /products left out \(--skip-products\)/);
+    assert.equal(productItems(fake).length, 0);
+    assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
+    assert.deepEqual(fake.unhandled, []);
+  });
+}
+
+test("a refusal about the app itself keeps the draft and says what to do", async () => {
+  const { fake, run } = await firstSubscriptionProject({ appPrivacyPublished: false });
+  await run("release");
+  const refused = await run("submit", "--submit");
+  assert.equal(refused.code, Exit.BLOCKED);
+  assert.equal(refused.json.results[0].status, "error");
+  assert.match(refused.json.results[0].message, /published answers to your app's data usages/);
+  const privacy = refused.json.findings.find((f) => f.id === "refusal.app-privacy");
+  assert.equal(privacy?.uiOnly, true);
+  assert.ok(privacy?.fixClicks?.includes("App Privacy"));
+  assert.equal(productItems(fake).length, 2, "products are not to blame, so they stay in the draft");
+});
+
+test("--skip-products takes out product items an earlier run left in the draft", async () => {
+  const { fake, run } = await firstSubscriptionProject();
+  await run("release");
+  await run("submit"); // prepares the draft, products included
+  assert.equal(productItems(fake).length, 2);
+
+  const alone = await run("submit", "--submit", "--skip-products");
+  assert.equal(alone.code, Exit.OK, JSON.stringify(alone.json.results, null, 2));
+  assert.equal(productItems(fake).length, 0, "nothing but the version goes to review");
+  assert.equal(fake.all("reviewSubmissions")[0].attributes.state, "WAITING_FOR_REVIEW");
+});
+
+test("a refused later product is its own problem, not the first subscription's", async () => {
+  const { fake, run } = await productsProject(
+    { firstSubscription: true, approvedPurchase: true, refuseProductIds: ["com.example.wellness.lifetime"] },
+    (config) => ({
+      ...config,
+      inAppPurchases: [
+        {
+          productId: "com.example.wellness.lifetime",
+          name: "Lifetime",
+          localeName: "Lifetime access",
+          priceAmount: 49.99,
+          reviewScreenshot: "./assets/paywall-1320x2868.png",
+        },
+      ],
+    }),
+  );
+  await run("release");
+  const refused = await run("submit", "--submit");
+  const result = refused.json.results[0];
+  assert.equal(result.status, "error", result.message);
+  assert.match(result.message, /lifetime is missing its review screenshot/);
+  assert.equal(
+    refused.json.findings.some((f) => f.id.startsWith("product.first.refused")),
+    false,
+    "the first subscription was not what App Store Connect refused",
+  );
+  assert.equal(fake.all("reviewSubmissionItems").filter((i) => !i.relationships?.appStoreVersion).length, 0);
+  assert.equal(fake.all("reviewSubmissions")[0].attributes.state, "READY_FOR_REVIEW");
+});
+
+test("a refusal about both the app and a first product keeps both, and does not offer the app alone", async () => {
+  const { run } = await firstSubscriptionProject({
+    appPrivacyPublished: false,
+    firstProductPolicy: "refuse-on-submit",
+  });
+  await run("release");
+  const refused = await run("submit", "--submit");
+  const result = refused.json.results[0];
+  assert.equal(result.status, "manual");
+  assert.ok(
+    refused.json.findings.some((f) => f.id === "refusal.app-privacy"),
+    "App Privacy is not lost",
+  );
+  assert.ok(refused.json.findings.some((f) => f.id === "product.first.refused.com.example.wellness.monthly"));
+  assert.doesNotMatch(result.message, /--skip-products/, "the app alone would be refused too");
+});
+
+test("review-info --draft-notes needs no App Review contact details", async () => {
+  const { run } = await productsProject({}, ({ review, ...config }) => config);
+  const drafted = await run("review-info", "--draft-notes");
+  assert.equal(drafted.code, Exit.OK, JSON.stringify(drafted.json.results, null, 2));
+  assert.match(drafted.json.results[0].details.notes, /^Sign-in\n/);
+  const write = await run("review-info");
+  assert.equal(write.json.results[0].status, "error");
+  assert.match(write.json.results[0].message, /review\.contactFirstName/);
+});
+
+test("review-info --draft-notes drafts from the config and the app, and writes nothing", async () => {
+  const { fake, run } = await firstSubscriptionProject();
+  const drafted = await run("review-info", "--draft-notes");
+  assert.equal(drafted.code, Exit.OK);
+  const { notes } = drafted.json.results[0].details;
+  assert.match(notes, /^Sign-in\n/);
+  assert.match(notes, /In-app purchases\n- .*com\.example\.wellness\.monthly/);
+  assert.deepEqual(fake.mutations(), []);
 });
 
 test("an Expo project's store.config.json, eas.json and app.json are used as they are", async () => {
@@ -391,8 +507,8 @@ test("several plans, a free trial and a lifetime purchase: created, completed, s
   assert.equal(items.filter((i) => i.relationships?.inAppPurchaseVersion).length, 1, "and the lifetime purchase");
 });
 
-test("an app's first in-app purchase stops at needs-human, like its first subscription", async () => {
-  const { run } = await productsProject({}, (config) => ({
+test("an app's first in-app purchase travels with the version, like its first subscription", async () => {
+  const { fake, run } = await productsProject({}, (config) => ({
     ...config,
     inAppPurchases: [
       {
@@ -405,8 +521,11 @@ test("an app's first in-app purchase stops at needs-human, like its first subscr
     ],
   }));
   const release = await run("release");
-  assert.equal(verdictOf(release.json), "needs-human");
-  assert.ok(release.json.findings.some((f) => f.id === "iap.first.ui-only" && f.uiOnly));
+  assert.equal(verdictOf(release.json), "ready");
+  assert.ok(release.json.findings.some((f) => f.id === "iap.first.with-version" && f.severity === "info"));
+  const sent = await run("submit", "--submit");
+  assert.equal(sent.code, Exit.OK, JSON.stringify(sent.json.results, null, 2));
+  assert.ok(fake.all("reviewSubmissionItems").some((i) => i.relationships?.inAppPurchaseVersion));
 });
 
 test("rejected → fixed → resubmitted: the same submission goes back, its items marked resolved", async () => {

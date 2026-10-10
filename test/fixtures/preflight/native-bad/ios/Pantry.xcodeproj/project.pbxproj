@@ -1,0 +1,15 @@
+// !$*UTF8*$!
+{
+	objects = {
+		A1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				INFOPLIST_KEY_CFBundleDisplayName = Pantry;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.pantry;
+			};
+			name = Release;
+		};
+	};
+}

@@ -3,9 +3,8 @@
 // for READY_TO_SUBMIT: group and subscription localizations, a price, the App
 // Review paywall screenshot, and an introductory offer when one is configured.
 //
-// Submitting is submit's job. An app's FIRST subscription goes to review from the
-// App Store Connect website together with the binary, as Apple requires; later
-// ones are submitted by API (see submit.mjs).
+// Submitting is submit's job, the app's first subscription included (see
+// submit.mjs for what happens if App Store Connect will not take it by API).
 import { Status } from "../core/status.mjs";
 import { AssetUploader } from "../asc/assets.mjs";
 import { nearestPricePoint } from "../core/price.mjs";

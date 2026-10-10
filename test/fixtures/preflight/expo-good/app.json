@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "Pantry",
+    "slug": "pantry",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Scan the barcode on a product to add it to your pantry list.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.example.pantry",
+      "config": { "usesNonExemptEncryption": false },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ]
+      }
+    }
+  }
+}

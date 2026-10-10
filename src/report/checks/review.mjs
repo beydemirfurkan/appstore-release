@@ -3,6 +3,7 @@
 
 import { versionState, APPROVED_STATES } from "../../core/status.mjs";
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
+import { APP_PRIVACY_CLICKS } from "../../asc/refusals.mjs";
 
 export const section = { id: "review", title: "Review and submission" };
 
@@ -43,7 +44,7 @@ function privacyFinding(config) {
     fix: attested
       ? "Nothing, if the label is published."
       : 'Declare the data types matching the app\'s privacy manifest, press Publish, then set "review": { "privacyPublished": true }.',
-    fixClicks: ["App Store Connect", "your app", "App Privacy", "Get Started / Edit", "Publish"],
+    fixClicks: APP_PRIVACY_CLICKS,
     docs: "references/gotchas.md#app-privacy-ui-only",
   });
 }
@@ -77,6 +78,33 @@ export function check({ snapshot, config }) {
         detail: "demoAccountRequired is true with no credentials, which reviewers reject immediately.",
         fix: "Set review.demoAccountName and review.demoAccountPassword, or set demoAccountRequired to false.",
         fixCommand: "appstore-release review-info",
+      }),
+    );
+  }
+
+  // Guideline 2.1: a reviewer who cannot get past the sign-in screen rejects the
+  // app. Preflight saw sign-in; nothing says how the reviewer gets in.
+  const notes = `${config?.review?.notes ?? ""} ${detail?.attributes?.notes ?? ""}`;
+  if (
+    snapshot.preflight?.signals?.signIn &&
+    !config?.review?.demoAccountName &&
+    !detail?.attributes?.demoAccountName &&
+    !/demo|no (login|sign[- ]?in|account)|without (an )?account/i.test(notes)
+  ) {
+    out.push(
+      finding({
+        id: "review.demo.likely-needed",
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: "The app has sign-in, but App Review has no demo account",
+        detail:
+          "Preflight found sign-in in the app. Guideline 2.1: reviewers need a working demo account, or notes " +
+          "saying every feature is usable without one; otherwise the app is rejected for incomplete information.",
+        fixOwner: FixOwner.CLI,
+        fix:
+          "Set review.demoAccountName and review.demoAccountPassword (or say in review.notes that no account is " +
+          "needed), then run review-info. `review-info --draft-notes` drafts the notes.",
+        guideline: "2.1",
       }),
     );
   }

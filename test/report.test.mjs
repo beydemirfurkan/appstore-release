@@ -6,6 +6,8 @@ import { getAppSnapshot } from "../src/report/snapshot.mjs";
 import { createContext } from "../src/core/context.mjs";
 import { runOperation } from "../src/index.mjs";
 import { Severity } from "../src/core/findings.mjs";
+import { isFirstVersion } from "../src/core/status.mjs";
+import { renderReportMarkdown } from "../src/report/render.mjs";
 import { createMockAsc, readyToPrepareRoutes, testCredentials } from "./helpers/mock-asc.mjs";
 
 /** A snapshot with everything in order; each test spoils one thing. */
@@ -42,7 +44,13 @@ function healthySnapshot(overrides = {}) {
       {
         id: "l1",
         detailed: true,
-        attributes: { locale: "en-US", description: "d", keywords: "k", supportUrl: "https://e.com" },
+        attributes: {
+          locale: "en-US",
+          description: "d",
+          keywords: "k",
+          supportUrl: "https://e.com",
+          whatsNew: "Fixes",
+        },
       },
     ],
     screenshotSets: [
@@ -178,22 +186,24 @@ test("reserved-but-uncommitted screenshots are reported, not counted as present"
   assert.ok(ids(report).includes("screenshots.upload.incomplete"));
 });
 
-test("a first subscription goes through App Store Connect; a later one travels with the version", () => {
+test("a first subscription travels with the version too, and says what happens if Apple refuses", () => {
   const config = {
     locale: "en-US",
     subscription: { productId: "com.example.pro" },
     review: { privacyPublished: true },
   };
 
-  // Apple: the app's FIRST subscription is submitted with the binary from the website.
+  // The app's FIRST subscription goes in the same submission; the clicks are the fallback.
   const first = buildReport({
     snapshot: healthySnapshot({ subscriptions: [{ id: "s", productId: "com.example.pro", state: "READY_TO_SUBMIT" }] }),
     config,
   });
-  const uiOnly = first.findings.find((f) => f.id === "subscription.first.ui-only");
-  assert.equal(uiOnly?.uiOnly, true);
-  assert.equal(uiOnly?.severity, "blocker");
-  assert.equal(first.verdict, "needs-human");
+  const withVersion = first.findings.find((f) => f.id === "subscription.first.with-version");
+  assert.equal(withVersion?.severity, "info");
+  assert.equal(withVersion?.uiOnly, false);
+  assert.ok(withVersion?.fixClicks?.includes("Add for Review"));
+  assert.match(withVersion?.fix ?? "", /--skip-products/);
+  assert.equal(first.verdict, "ready");
 
   // With an approved plan already on sale, a new one is submitted by API.
   const later = buildReport({
@@ -206,7 +216,7 @@ test("a first subscription goes through App Store Connect; a later one travels w
     config,
   });
   assert.equal(
-    later.findings.find((f) => f.id === "subscription.first.ui-only"),
+    later.findings.find((f) => f.id === "subscription.first.with-version"),
     undefined,
   );
   assert.equal(later.findings.find((f) => f.id === "subscription.ready-to-submit")?.severity, "info");
@@ -328,4 +338,85 @@ test("colour is on for a terminal, off for pipes, and NO_COLOR / FORCE_COLOR win
   assert.equal(createStyle({ isTTY: true }, { NO_COLOR: "" }).enabled, false);
   assert.equal(createStyle({ isTTY: false }, { FORCE_COLOR: "1" }).enabled, true);
   assert.equal(createStyle({ isTTY: true }, { FORCE_COLOR: "0" }).enabled, true);
+});
+
+test("an update must say what changed in every locale; a first version must not", () => {
+  const noWhatsNew = [
+    {
+      id: "l1",
+      detailed: true,
+      attributes: { locale: "en-US", description: "d", keywords: "k", supportUrl: "https://e.com" },
+    },
+  ];
+  const update = buildReport({ snapshot: healthySnapshot({ localizations: noWhatsNew }), config: { locale: "en-US" } });
+  const f = update.findings.find((x) => x.id === "metadata.whatsNew.missing");
+  assert.equal(f?.severity, Severity.BLOCKER);
+  assert.equal(f?.fixCommand, "appstore-release metadata");
+
+  const first = buildReport({
+    snapshot: healthySnapshot({
+      localizations: noWhatsNew,
+      versions: [{ id: "v1", attributes: { versionString: "1.1", appStoreState: "PREPARE_FOR_SUBMISSION" } }],
+    }),
+    config: { locale: "en-US" },
+  });
+  assert.equal(
+    first.findings.some((x) => x.id === "metadata.whatsNew.missing"),
+    false,
+  );
+});
+
+test("isFirstVersion: no other version on the same platform, whatever the number says", () => {
+  const v = (id, platform) => ({ id, attributes: { versionString: "1.0", platform } });
+  assert.equal(isFirstVersion([v("a", "IOS")], v("a", "IOS")), true);
+  assert.equal(isFirstVersion([v("a", "IOS"), v("b", "IOS")], v("a", "IOS")), false);
+  // A Mac version of the same app does not make the iOS one an update.
+  assert.equal(isFirstVersion([v("a", "IOS"), v("m", "MAC_OS")], v("a", "IOS")), true);
+  assert.equal(isFirstVersion([], null), false);
+});
+
+test("a subscription needs a Terms of Use link, unless a custom EULA is set or nothing is known", () => {
+  const config = (description) => ({
+    locale: "en-US",
+    metadata: { description },
+    subscription: { productId: "pro", name: "Pro", period: "ONE_MONTH" },
+  });
+  const terms = (snapshot, cfg) =>
+    buildReport({ snapshot: healthySnapshot(snapshot), config: cfg }).findings.find(
+      (x) => x.id === "subscription.terms-link.missing",
+    );
+
+  const missing = terms({ eula: { custom: false } }, config("Plan your meals."));
+  assert.equal(missing?.severity, Severity.WARNING);
+  assert.equal(missing?.guideline, "3.1.2");
+
+  const standard = "Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
+  assert.equal(terms({ eula: { custom: false } }, config(`Plan your meals.\n${standard}`)), undefined);
+  assert.equal(terms({ eula: { custom: false } }, config("Terms of Use: https://example.com/terms")), undefined);
+  assert.equal(terms({ eula: { custom: true } }, config("Plan your meals.")), undefined);
+  assert.equal(terms({ eula: null }, config("Plan your meals.")), undefined, "unknown is not missing");
+});
+
+test("next actions say which commands write to App Store Connect", () => {
+  const report = buildReport({
+    snapshot: healthySnapshot({ pricing: { hasSchedule: false } }),
+    config: { locale: "en-US" },
+  });
+  const pricing = report.nextActions.find((a) => a.command === "appstore-release pricing");
+  assert.equal(pricing?.mutates, true);
+  assert.match(renderReportMarkdown(report), /`appstore-release pricing` \(writes to App Store Connect\)/);
+});
+
+test("sign-in without a demo account or a word about it in the notes is a warning", () => {
+  const signals = { signIn: true, logins: [], purchases: false, permissions: [] };
+  const demo = (/** @type {any} */ config, /** @type {any} */ preflight = { findings: [], signals }) =>
+    buildReport({ snapshot: healthySnapshot({ preflight }), config: { locale: "en-US", ...config } }).findings.find(
+      (f) => f.id === "review.demo.likely-needed",
+    );
+  assert.equal(demo({})?.severity, Severity.WARNING);
+  assert.equal(demo({})?.guideline, "2.1");
+  assert.equal(demo({ review: { demoAccountName: "review@example.com" } }), undefined);
+  assert.equal(demo({ review: { notes: "No login is needed: every feature works offline." } }), undefined);
+  assert.equal(demo({}, { findings: [], signals: { ...signals, signIn: false } }), undefined);
+  assert.equal(demo({}, null), undefined, "no preflight, no guess");
 });

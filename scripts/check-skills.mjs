@@ -10,10 +10,68 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { OPERATIONS } from "../src/ops/registry.mjs";
+import { GLOBAL_FLAGS, LOCAL_COMMANDS, kebab } from "../src/cli/args.mjs";
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 export const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 export const LIMITS = Object.freeze({ name: 64, description: 1024, compatibility: 500, lines: 500, softLines: 200 });
+/** The App Store Review Guidelines revision the skills were checked against. */
+export const GUIDELINES = "2026-06-08";
+export const GUIDELINES_STAMP = "_Checked against the App Store Review Guidelines of June 8, 2026._";
+export const MIN_EVALS = 3;
+
+/** Every command the CLI accepts, with the flags it takes (kebab-case, globals included). */
+export function cliSurface() {
+  const globals = Object.keys(GLOBAL_FLAGS);
+  /** @type {Map<string, Set<string>>} */
+  const out = new Map();
+  for (const [id, op] of Object.entries(OPERATIONS)) {
+    out.set(id, new Set([...globals, ...Object.keys(op.meta.args ?? {}).map(kebab)]));
+  }
+  for (const [id, flags] of Object.entries(LOCAL_COMMANDS)) out.set(id, new Set([...globals, ...Object.keys(flags)]));
+  return out;
+}
+
+/**
+ * Every `asc <command> --flag …` in a document's code — fenced blocks and inline
+ * code — that names a command or a flag the CLI does not have. Prose is left
+ * alone: only what an agent would copy and run is held to the CLI.
+ *
+ * @param {string} md
+ * @param {Map<string, Set<string>>} surface
+ * @returns {string[]}
+ */
+export function unknownCommands(md, surface) {
+  const code = [
+    ...[...md.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].flatMap((m) => m[1].split("\n")),
+    ...[...md.replace(/```[\s\S]*?```/g, "").matchAll(/`([^`\n]+)`/g)].map((m) => m[1]),
+  ];
+  return code.flatMap((line) => commandProblems(line, surface));
+}
+
+/** @param {string} line @param {Map<string, Set<string>>} surface */
+export function commandProblems(line, surface) {
+  const problems = [];
+  // Quoted arguments may contain anything, flags included; they are values.
+  const bare = line.replace(/"(?:[^"\\]|\\.)*"|'[^']*'/g, '""');
+  // A command's flags run until the next separator, arrow or `asc`.
+  for (const m of bare.matchAll(/(?:^|[\s;&|(])asc\s+([a-z][a-z0-9-]*)((?:(?!\basc\s)[^;&|#→])*)/g)) {
+    const [, command, rest] = m;
+    const flags = surface.get(command);
+    if (!flags) {
+      problems.push(`\`asc ${command}\` is not a command`);
+      continue;
+    }
+    for (const f of rest.matchAll(/(?:^|\s)--([a-z][a-z0-9-]*)/g)) {
+      // `--no-<flag>` turns a boolean flag off.
+      const name = flags.has(f[1]) ? f[1] : f[1].replace(/^no-/, "");
+      if (!flags.has(name)) problems.push(`\`asc ${command} --${f[1]}\`: no such flag`);
+    }
+  }
+  return problems;
+}
 
 /**
  * The subset of YAML that skill frontmatter uses: `key: value` scalars and one
@@ -86,6 +144,7 @@ export function relativeLinks(md) {
 export function checkSkills(root = ROOT) {
   const errors = [];
   const warnings = [];
+  const surface = cliSurface();
   const skillsDir = join(root, "skills");
   const skills = readdirSync(skillsDir).filter((d) => statSync(join(skillsDir, d)).isDirectory());
 
@@ -125,6 +184,48 @@ export function checkSkills(root = ROOT) {
       errors.push(at("metadata must be a map of strings"));
     }
 
+    if (data.metadata?.guidelines !== GUIDELINES) {
+      errors.push(at(`metadata.guidelines must be "${GUIDELINES}", the guidelines revision it was checked against`));
+    }
+    if (!fm.body.includes(GUIDELINES_STAMP)) errors.push(at(`the body must end with the stamp: ${GUIDELINES_STAMP}`));
+    // The first screen of every skill says what to say and what happens.
+    if (!/> \*\*You say:\*\*/.test(fm.body) || !/> \*\*It does:\*\*/.test(fm.body)) {
+      errors.push(at('needs the "> **You say:**" and "> **It does:**" block under the title'));
+    }
+
+    // Evals: prompts that should trigger the skill, and what an agent should run.
+    const evalsPath = join(dir, "evals", "evals.json");
+    if (!existsSync(evalsPath)) errors.push(at("evals/evals.json is missing"));
+    else {
+      let evals;
+      try {
+        evals = JSON.parse(readFileSync(evalsPath, "utf8"));
+      } catch (e) {
+        errors.push(at(`evals/evals.json is not JSON: ${e instanceof Error ? e.message : e}`));
+      }
+      if (evals !== undefined) {
+        const valid =
+          Array.isArray(evals) &&
+          evals.every(
+            (x) =>
+              typeof x?.prompt === "string" &&
+              x.prompt.trim() &&
+              Array.isArray(x.expects) &&
+              x.expects.length &&
+              x.expects.every((/** @type {unknown} */ e) => typeof e === "string" && e.trim()),
+          );
+        if (!valid) errors.push(at('evals/evals.json must be [{ "prompt": "…", "expects": ["…"] }, …]'));
+        else if (evals.length < MIN_EVALS) errors.push(at(`evals/evals.json needs at least ${MIN_EVALS} prompts`));
+        else {
+          for (const x of evals) {
+            for (const e of x.expects) {
+              for (const p of commandProblems(e, surface)) errors.push(at(`evals: ${p}`));
+            }
+          }
+        }
+      }
+    }
+
     const lines = source.split("\n").length;
     if (lines >= LIMITS.lines) errors.push(at(`SKILL.md is ${lines} lines; the spec asks for under ${LIMITS.lines}`));
     else if (lines > LIMITS.softLines) warnings.push(at(`SKILL.md is ${lines} lines; move detail into references/`));
@@ -133,6 +234,7 @@ export function checkSkills(root = ROOT) {
     // directory alone, so a link to a sibling skill or the repo is a dead link.
     const docs = [skillPath, ...listFiles(join(dir, "references")).filter((f) => f.endsWith(".md"))];
     for (const doc of docs) {
+      for (const p of unknownCommands(readFileSync(doc, "utf8"), surface)) errors.push(`${relative(root, doc)}: ${p}`);
       for (const target of relativeLinks(readFileSync(doc, "utf8"))) {
         const abs = resolve(dirname(doc), decodeURIComponent(target));
         const where = relative(root, doc);

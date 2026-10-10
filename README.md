@@ -37,13 +37,15 @@ The demo runs against a local stand-in for App Store Connect, so nothing leaves 
 
 ## How it works
 
+**`preflight`** reads the app itself — Info.plist, privacy manifest, code — offline, and names what App Review rejects before you build: a permission prompt with no reason, accounts that cannot be deleted, a paywall with no restore. Each finding has the guideline, the file and line, and the fix.
+
 **`check`** reads the whole app and returns a verdict with an ordered plan. Each finding says whether the tool can fix it or only you can.
 
 **`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscriptions and in-app purchases. It is idempotent; a second run sends nothing.
 
 **`submit`** sends the version with any new plans and purchases, and refuses unless `check` says ready. `check --wait` then follows the review to its outcome.
 
-Apple keeps two things in its web UI: the App Privacy label and an app's first subscription or in-app purchase. For those, `check` tells you exactly where to click.
+Apple keeps the App Privacy label in its web UI; `check` tells you exactly where to click. An app's first subscription or in-app purchase goes with the version by API — and if App Store Connect will not take it, nothing is submitted and you get the clicks instead.
 
 Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they are.
 
@@ -51,13 +53,21 @@ Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they
 
 `appstore-release` reads the plan and hands each finding to the skill that knows that area:
 
-- **asc-screenshots**: exact sizes, iPhone Duo, iPad
-- **asc-age-rating**: the 2026 questionnaire
-- **asc-subscriptions**: plans, free trials, lifetime purchases
-- **asc-rejection**: read the reviewer's message, fix, resubmit
-- **asc-credentials**: EAS certificates and provisioning profiles
-- **asc-testflight**: groups, testers, What to Test, beta review
-- **asc-reviews**: read customer reviews, draft replies, publish each after your OK
+- **app-store-preflight**: what App Review rejects in the app itself, before you submit
+- **app-store-screenshot-upload**: exact sizes, iPhone Duo, iPad
+- **app-store-age-rating**: the 2026 questionnaire
+- **app-store-subscriptions**: plans, free trials, lifetime purchases
+- **app-store-rejection**: read the reviewer's message, fix, resubmit
+- **ios-code-signing**: EAS certificates and provisioning profiles
+- **app-store-testflight**: groups, testers, What to Test, beta review
+- **app-store-customer-reviews**: read customer reviews, draft replies, publish each after your OK
+
+Coming from 3.x, where the skills were named `asc-*`? Remove the old ones, then add again:
+
+```bash
+npx skills remove asc-screenshots asc-age-rating asc-subscriptions asc-rejection asc-credentials asc-testflight asc-reviews
+npx skills add beydemirfurkan/appstore-release
+```
 
 ## Also runs as
 

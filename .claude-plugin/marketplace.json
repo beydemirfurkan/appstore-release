@@ -4,6 +4,7 @@
     "name": "Furkan Beydemir",
     "url": "https://github.com/beydemirfurkan"
   },
+  "description": "App Store Connect release automation for coding agents: one plugin with six skills and an MCP server that take an iOS app to App Review.",
   "plugins": [
     {
       "name": "appstore-release",

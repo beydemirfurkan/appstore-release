@@ -1,9 +1,9 @@
 {
-  "$schema": "https://beydemirfurkan.github.io/appstore-release/schemas/v1/config.schema.json",
+  "$schema": "https://raw.githubusercontent.com/beydemirfurkan/appstore-release/main/schemas/config.schema.json",
+  "$comment": "Every block is optional except locale and metadata; the readiness report names whatever is still missing. `locales` entries override metadata for that App Store locale and inherit the rest. `price` is the string \"free\" or an amount in a base territory; Apple only accepts its own price points, so the nearest one is chosen. Run `asc schema` for the full shape.",
   "bundleId": "com.example.app",
   "appleTeamId": "XXXXXXXXXX",
   "locale": "en-US",
-  "$comment": "For more than one App Store locale, add a \"locales\" block keyed by locale code. Each entry overrides \"metadata\"; anything it omits is inherited. Example: \"locales\": { \"en-US\": {}, \"tr\": { \"name\": \"Deneme\", \"description\": \"...\" } }",
   "metadata": {
     "name": "App Name",
     "subtitle": "Subtitle, max 30 chars",
@@ -15,24 +15,59 @@
     "promotionalText": "Promo text, max 170 chars",
     "copyright": "2026 Your Name"
   },
+  "locales": {
+    "en-US": {},
+    "tr": {
+      "name": "Uygulama Adı",
+      "description": "Türkçe açıklama. Emoji yok.",
+      "keywords": "anahtar1,anahtar2"
+    }
+  },
   "category": {
     "primary": "LIFESTYLE",
     "secondary": "REFERENCE"
   },
-  "ageRating4Plus": true,
+  "ageRating": {
+    "$comment": "Anything omitted is NONE or false. Content dimensions take NONE, INFREQUENT or FREQUENT.",
+    "medicalOrTreatmentInformation": "NONE",
+    "healthOrWellnessTopics": true,
+    "userGeneratedContent": false,
+    "messagingAndChat": false,
+    "socialMedia": false,
+    "socialMediaAgeRestricted": false,
+    "advertising": false,
+    "ageAssurance": false,
+    "override": "NONE"
+  },
   "contentRights": "DOES_NOT_USE_THIRD_PARTY_CONTENT",
-  "price": "free",
+  "price": {
+    "amount": 2.99,
+    "baseTerritory": "USA"
+  },
   "review": {
     "contactFirstName": "First",
     "contactLastName": "Last",
     "contactPhone": "+10000000000",
     "contactEmail": "you@example.com",
     "demoAccountRequired": false,
-    "notes": "The app is fully usable without an account."
+    "notes": "The app is fully usable without an account.",
+    "privacyPublished": false
+  },
+  "release": {
+    "type": "AFTER_APPROVAL",
+    "phased": true
   },
   "screenshots": {
-    "displayType": "APP_IPHONE_67",
-    "dir": "./assets/screenshots"
+    "$comment": "api: auto uses the App Asset Library (needed for iPhone Duo) and falls back to legacy screenshot sets. The device group is read from each image's size.",
+    "api": "auto",
+    "sets": [
+      {
+        "dir": "./assets/screenshots/iphone"
+      },
+      {
+        "dir": "./assets/screenshots/ipad"
+      }
+    ]
   },
   "credentials": {
     "outputDir": "./secrets"

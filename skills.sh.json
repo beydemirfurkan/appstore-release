@@ -1,0 +1,15 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "groupings": [
+    {
+      "title": "Release pipeline",
+      "description": "Take an iOS app from build to App Review over the App Store Connect API, driven by a readiness report.",
+      "skills": ["appstore-release"]
+    },
+    {
+      "title": "Focused skills",
+      "description": "One App Store Connect job each — usable alone, or handed off to by the pipeline.",
+      "skills": ["asc-screenshots", "asc-age-rating", "asc-subscriptions", "asc-rejection", "asc-credentials"]
+    }
+  ]
+}

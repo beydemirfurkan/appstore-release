@@ -53,11 +53,12 @@
     "manifests:sync": "node scripts/sync-manifests.mjs",
     "manifests:check": "node scripts/sync-manifests.mjs --check",
     "test": "node --test test/*.test.mjs",
-    "version": "npm run manifests:sync && git add .claude-plugin skills/appstore-release/SKILL.md",
+    "version": "npm run manifests:sync && git add .claude-plugin skills scripts/skill-launcher.mjs",
     "prepack": "npm run manifests:check",
     "schema:validate": "node scripts/validate-schema.mjs",
-    "verify": "npm run typecheck && npm run format:check && npm run schema:validate && npm run manifests:check && npm run check:dist && npm test",
-    "check:dist": "node scripts/check-distribution.mjs"
+    "verify": "npm run typecheck && npm run format:check && npm run schema:validate && npm run manifests:check && npm run check:dist && npm run check:skills && npm test",
+    "check:dist": "node scripts/check-distribution.mjs",
+    "check:skills": "node scripts/check-skills.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

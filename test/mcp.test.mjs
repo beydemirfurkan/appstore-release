@@ -179,11 +179,26 @@ test("screenshot pruning is opt-in for a model, unlike the CLI", async () => {
 
 // ── resources ─────────────────────────────────────────────────────────────────
 
-test("the six resources are listed and readable", async () => {
+test("every skill and the original six resources are listed and readable", async () => {
   const mcp = connect();
   const { resources } = await mcp.request("resources/list");
   assert.equal(resources.length, RESOURCES.length);
-  assert.equal(resources.length, 6);
+  for (const uri of [
+    "runbook",
+    "gotchas",
+    "config-schema",
+    "config-template",
+    "references/screenshots",
+    "references/setup",
+  ]) {
+    assert.ok(
+      resources.some((r) => r.uri === `appstore-release://${uri}`),
+      `${uri} must keep working as an alias`,
+    );
+  }
+
+  const router = await mcp.read("appstore-release://skills/appstore-release");
+  assert.match(router.contents[0].text, /^---\nname: appstore-release/);
 
   const gotchas = await mcp.read("appstore-release://gotchas");
   assert.match(gotchas.contents[0].text, /Gotchas/);

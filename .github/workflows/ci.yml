@@ -29,6 +29,8 @@ jobs:
       - run: npm run format:check
       - run: npm run schema:validate
       - run: npm run manifests:check
+      - run: npm run check:dist
+      - run: npm run check:skills
       - run: npm test
 
   secrets:
@@ -73,3 +75,8 @@ jobs:
             if (tools.length !== 11) { console.error("expected 11 tools, got " + tools.length); process.exit(1) }
             console.log("✓ " + tools.length + " tools over stdio, nothing installed");
           '
+      - name: A skill's launcher finds the CLI from a bare checkout
+        run: |
+          for skill in skills/*/; do
+            node "$skill/scripts/asc.mjs" --version
+          done

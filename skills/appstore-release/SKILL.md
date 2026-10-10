@@ -1,123 +1,139 @@
 ---
 name: appstore-release
-description: Ship an iOS app to App Store review end-to-end via the App Store Connect API — build attach, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions, and the review submission. Use when the user says "publish/submit my app", "send it to App Review", "ship the iOS app", "fill out App Store Connect", "upload metadata/screenshots", "my app got rejected", or "automate App Store Connect". Works for any app given an App Store Connect API key, an app id, and a config file.
+description: Ship an iOS app to App Store review end to end over the App Store Connect API — build attach, metadata, screenshots, pricing, age rating, content rights, review info, subscriptions and the review submission, driven by a readiness report that says what to do next. Use when the user says "publish/submit my app", "send it to App Review", "ship the iOS app", "release a new version", "fill out App Store Connect", "upload metadata", "why can't I submit", or "automate App Store Connect". Works for any app given an App Store Connect API key, an app id and a config file. Hands focused work to asc-screenshots, asc-age-rating, asc-subscriptions, asc-rejection and asc-credentials.
+license: MIT
+compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com. Needs an App Store Connect API key with the App Manager role. git is used once to fetch the CLI when the skill runs outside a checkout.
+metadata:
+  author: Furkan Beydemir
+  version: "2.1.0"
 ---
 
 # App Store Release
 
-Drive an entire iOS App Store submission from the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for the two things Apple genuinely does not expose.
+Drive an entire iOS App Store submission through the App Store Connect API. The user provides credentials and a config **once**; you do everything automatable and interrupt them only for what Apple genuinely keeps out of the API — today that is one thing, the App Privacy questionnaire.
 
 ## Operating principle
 
 1. **Let `check` decide what to do.** It returns a verdict and an ordered list of next actions, each labelled as something the tool can fix or something only a human in App Store Connect can. Do not plan the sequence yourself — read it.
 2. **Config-driven, not prompt-driven.** All app content lives in the config. Run commands; do not interview the user about things the config already answers.
-3. **Ask the user only when**: the config is missing a field (say exactly which), a business decision is not in the config (subscription price, release timing), or before the single irreversible action (final submit).
-4. **Everything is idempotent.** `release` is safe to re-run; a second run with nothing changed sends nothing.
-5. **Ask about content, not about schema.** If the app is paid, has mature content, supports iPad, or ships in several languages, those are config decisions — `price`, `ageRating`, `screenshots.sets`, `locales`. Ask the user the question in their terms and write the config yourself; `appstore-release schema` has the exact shape.
+3. **Ask about content, not about schema.** Paid or free, mature content, iPad support, languages — ask in the user's terms, then write the config yourself. `asc schema` prints the exact shape.
+4. **Ask the user only when** a field is missing (say exactly which), a business decision is not in the config (price, release timing), or before the one irreversible action: the final submit.
+5. **Everything is idempotent.** `release` is safe to re-run; a second run with nothing changed sends nothing.
 
-## Setup — see references/setup.md
+## Running the CLI
 
-The user needs an App Store Connect API key with the **App Manager** role, and the numeric app id from the App Store Connect URL.
+Every command goes through the launcher inside this skill:
+
+```bash
+node <skill-dir>/scripts/asc.mjs <command> [flags]
+```
+
+`<skill-dir>` is the directory you loaded this SKILL.md from — for example `.claude/skills/appstore-release`, `~/.agents/skills/appstore-release`, or `${CLAUDE_PLUGIN_ROOT}/skills/appstore-release`. The launcher finds the CLI by itself (plugin install, repository checkout, or a one-time `git clone` pinned to this skill's version into `~/.cache/appstore-release`). If it says it is cloning, tell the user once. Set `APPSTORE_RELEASE_HOME` to use a specific checkout.
+
+Below, `asc <command>` is shorthand for that line. Run it from the user's project directory — relative paths in the config resolve against the config file, so never `cd` first. Add `--json` for one machine-readable document on stdout; `asc <command> --help` lists that command's own flags.
+
+## Setup
+
+See [references/setup.md](references/setup.md). In short:
 
 ```bash
 export ASC_KEY_ID=...            # 10 characters
 export ASC_ISSUER_ID=...         # a UUID
 export ASC_P8_PATH=/abs/AuthKey_XXXXXXXXXX.p8    # or ASC_P8 with the PEM inline
-export ASC_APP_ID=1234567890     # digits from the ASC URL, NOT the bundle id
+export ASC_APP_ID=1234567890     # digits from the App Store Connect URL, NOT the bundle id
 ```
 
-**How to invoke it.** This package has no install step and no dependencies — run the file directly:
+Never put the key id, issuer id or `.p8` into a tool argument or a file you commit. They come from the environment only.
 
-```bash
-node "${CLAUDE_PLUGIN_ROOT:-.}/src/cli.mjs" <command>
-```
-
-Below it is written as `appstore-release <command>` for readability; that is the same thing. Run it from the user's project directory. Relative paths in the config resolve against the config file, so never `cd` anywhere first.
-
-Run everything with `appstore-release <command>` from the user's project directory. Relative paths in the config resolve against the config file, so never `cd` anywhere first.
-
-If there is no config yet: `appstore-release init` writes one with a `$schema`, then fill it in from what the user tells you. `appstore-release validate` checks it without needing credentials or a network.
-
-For an app listed in several languages, add a `locales` block keyed by locale code. `metadata` is the default for all of them and each entry overrides only what differs — so ask the user for the translations, not for every field again. All configured locales are written and checked; an incomplete one is reported by name.
+No config yet? `asc init` writes `appstore.config.json` with a `$schema`; fill it from what the user tells you ([references/config-template.json](references/config-template.json) shows every block). `asc validate` checks it offline, without credentials.
 
 ## Runbook
 
 ### 1. Orient
 
 ```bash
-appstore-release doctor      # credentials, openssl, config — touches no app data
-appstore-release check       # the verdict and the ordered plan
+asc doctor      # credentials, openssl, config — touches no app data
+asc check       # the verdict and the ordered plan
 ```
 
-`check --json` gives the same thing as structured data: `verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `rejected`, `live`, and `nextActions` is the plan.
+`verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `rejected`, `live`. Exit codes: `0` ready · `4` blocked but fixable by this tool · `5` only a human in App Store Connect can finish.
 
-### 2. Open a version, if none is editable
+### 2. Route by finding
 
-`check` reports `version.none` when every version is already live. Nothing can be
-prepared until the next one exists:
+Work through `nextActions` in order. When a finding belongs to a focused area, load that skill — it carries the detail this one leaves out:
+
+| Finding ids / situation                                        | Skill or reference                                                       |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `screenshots.*`, "make screenshots", iPhone Duo, iPad sizes    | **asc-screenshots**                                                      |
+| `rating.*`, "what age rating", social media / loot box answers | **asc-age-rating**                                                       |
+| `subscription.*`, paywall, in-app subscription pricing         | **asc-subscriptions**                                                    |
+| verdict `rejected`, `submission.rejected`, "Apple rejected it" | **asc-rejection**                                                        |
+| `version.build.*` with an EAS signing error, expired profile   | **asc-credentials**                                                      |
+| `metadata.*`, `config.*.emoji`, `config.*.too-long`, locales   | [references/metadata.md](references/metadata.md)                         |
+| `account.credentials.*`, `config.missing`                      | [references/setup.md](references/setup.md)                               |
+| any 409 you do not recognise                                   | [references/gotchas.md](references/gotchas.md) — read it before guessing |
+
+If a focused skill is not installed, the reference files here and `asc <command> --help` are enough to proceed.
+
+### 3. Open a version, if none is editable
+
+`check` reports `version.none` when every version is already live:
 
 ```bash
-appstore-release new-version          # infers the next number
-appstore-release new-version 1.2.0    # or name it
+asc new-version          # infers the next number
+asc new-version 1.2.0    # or name it
 ```
 
-### 3. Build the binary (Expo/EAS)
+### 4. Build the binary (Expo/EAS)
 
-Only needed when `check` reports no build. If `eas build` fails on stale credentials (_"Provisioning Profile has expired / No certificate exists with serial…"_):
-
-```bash
-appstore-release credentials    # reuses an existing certificate when it can
-```
-
-then set `"credentialsSource": "local"` on the eas.json production profile. **Never pass `--allow-new-cert` without telling the user** — Apple caps the account at three distribution certificates.
+Only when `check` reports no build:
 
 ```bash
 eas build -p ios --profile production --non-interactive --no-wait
 eas submit -p ios --profile production --id <buildId>
+asc attach-build                   # newest VALID build; or --build <number>
 ```
 
-### 4. Fill the listing
+Signing failures (_"Provisioning Profile has expired"_, _"No certificate exists with serial…"_) belong to **asc-credentials**. Builds made with the iOS 27 SDK must ship a launch screen (`UILaunchScreen` or a launch storyboard) and adopt the scene lifecycle, or Apple rejects them; from April 2027 every upload must be built with Xcode 27.
+
+### 5. Fill the listing
 
 ```bash
-appstore-release release --dry-run    # show the user exactly what would change
-appstore-release release              # apply it
+asc release --dry-run    # show the user exactly what would change
+asc release              # apply it, then a fresh check
 ```
 
-Screenshots must already exist at `config.screenshots.dir` — see references/screenshots.md for producing exact-size PNGs. If the app supports iPad, it needs an iPad set too: use `config.screenshots.sets` with one entry per device size. A locale subdirectory (`./shots/tr/`) overrides the base directory for that locale.
+`release` runs attach-build, metadata, pricing, content-rights, age-rating, category, review-info, release-options, screenshots and subscription — each one idempotent. Run any of them alone by name.
 
-### 5. Hand off the two UI-only steps
+### 6. Hand off the one UI-only step
 
-`check` lists these when they apply, with the exact clicks. Apple has no API for either; do not pretend otherwise and do not attempt a workaround.
+**App Privacy → Data Collection.** Apple has no API for it. Ask the user to declare the data types matching the app's privacy manifest and press **Publish** (App Store Connect → the app → App Privacy). Then record that they did, so the readiness report can reach `ready`:
 
-1. **App Privacy → Data Collection.** Declare the data types matching the app's privacy manifest, then **Publish**. If the binary ships `NSUserTrackingUsageDescription` but you declare no tracking, Publish is blocked — the app must drop the key and be rebuilt (references/gotchas.md).
-2. **A first subscription.** Version page → _In-App Purchases and Subscriptions → Select → \<product\>_ → Save → _Add for Review → Submit_.
+```json
+"review": { "privacyPublished": true }
+```
 
-### 6. Submit
+The API cannot verify this flag — only set it when the user confirms. If Publish is greyed out, see "NSUserTracking conflict" in [references/gotchas.md](references/gotchas.md#app-privacy-ui-only).
+
+### 7. Submit
 
 ```bash
-appstore-release check
-appstore-release submit --submit
+asc check
+asc submit --submit
 ```
 
-`submit` computes the readiness report first and refuses unless the verdict is `ready`. If the user insists on submitting anyway, `--force` exists — tell them Apple will reject it.
+**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. A configured subscription is submitted together with the version — including a first subscription. If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`.
 
-Verify with `status`: the version and any subscription should both be `WAITING_FOR_REVIEW`.
+On rejection, switch to **asc-rejection**.
 
-### Rejections
+## MCP
 
-On rejection the version becomes editable again. The rejection _text_ lives in Resolution Center, which Apple does not expose through the API — the user has to read it. Then fix (metadata via `release`, or a rebuild for binary issues) and resubmit.
-
-## When something returns a 409
-
-Read references/gotchas.md before guessing. It documents the exact error strings and their causes: emoji in the description, `whatsNew` on a first version, the age-rating attribute set, `ageRatingOverride` conflicting with `ageRatingOverrideV2`, the missing price tier, the screenshot commit step.
-
-## Extending
-
-Operations live in `src/ops/`, one file each, with a uniform `{ meta, run(ctx, args) }` contract — see `src/ops/_contract.md`. Add a file, register it in `src/ops/registry.mjs`, and both the CLI and the MCP server pick it up.
+The same core is an MCP server (`asc mcp`, 11 tools). Start with `asc_readiness_report`; every mutating tool needs `confirm: true`, and `asc_submit_for_review` refuses unless the report is `ready`.
 
 ## References
 
-- `references/setup.md` — key creation, app record, secrets hygiene.
-- `references/gotchas.md` — every pitfall hit in practice. Read before the first run.
-- `references/screenshots.md` — producing exact-size PNGs.
-- `references/config-template.json` — the config, validated against a published JSON Schema.
+- [references/setup.md](references/setup.md) — API key, app record, secrets hygiene.
+- [references/metadata.md](references/metadata.md) — fields, limits, locales, what Apple rejects.
+- [references/gotchas.md](references/gotchas.md) — every pitfall hit in practice, with exact error text.
+- [references/config-template.json](references/config-template.json) — a complete config, validated against the published schema.
+- [references/screenshots.md](references/screenshots.md) — screenshot essentials (full guide in **asc-screenshots**).

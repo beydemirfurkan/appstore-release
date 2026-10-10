@@ -5,7 +5,7 @@
 // PATCH /v1/appStoreVersionLocalizations still does not know that whatsNew 409s
 // on a first version, that emoji in the description is a hard rejection, or that
 // the age-rating declaration must be sent complete. Those tools hand the model
-// the landmines; these eleven defuse them.
+// the landmines; these thirteen defuse them.
 //
 // The count is a product decision with a test behind it. Each tool earns its
 // place by being an outcome someone wants, not an API call someone could make.
@@ -20,6 +20,8 @@ import { runOperation, runPipeline } from "../index.mjs";
 import { getAppSnapshot } from "../report/snapshot.mjs";
 import { getReadinessReport } from "../report/report.mjs";
 import { waitForReview } from "../report/wait.mjs";
+import { listReviews, summarize as summarizeReviews, formatReview } from "../ops/reviews.mjs";
+import { MAX_REPLY_LENGTH } from "../ops/reply.mjs";
 import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { renderReportMarkdown } from "../report/render.mjs";
 import { validateConfig } from "../core/requirements.mjs";
@@ -467,6 +469,69 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         // in review" and an ERROR is a refusal — neither is a submission.
         const submitted = res.status === Status.CHANGED;
         return structured(`${res.status.toUpperCase()} — ${res.message}`, { submitted, result: res, report });
+      },
+    },
+
+    {
+      name: "asc_customer_reviews",
+      title: "Customer reviews",
+      description:
+        "Read the app's customer reviews, newest first: rating, title, text, territory, and any published reply. " +
+        "Filter to what needs attention — low ratings, unanswered ones — and optionally include Apple's own " +
+        "summary of recent reviews. Read-only. To answer one, draft a reply, show it to the human, and only " +
+        "after they approve it call asc_reply_to_review.",
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      inputSchema: input({
+        appId,
+        rating: {
+          type: "array",
+          items: { type: "integer", minimum: 1, maximum: 5 },
+          description: "Only these star ratings, e.g. [1, 2].",
+        },
+        unanswered: bool("Only reviews without a published reply.", false),
+        territory: str("Only reviews from this territory, e.g. USA."),
+        limit: { type: "integer", minimum: 1, maximum: 200, description: "How many, newest first. Default 20." },
+        summary: bool("Also return Apple's summary of recent reviews.", false),
+      }),
+      async run(args) {
+        const { ctx, refusal } = await contextOrRefusal(args, env);
+        if (refusal) return refusal;
+        const reviews = await listReviews(ctx, args);
+        const summaries = args.summary ? await summarizeReviews(ctx) : [];
+        const lines = [
+          `# ${reviews.length} review${reviews.length === 1 ? "" : "s"}`,
+          "",
+          ...reviews.map((r) => `- ${formatReview(r)}`),
+          ...(summaries.length ? ["", "## Apple's summary", ...summaries.map((s) => `- (${s.locale}) ${s.text}`)] : []),
+        ];
+        return structured(lines.join("\n"), { reviews, summaries });
+      },
+    },
+
+    {
+      name: "asc_reply_to_review",
+      title: "Reply to a customer review",
+      description:
+        "Publish a reply to one customer review on the App Store — publicly, under the developer's name. Replying " +
+        "again replaces the previous reply; the same text twice changes nothing. Draft the reply in the review's " +
+        "language, show the exact text to the human, and call this only once they approve that text. Never reply " +
+        "in bulk without approval of each reply.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+      inputSchema: input(
+        {
+          appId,
+          reviewId: str("The review id, from asc_customer_reviews."),
+          text: { type: "string", maxLength: MAX_REPLY_LENGTH, description: "The reply exactly as approved." },
+          delete: bool("Remove the published reply instead of writing one.", false),
+          confirm,
+        },
+        ["reviewId", "confirm"],
+      ),
+      async run(args) {
+        const { ctx, refusal } = await contextOrRefusal(args, env);
+        if (refusal) return refusal;
+        const res = await runOperation("reply", ctx, { review: args.reviewId, text: args.text, delete: args.delete });
+        return structured(`${res.status.toUpperCase()} — ${res.message}`, res);
       },
     },
 

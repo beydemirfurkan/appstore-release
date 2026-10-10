@@ -17,13 +17,14 @@ Load the skill that matches the task. Each is self-contained under `skills/<name
 | [`asc-age-rating`](skills/asc-age-rating/SKILL.md)       | The age-rating questionnaire, 13+/16+/18+ tiers, social media questions        |
 | [`asc-subscriptions`](skills/asc-subscriptions/SKILL.md) | Plans, free trials, lifetime purchases: metadata, price, review submission     |
 | [`asc-testflight`](skills/asc-testflight/SKILL.md)       | TestFlight: groups, testers, What to Test, beta review                         |
+| [`asc-reviews`](skills/asc-reviews/SKILL.md)             | Customer reviews: read, draft replies, publish each one after approval         |
 | [`asc-rejection`](skills/asc-rejection/SKILL.md)         | Rejection → guideline → fix → reply → resubmit                                 |
 | [`asc-credentials`](skills/asc-credentials/SKILL.md)     | EAS signing: distribution certificate and App Store profile                    |
 
 Install them into your agent:
 
 ```bash
-npx skills add beydemirfurkan/appstore-release            # all seven
+npx skills add beydemirfurkan/appstore-release            # all eight
 npx skills add beydemirfurkan/appstore-release -s asc-screenshots -a codex
 ```
 
@@ -51,6 +52,6 @@ Credentials come from `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_P8_PATH` (or `ASC_P8`)
 - Plain ESM JavaScript with JSDoc, type-checked by `tsc --checkJs`. **No build step and no runtime dependencies** — the files that ship are the files you edit; `scripts/check-distribution.mjs` fails the build on any non-builtin import under `src/`.
 - `npm ci && npm run verify` — typecheck, Prettier, schema, manifests, distribution gate, skill gate, tests.
 - A new capability is a file in `src/ops/` with the `{ meta, run(ctx, args) }` contract ([`src/ops/_contract.md`](src/ops/_contract.md)), registered in `src/ops/registry.mjs`. The CLI and MCP server pick it up.
-- The MCP tool list is deliberately small (11 tools, count asserted in `test/mcp.test.mjs`). Prefer extending an outcome tool over adding an endpoint-shaped one.
+- The MCP tool list is deliberately small (13 tools, count asserted in `test/mcp.test.mjs`). Prefer extending an outcome tool over adding an endpoint-shaped one.
 - **Skills:** edit `skills/<name>/SKILL.md` and its `references/`. Never edit `skills/*/scripts/asc.mjs` — it is generated from `scripts/skill-launcher.mjs` by `npm run manifests:sync`, which also stamps every skill's `metadata.version` from `package.json`. `npm run check:skills` holds each skill to the Agent Skills spec: name equals directory, description ≤ 1024 characters with "Use when…" triggers, SKILL.md under 500 lines, and no link that leaves the skill directory (an installed skill is that directory alone).
 - Every operation must stay idempotent: a second run with nothing changed sends nothing. Add a test against `test/helpers/mock-asc.mjs`.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.0
+
+### Added
+
+- **Customer reviews.** `appstore-release reviews` lists them newest first — `--rating 1,2`, `--unanswered`, `--territory`, `--limit` — with any published reply, and `--summary` adds Apple's own summary of recent reviews. No config file needed.
+- **Replies.** `appstore-release reply <reviewId> --text "…"` publishes one reply on the App Store; posting again replaces it, the same text twice is a no-op, `--delete` removes it. Empty and over-long (5,970+) replies are refused before any request.
+- **Two MCP tools**, a deliberate product decision: `asc_customer_reviews` (read-only) and `asc_reply_to_review` (requires `confirm: true`). Split so a host can read without asking and must ask before a public reply. The server now has 13 tools.
+- **The `asc-reviews` skill:** read, group by problem, draft in the reviewer's language within Apple's rules (no rating requests, no incentives, no personal data), and publish each reply only after the user approves its exact text. Eight skills in all.
+
 ## 3.1.0
 
 Competitor research, then the gaps that mattered most to indie and Expo developers working with agents — and one correction to 3.0.0.

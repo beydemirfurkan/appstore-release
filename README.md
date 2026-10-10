@@ -57,6 +57,7 @@ Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they
 - **asc-rejection**: read the reviewer's message, fix, resubmit
 - **asc-credentials**: EAS certificates and provisioning profiles
 - **asc-testflight**: groups, testers, What to Test, beta review
+- **asc-reviews**: read customer reviews, draft replies, publish each after your OK
 
 ## Also runs as
 

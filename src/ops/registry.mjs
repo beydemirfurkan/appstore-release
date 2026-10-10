@@ -16,6 +16,8 @@ import * as screenshots from "./screenshots.mjs";
 import * as subscription from "./subscription.mjs";
 import * as inAppPurchases from "./in-app-purchases.mjs";
 import * as testflight from "./testflight.mjs";
+import * as reviews from "./reviews.mjs";
+import * as reply from "./reply.mjs";
 import * as submit from "./submit.mjs";
 import * as newVersion from "./new-version.mjs";
 import * as releaseOptions from "./release-options.mjs";
@@ -31,6 +33,7 @@ import * as releaseOptions from "./release-options.mjs";
  * @property {boolean} [irreversible]            cannot be undone through the API
  * @property {Record<string, import("../cli/args.mjs").FlagSpec>} [args]
  * @property {string} [positional]               the one arg the CLI may take positionally
+ * @property {boolean} [configFree]               runs without a config file
  */
 
 /** @typedef {{ meta: OperationMeta, run: (ctx: any, args?: any) => Promise<any> }} Operation */
@@ -54,6 +57,8 @@ export const OPERATIONS = {
   subscription,
   "in-app-purchases": inAppPurchases,
   testflight,
+  reviews,
+  reply,
 };
 
 /**

@@ -34,6 +34,7 @@ test("every shipped skill passes the skill gate", () => {
     "asc-age-rating",
     "asc-credentials",
     "asc-rejection",
+    "asc-reviews",
     "asc-screenshots",
     "asc-subscriptions",
     "asc-testflight",

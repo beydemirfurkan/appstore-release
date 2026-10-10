@@ -48,7 +48,11 @@ export async function runOperation(id, ctx, args = {}) {
   const requestsBefore = ctx.client.requestCount;
   const base = { id: op.meta.id, title: op.meta.title };
 
-  const { findings } = validateConfig(ctx.config, { needs: op.meta.needs ?? [] });
+  // Operations about the app rather than its listing (reviews, replies) run
+  // without a config; the rest are checked against what they need from it.
+  const { findings } = op.meta.configFree
+    ? { findings: [] }
+    : validateConfig(ctx.config, { needs: op.meta.needs ?? [] });
   const missing = findings.filter((f) => f.severity === "blocker");
   if (missing.length) {
     return ctx.log.result({

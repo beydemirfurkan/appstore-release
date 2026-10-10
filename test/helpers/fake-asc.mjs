@@ -26,6 +26,8 @@ export const FAKE_REF_DATA = Object.freeze({
     { placementProfileGroupId: "IPHONE_DUO_INNER_PROFILE", platform: "IOS", displayClassId: "IPHONE_DUO" },
     { placementProfileGroupId: "IPAD_13_PROFILE", platform: "IOS", displayClassId: "IPAD_13_DISPLAY" },
   ],
+  // App previews: Apple's iPhone 6.9" and iPad 13" sizes, 15 to 30 seconds.
+  videoSpecs: [videoSpec("v886x1920", 886, 1920), videoSpec("v1200x1600", 1200, 1600)],
   imageSpecs: [
     spec("i1320x2868a0", 1320, 2868),
     spec("i1290x2796a0", 1290, 2796),
@@ -42,6 +44,14 @@ export const FAKE_REF_DATA = Object.freeze({
         { placementGroupId: "IPHONE_DUO_OUTER_PROFILE", specs: ["i1398x2034a0"] },
         { placementGroupId: "IPHONE_DUO_INNER_PROFILE", specs: ["i2007x2853a0"] },
         { placementGroupId: "IPAD_13_PROFILE", specs: ["i2064x2752a0"] },
+      ],
+    },
+    {
+      placementTypeId: "APP_PREVIEW",
+      acceptsAssetCategories: ["APP_SCREENSHOTS_AND_PREVIEWS"],
+      specMappings: [
+        { placementGroupId: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", specs: ["v886x1920"] },
+        { placementGroupId: "IPAD_13_PROFILE", specs: ["v1200x1600"] },
       ],
     },
   ],
@@ -63,10 +73,25 @@ export const FAKE_REF_DATA = Object.freeze({
             },
           ],
         },
+        {
+          placementType: "APP_PREVIEW",
+          groupLimits: [{ groupIds: ["IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE", "IPAD_13_PROFILE"], maxCount: 3 }],
+        },
       ],
     },
   ],
 });
+
+function videoSpec(shortName, width, height) {
+  return {
+    specId: shortName,
+    shortName,
+    dimensions: { minWidth: width, maxWidth: width, minHeight: height, maxHeight: height },
+    duration: { min: "PT15S", max: "PT30S" },
+    fileExtensions: [".mov", ".mp4", ".m4v"],
+    compatiblePlacementTypes: ["APP_PREVIEW"],
+  };
+}
 
 function spec(shortName, width, height) {
   return {
@@ -457,15 +482,41 @@ export function createFakeAsc({
     if (body?.data?.attributes?.uploaded) img.attributes.state = "PREPARE_FOR_SUBMISSION"; // processing is instant here
     return ok(img);
   });
+  on("POST", `/v1/appAssetLibraryVideos`, reserve("appAssetLibraryVideos", "vid", { state: "AWAITING_UPLOAD" }));
+  on("PATCH", `/v1/appAssetLibraryVideos/:id`, (m, { body }) => {
+    const video = get("appAssetLibraryVideos", m[1]);
+    if (!video) return notFound();
+    if ("sourceFileChecksum" in (body?.data?.attributes ?? {})) {
+      return conflict(
+        "ENTITY_ERROR.ATTRIBUTE.UNKNOWN",
+        "sourceFileChecksum is not an attribute of appAssetLibraryVideos",
+      );
+    }
+    Object.assign(video.attributes, body?.data?.attributes ?? {});
+    if (body?.data?.attributes?.uploaded) video.attributes.state = "PREPARE_FOR_SUBMISSION";
+    return ok(video);
+  });
+  on("GET", `/v1/appAssetLibraries/:id/videos`, (_m, { url }) => {
+    const name = url.searchParams.get("filter[referenceName]");
+    return ok(all("appAssetLibraryVideos").filter((i) => !name || i.attributes.referenceName === name));
+  });
   on("GET", `/v1/appAssetLibraries/:id/images`, (_m, { url }) => {
     const name = url.searchParams.get("filter[referenceName]");
     return ok(all("appAssetLibraryImages").filter((i) => !name || i.attributes.referenceName === name));
   });
   on("POST", `/v1/appAssetLibraryPlacements`, (_m, { body }) => {
+    const cppLoc = body.data.relationships?.appCustomProductPageLocalization?.data?.id;
+    if (cppLoc && !["PREPARE_FOR_SUBMISSION", "REJECTED"].includes(pageVersionOf(cppLoc)?.attributes.state)) {
+      return conflict("STATE_ERROR", "An approved version cannot change.");
+    }
     const r = put(
       "appAssetLibraryPlacements",
       nextId("plc"),
-      { ...body.data.attributes, mediaType: "IMAGE", state: "PARENT_PREPARE_FOR_SUBMISSION" },
+      {
+        ...body.data.attributes,
+        mediaType: body.data.relationships?.video ? "VIDEO" : "IMAGE",
+        state: "PARENT_PREPARE_FOR_SUBMISSION",
+      },
       body.data.relationships,
     );
     return created(r);
@@ -479,16 +530,31 @@ export function createFakeAsc({
     });
     return created({ type: "appAssetLibraryPlacementOrderingRequests", id: nextId("order"), attributes: {} });
   });
-  on("GET", `/v1/appStoreVersionLocalizations/:id/placements`, (m, { url }) => {
-    const group = url.searchParams.get("filter[placementGroup]");
-    const placed = all("appAssetLibraryPlacements")
-      .filter(
-        (p) => rel(p, "appStoreVersionLocalization")?.id === m[1] && (!group || p.attributes.placementGroup === group),
-      )
-      .sort((a, b) => (a.attributes.position ?? 0) - (b.attributes.position ?? 0));
-    const images = placed.map((p) => get("appAssetLibraryImages", rel(p, "image")?.id));
-    return ok(placed, images);
-  });
+  // Placements of one parent, as Apple filters them: by placement type and group,
+  // with the image or the video included as asked.
+  for (const [path, parentKey] of [
+    ["appStoreVersionLocalizations", "appStoreVersionLocalization"],
+    ["appCustomProductPageLocalizations", "appCustomProductPageLocalization"],
+  ]) {
+    on("GET", `/v1/${path}/:id/placements`, (m, { url }) => {
+      const group = url.searchParams.get("filter[placementGroup]");
+      const type = url.searchParams.get("filter[placementType]");
+      const placed = all("appAssetLibraryPlacements")
+        .filter(
+          (p) =>
+            rel(p, parentKey)?.id === m[1] &&
+            (!group || p.attributes.placementGroup === group) &&
+            (!type || p.attributes.placementType === type),
+        )
+        .sort((a, b) => (a.attributes.position ?? 0) - (b.attributes.position ?? 0));
+      const included = placed
+        .map(
+          (p) => get("appAssetLibraryImages", rel(p, "image")?.id) ?? get("appAssetLibraryVideos", rel(p, "video")?.id),
+        )
+        .filter(Boolean);
+      return ok(placed, included);
+    });
+  }
   on("GET", `/v1/appStoreVersionLocalizations/:id/appScreenshotSets`, () => ok([], []));
 
   // Subscriptions
@@ -734,6 +800,89 @@ export function createFakeAsc({
       (_, i) => `CODE${String(i + 1).padStart(6, "0")}`,
     );
     return { status: 200, raw: `${rows.join("\n")}\n`, contentType: "text/csv" };
+  });
+
+  // Custom product pages: page → versions → localizations. Only an editable
+  // version (PREPARE_FOR_SUBMISSION, REJECTED) or its localizations and
+  // placements can change; an approved one answers 409, as Apple's does.
+  const PAGE_EDITABLE = ["PREPARE_FOR_SUBMISSION", "REJECTED"];
+  const pageVersionOf = (/** @type {any} */ locId) =>
+    get(
+      "appCustomProductPageVersions",
+      rel(/** @type {Resource} */ (get("appCustomProductPageLocalizations", locId)), "appCustomProductPageVersion")?.id,
+    );
+  on("GET", `/v1/apps/${appId}/appCustomProductPages`, () => ok(all("appCustomProductPages")));
+  on("POST", `/v1/appCustomProductPages`, (_m, { body }) => {
+    const page = put("appCustomProductPages", nextId("cpp"), {
+      name: body.data.attributes.name,
+      visible: false,
+      url: "https://apps.apple.com/app/id1?ppid=x",
+    });
+    for (const v of (body.included ?? []).filter((/** @type {any} */ x) => x.type === "appCustomProductPageVersions")) {
+      put(
+        "appCustomProductPageVersions",
+        nextId("cppv"),
+        { state: "PREPARE_FOR_SUBMISSION", version: "1", ...(v.attributes ?? {}) },
+        {
+          appCustomProductPage: ref("appCustomProductPages", page.id),
+        },
+      );
+    }
+    return created(page);
+  });
+  on("PATCH", `/v1/appCustomProductPages/:id`, patch("appCustomProductPages"));
+  on("GET", `/v1/appCustomProductPages/:id/appCustomProductPageVersions`, (m) =>
+    ok(all("appCustomProductPageVersions").filter((v) => rel(v, "appCustomProductPage")?.id === m[1])),
+  );
+  on("POST", `/v1/appCustomProductPageVersions`, (_m, { body }) => {
+    const pageId = body.data.relationships.appCustomProductPage.data.id;
+    const versions = all("appCustomProductPageVersions").filter((v) => rel(v, "appCustomProductPage")?.id === pageId);
+    if (versions.some((v) => PAGE_EDITABLE.includes(v.attributes.state))) {
+      return conflict("STATE_ERROR", "This page already has a version in progress.");
+    }
+    return created(
+      put(
+        "appCustomProductPageVersions",
+        nextId("cppv"),
+        { state: "PREPARE_FOR_SUBMISSION", version: String(versions.length + 1), ...(body.data.attributes ?? {}) },
+        {
+          appCustomProductPage: ref("appCustomProductPages", pageId),
+        },
+      ),
+    );
+  });
+  on("PATCH", `/v1/appCustomProductPageVersions/:id`, (m, { body }) => {
+    const v = get("appCustomProductPageVersions", m[1]);
+    if (!v) return notFound();
+    if (!PAGE_EDITABLE.includes(v.attributes.state))
+      return conflict("STATE_ERROR", "An approved version cannot change.");
+    Object.assign(v.attributes, body.data.attributes ?? {});
+    return ok(v);
+  });
+  on("GET", `/v1/appCustomProductPageVersions/:id/appCustomProductPageLocalizations`, (m) =>
+    ok(all("appCustomProductPageLocalizations").filter((l) => rel(l, "appCustomProductPageVersion")?.id === m[1])),
+  );
+  on("POST", `/v1/appCustomProductPageLocalizations`, (_m, { body }) => {
+    const versionId = body.data.relationships.appCustomProductPageVersion.data.id;
+    const v = get("appCustomProductPageVersions", versionId);
+    if (!v || !PAGE_EDITABLE.includes(v.attributes.state))
+      return conflict("STATE_ERROR", "An approved version cannot change.");
+    const dup = all("appCustomProductPageLocalizations").some(
+      (l) =>
+        rel(l, "appCustomProductPageVersion")?.id === versionId && l.attributes.locale === body.data.attributes.locale,
+    );
+    if (dup) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE", "locale exists");
+    return created(
+      put("appCustomProductPageLocalizations", nextId("cppl"), body.data.attributes, body.data.relationships),
+    );
+  });
+  on("PATCH", `/v1/appCustomProductPageLocalizations/:id`, (m, { body }) => {
+    const l = get("appCustomProductPageLocalizations", m[1]);
+    if (!l) return notFound();
+    if (!PAGE_EDITABLE.includes(pageVersionOf(m[1])?.attributes.state))
+      return conflict("STATE_ERROR", "An approved version cannot change.");
+    Object.assign(l.attributes, body.data.attributes ?? {});
+    return ok(l);
   });
 
   // Accessibility Nutrition Labels. What REPLACED means is not documented; the
@@ -1073,6 +1222,8 @@ export function createFakeAsc({
         const subVersion = get("subscriptionVersions", rel(item, "subscriptionVersion")?.id);
         const sub = subVersion && get("subscriptions", rel(subVersion, "subscription")?.id);
         if (sub) sub.attributes.state = "WAITING_FOR_REVIEW";
+        const pageVersion = get("appCustomProductPageVersions", rel(item, "appCustomProductPageVersion")?.id);
+        if (pageVersion) pageVersion.attributes.state = "WAITING_FOR_REVIEW";
         const iapVersion = get("inAppPurchaseVersions", rel(item, "inAppPurchaseVersion")?.id);
         const iap = iapVersion && get("inAppPurchases", rel(iapVersion, "inAppPurchase")?.id);
         if (iap) iap.attributes.state = "WAITING_FOR_REVIEW";
@@ -1143,4 +1294,14 @@ export function rejectSubmission(fake) {
   for (const s of fake.all("reviewSubmissions")) s.attributes = { ...s.attributes, state: "UNRESOLVED_ISSUES" };
   for (const i of fake.all("reviewSubmissionItems"))
     i.attributes = { ...i.attributes, state: "REJECTED", resolved: false };
+}
+
+/**
+ * Apple's side of approving every custom product page version under review.
+ * @param {ReturnType<typeof createFakeAsc>} fake
+ */
+export function approveCustomPages(fake) {
+  for (const v of fake.all("appCustomProductPageVersions")) {
+    if (["WAITING_FOR_REVIEW", "IN_REVIEW"].includes(v.attributes.state)) v.attributes.state = "APPROVED";
+  }
 }

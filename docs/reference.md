@@ -100,6 +100,8 @@ appstore-release submit --submit     # refuses unless the verdict is ready
 | A free trial or intro price             | `introOffer: { type, duration, periods?, priceAmount? }` on a plan | `FREE_TRIAL`, `PAY_AS_YOU_GO`, `PAY_UP_FRONT`                       |
 | A lifetime unlock                       | `inAppPurchases: [{ productId, name, … }]`                         | `NON_CONSUMABLE` by default                                         |
 | Accessibility labels                    | `accessibility: { iphone: { voiceover: true, … }, publish }`       | a feature left out is not claimed                                   |
+| App previews                            | `previews: { dir, posterFrame? }`                                  | grouped by size; 15–30 s; up to 3 per device                        |
+| Custom product pages                    | `customProductPages: [{ name, deepLink?, locales: { … } }]`        | sent with the app by `submit`                                       |
 | Promotional offers, offer codes         | `promotionalOffers: [...]`, `offerCodes: [...]` on a plan          | created once; one-time codes only with `offer-codes`                |
 | TestFlight                              | `testflight: { whatToTest, groups, testers, … }`                   | run with `appstore-release testflight`                              |
 | Release timing                          | `release: { type, earliestDate?, phased? }`                        | `MANUAL`, `AFTER_APPROVAL`, `SCHEDULED`                             |
@@ -128,6 +130,8 @@ Every key is in the [JSON Schema](../schemas/config.schema.json), and the [templ
 | `review-info`              | App Review contact and demo account; `--draft-notes` drafts the notes for the reviewer                                                           |
 | `release-options`          | manual, after approval, scheduled, phased release                                                                                                |
 | `screenshots`              | diff, then upload; `--list-groups`, `--no-prune`                                                                                                 |
+| `previews`                 | app preview videos through the App Asset Library, checked for size and length first                                                              |
+| `custom-product-pages`     | campaign pages: text, deep link, screenshots, previews; a new version only when something differs                                                |
 | `subscription`             | plans (created when missing), localizations, price, intro offer, review screenshot                                                               |
 | `in-app-purchases`         | one-time purchases (created when missing): localizations, availability, price, review screenshot                                                 |
 | `offer-codes`              | generate one-time offer code batches and write them to CSV; never part of `release`                                                              |

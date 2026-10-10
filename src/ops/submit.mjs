@@ -16,6 +16,7 @@ import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { FIRST_PRODUCT_CLICKS, isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
 import { explainRefusal, isProductLine, refusedKinds } from "../asc/refusals.mjs";
 import { recordRefusals } from "../core/state.mjs";
+import { EDITABLE_PAGE_STATES, pageConfigs } from "./custom-product-pages.mjs";
 
 /** Review submission item relationships that carry a product rather than the app. */
 const PRODUCT_RELATIONSHIPS = ["subscriptionGroupVersion", "subscriptionVersion", "inAppPurchaseVersion"];
@@ -102,7 +103,7 @@ export function submitGate(report, { resolved = false, skipProducts = false } = 
 
 /**
  * @typedef {Object} Item
- * @property {"appStoreVersion"|"subscriptionGroupVersion"|"subscriptionVersion"|"inAppPurchaseVersion"} relationship
+ * @property {"appStoreVersion"|"subscriptionGroupVersion"|"subscriptionVersion"|"inAppPurchaseVersion"|"appCustomProductPageVersion"} relationship
  * @property {string} type
  * @property {string} id         the related resource's id
  * @property {string} label
@@ -180,6 +181,9 @@ export async function run(ctx, args = {}) {
       )),
     );
   }
+  // Custom product pages with an editable version go with the app; they are not
+  // products, so a refusal of theirs is reported, never rolled back.
+  wanted.push(...(await pageItems(ctx)));
   const products = wanted.filter((i) => i.product);
 
   /** related id → its reviewSubmissionItem, for everything the submission already holds */
@@ -410,6 +414,37 @@ async function removeProductItems(client, present) {
 }
 
 /**
+ * Configured custom product pages with a version still to review, as items.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @returns {Promise<Item[]>}
+ */
+async function pageItems({ client, discovery, config }) {
+  const pages = pageConfigs(config);
+  if (!pages.length) return [];
+  const remote = await client.all(`/v1/apps/${discovery.appId}/appCustomProductPages`, { limit: 200 });
+  /** @type {Item[]} */
+  const items = [];
+  for (const page of pages) {
+    const found = remote.find((p) => p.attributes?.name === page.name);
+    if (!found) continue;
+    const versions = await client.all(`/v1/appCustomProductPages/${found.id}/appCustomProductPageVersions`, {
+      limit: 50,
+    });
+    const editable = versions.find((v) => EDITABLE_PAGE_STATES.includes(v.attributes?.state));
+    if (editable) {
+      items.push({
+        relationship: "appCustomProductPageVersion",
+        type: "appCustomProductPageVersions",
+        id: editable.id,
+        label: `page "${page.name}"`,
+      });
+    }
+  }
+  return items;
+}
+
+/**
  * Configured subscriptions that are ready, as versioned review items — with
  * their group's version when the group was never approved. Marked `first` when
  * the app has never had a subscription approved.
@@ -536,7 +571,7 @@ async function existingItems(client, submissionId) {
   // item looks empty, and a re-run adds the same version again (409).
   const items = await client.all(
     `/v1/reviewSubmissions/${submissionId}/items` +
-      `?include=appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion`,
+      `?include=appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion,appCustomProductPageVersion`,
     { limit: 50 },
   );
   for (const item of items) {

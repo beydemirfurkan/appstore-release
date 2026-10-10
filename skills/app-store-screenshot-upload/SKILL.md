@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). Producing images optionally uses the iOS Simulator (macOS) or headless Chrome/Chromium.
 metadata:
   author: Furkan Beydemir
-  version: "4.1.0"
+  version: "4.2.0"
   guidelines: "2026-06-08"
 ---
 
@@ -112,6 +112,24 @@ What happens, per locale and device group:
 4. Remote screenshots without a local file are removed — placement first, then the asset — unless `--no-prune`.
 
 Placements can only be created while the version is editable (`PREPARE_FOR_SUBMISSION`, or rejected). If the version is in review, open a new one first.
+
+## App previews (videos)
+
+```json
+"previews": { "dir": "./previews", "posterFrame": "00:00:05:00" }
+```
+
+```bash
+asc previews --dry-run
+asc previews             # also a release step
+```
+
+- Up to three per device size, 15 to 30 seconds, `.mov` / `.mp4` / `.m4v`. Sizes come from Apple's catalog at run time — 886×1920 for the large iPhones and 1200×1600 for the 13" iPad today. Each file is grouped by its pixel size; size and length are checked locally before anything is uploaded.
+- A locale subfolder (`./previews/tr/`) replaces the folder for that locale. Filename order is display order.
+- Through the App Asset Library only. Apple processes a video after upload; it shows in App Store Connect a few minutes later.
+- `asc previews --prune` removes placed previews that have no local file; screenshots are never touched by it, nor previews by `screenshots --prune`.
+
+Custom product pages take their own screenshots and previews: see `references/custom-product-pages.md` in the **appstore-release** skill.
 
 ## When it fails
 

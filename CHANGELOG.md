@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.2.0
+
+### Added
+
+- **App previews** (`previews`, and a new `previews` step in `release`): videos through the App Asset Library, placed as `APP_PREVIEW`, grouped by pixel size into device groups from Apple's own catalog, with a locale subfolder replacing the folder for that locale. Every file's size and length are read from the file itself — a zero-dependency MP4/QuickTime reader — and checked before a byte is uploaded, as is Apple's per-device limit. `--prune` removes placed previews with no local file and never touches screenshots (nor `screenshots --prune` previews).
+- **Custom product pages** (`customProductPages`, and a `custom-product-pages` step): a page per campaign with its own promotional text, deep link, screenshots and previews, per locale. An approved page version cannot change, so a new version is created only when the config differs from it — text, deep link, locales or any screenshot — and nothing is written otherwise. `submit` sends an editable page version in the same review submission as the app.
+
+### Changed
+
+- The App Asset Library reconciliation behind screenshots now also serves previews (videos) and custom product page localizations, with a check-only mode. Screenshots behave exactly as before; placements are now always filtered by placement type, so previews and screenshots in the same device group never mistake each other for orphans.
+
+### Not yet
+
+- Previews and custom product pages are built from Apple's OpenAPI specification (4.5.1) and tested against the fake; not yet run against a live account. The preview frame time code is passed through as written: its format is not documented in the specification.
+
 ## 4.1.0
 
 ### Added

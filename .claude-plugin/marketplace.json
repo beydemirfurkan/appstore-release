@@ -10,7 +10,7 @@
       "name": "appstore-release",
       "source": "./",
       "description": "Ship an iOS app to App Store review end to end over the App Store Connect API — agent skills, an MCP server and a CLI around a readiness report and an idempotent pipeline. Updated for iOS 27.",
-      "version": "4.1.0",
+      "version": "4.2.0",
       "author": {
         "name": "Furkan Beydemir"
       }

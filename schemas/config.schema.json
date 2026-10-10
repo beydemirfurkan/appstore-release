@@ -443,6 +443,10 @@
           }
         }
       }
+    },
+    "easMetadata": {
+      "type": "string",
+      "description": "Path to an Expo EAS Metadata store.config.json, relative to this file. Its listing, age rating, categories, release and review details are used; anything set in this file wins."
     }
   },
   "$defs": {

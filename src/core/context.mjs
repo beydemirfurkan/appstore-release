@@ -13,6 +13,7 @@ import { createLog } from "./events.mjs";
 import { resolveProjectPath } from "./paths.mjs";
 import { createTokenProvider } from "../asc/jwt.mjs";
 import { AscClient, DEFAULT_BASE_URL } from "../asc/client.mjs";
+import { readExpoProject } from "./eas.mjs";
 import { Discovery } from "../asc/discovery.mjs";
 import { AssetUploader } from "../asc/assets.mjs";
 
@@ -55,18 +56,27 @@ import { AssetUploader } from "../asc/assets.mjs";
 export async function createContext(options = {}) {
   const { env = process.env, cwd = process.cwd(), random = Math.random } = options.runtime ?? {};
 
-  const { credentials, findings } = resolveCredentials(options.credentials ?? {}, { env });
-
   const configSource =
     typeof options.config === "object" && options.config !== null
       ? options.config
       : (options.config ?? findConfigPath({ env, cwd }));
-  const { config, configPath } = loadConfig(configSource);
+  const { config: loaded, configPath } = loadConfig(configSource);
 
   // Relative paths belong to the config's directory, not to wherever the process
   // was started. This one default is what stops `./assets/screenshots` from
   // resolving inside an installed plugin's own tree.
   const projectRoot = options.projectRoot ?? (configPath ? dirname(configPath) : cwd);
+
+  // An Expo project already knows its bundle id and App Store Connect app id;
+  // they fill in what the config and the environment leave out.
+  const expo = readExpoProject(projectRoot);
+  const config =
+    loaded && expo.bundleId && !(/** @type {any} */ (loaded).bundleId)
+      ? { ...loaded, bundleId: expo.bundleId }
+      : loaded;
+  const { credentials, findings } = resolveCredentials(options.credentials ?? {}, {
+    env: expo.ascAppId && !env.ASC_APP_ID ? { ...env, ASC_APP_ID: expo.ascAppId } : env,
+  });
 
   const log = createLog({ onEvent: options.onEvent ?? null });
   const dryRun = options.dryRun ?? false;

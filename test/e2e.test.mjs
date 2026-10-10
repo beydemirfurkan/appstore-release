@@ -229,3 +229,78 @@ test("an app's first subscription stops at needs-human with the clicks, as Apple
     false,
   );
 });
+
+test("an Expo project's store.config.json, eas.json and app.json are used as they are", async () => {
+  const { writeFileSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "asr-e2e-expo-"));
+  const ours = writeWellnessProject(root);
+  // EAS Metadata carries the listing; appstore.config.json only what EAS cannot say.
+  const store = {
+    configVersion: 0,
+    apple: {
+      copyright: "2026 Example Inc.",
+      info: {
+        "en-US": {
+          title: "Wellness",
+          subtitle: "Small habits, every day",
+          description: ours.metadata.description,
+          keywords: ["health", "routine", "tracker", "mood"],
+          supportUrl: "https://example.com/support",
+          marketingUrl: "https://example.com",
+          privacyPolicyUrl: "https://example.com/privacy",
+        },
+      },
+      advisory: { healthOrWellnessTopics: true, alcoholTobaccoOrDrugUseOrReferences: "NONE" },
+      categories: ["HEALTH_AND_FITNESS"],
+      release: { automaticRelease: true },
+      review: { firstName: "Ada", lastName: "Lovelace", email: "review@example.com", phone: "+1 555 0100" },
+    },
+  };
+  writeFileSync(join(root, "store.config.json"), JSON.stringify(store));
+  writeFileSync(
+    join(root, "app.json"),
+    JSON.stringify({ expo: { version: "1.0", ios: { bundleIdentifier: "com.example.wellness" } } }),
+  );
+  writeFileSync(
+    join(root, "eas.json"),
+    JSON.stringify({ submit: { production: { ios: { ascAppId: "1234567890" } } } }),
+  );
+  const { metadata, ageRating, category, review, release, bundleId, locale, ...rest } = ours;
+  writeFileSync(
+    join(root, "appstore.config.json"),
+    JSON.stringify({ ...rest, easMetadata: "./store.config.json", review: { privacyPublished: true } }),
+  );
+
+  const fake = createFakeAsc();
+  const env = {
+    ASC_KEY_ID: "ABCDE12345",
+    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+    ASC_P8: testPrivateKey(),
+    // no ASC_APP_ID: it comes from eas.json
+  };
+  const out = [];
+  const io = {
+    stdout: { write: (s) => out.push(s) },
+    stderr: { write: () => {} },
+    env,
+    cwd: root,
+    fetchImpl: fake.fetchImpl,
+  };
+  const code = await main(["release", "--json"], io);
+  const json = JSON.parse(out.join(""));
+  assert.equal(
+    verdictOf(json),
+    "ready",
+    JSON.stringify(
+      json.findings.filter((f) => f.severity === "blocker"),
+      null,
+      2,
+    ),
+  );
+  assert.equal(code, Exit.OK);
+  assert.equal(
+    fake.get("appStoreVersionLocalizations", "verloc-1")?.attributes.keywords,
+    "health,routine,tracker,mood",
+  );
+  assert.equal(fake.get("ageRatingDeclarations", "age-1")?.attributes.healthOrWellnessTopics, true);
+});

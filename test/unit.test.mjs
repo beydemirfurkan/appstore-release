@@ -259,3 +259,28 @@ test("version state reads appVersionState first, and translates the deprecated a
   );
   assert.equal(isCurrentVersionState("ACCEPTED"), true, "approved versions are still the one being reported on");
 });
+
+test("an EAS Metadata file translates into our config, and ours wins where both speak", async () => {
+  const { fromStoreConfig, mergeConfig } = await import("../src/core/eas.mjs");
+  const translated = fromStoreConfig({
+    configVersion: 0,
+    apple: {
+      info: { tr: { title: "Sağlık" }, "en-US": { title: "Wellness", keywords: ["a", "b"], releaseNotes: "Fixes" } },
+      categories: [["GAMES", "GAMES_CARD"], "ENTERTAINMENT"],
+      release: { automaticRelease: "2026-11-01T10:00:00Z", phasedRelease: true },
+      advisory: { ageRatingOverrideV2: "THIRTEEN_PLUS", seventeenPlus: false, gambling: false },
+      review: { demoUsername: "demo", demoRequired: true },
+    },
+  });
+  assert.equal(translated.locale, "en-US", "en-US is primary when present");
+  assert.deepEqual(translated.metadata, { name: "Wellness", whatsNew: "Fixes", keywords: "a,b" });
+  assert.deepEqual(translated.locales, { tr: { name: "Sağlık" } });
+  assert.deepEqual(translated.category, { primary: "GAMES", secondary: "ENTERTAINMENT" });
+  assert.deepEqual(translated.release, { type: "SCHEDULED", earliestDate: "2026-11-01T10:00:00Z", phased: true });
+  assert.equal(translated.ageRating.override, "THIRTEEN_PLUS");
+  assert.equal("seventeenPlus" in translated.ageRating, false, "keys Apple removed are dropped");
+  assert.deepEqual(translated.review, { demoAccountName: "demo", demoAccountRequired: true });
+  assert.deepEqual(mergeConfig({ metadata: { name: "A", subtitle: "S" } }, { metadata: { name: "B" } }), {
+    metadata: { name: "B", subtitle: "S" },
+  });
+});

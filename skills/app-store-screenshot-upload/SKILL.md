@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). Producing images optionally uses the iOS Simulator (macOS) or headless Chrome/Chromium.
 metadata:
   author: Furkan Beydemir
-  version: "4.0.1"
+  version: "4.0.2"
   guidelines: "2026-06-08"
 ---
 

@@ -3,8 +3,9 @@
 // installed plugin resolve `./assets/screenshots` inside its own install
 // directory and write credentials.json into the plugin tree.
 
-import { realpathSync } from "node:fs";
-import { isAbsolute, resolve, relative, dirname } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, resolve, relative, dirname, join, parse } from "node:path";
 
 export class PathError extends Error {}
 
@@ -19,10 +20,13 @@ export class PathError extends Error {}
  *
  * @param {string} projectRoot  absolute directory every relative path hangs off
  * @param {string} p            the path from config or a tool argument
- * @param {{ purpose?: string, allowOutside?: boolean }} [opts]
+ * @param {{ purpose?: string, allowOutside?: boolean, boundary?: string }} [opts]
+ *   `boundary`: the directory paths must stay inside, when wider than the root —
+ *   the enclosing repository (see `repositoryBoundary`). Relative paths still
+ *   hang off `projectRoot`.
  * @returns {string} absolute path
  */
-export function resolveProjectPath(projectRoot, p, { purpose, allowOutside = false } = {}) {
+export function resolveProjectPath(projectRoot, p, { purpose, allowOutside = false, boundary } = {}) {
   if (typeof p !== "string" || p === "") {
     throw new PathError(`${purpose ?? "path"} is empty`);
   }
@@ -32,15 +36,36 @@ export function resolveProjectPath(projectRoot, p, { purpose, allowOutside = fal
   const abs = isAbsolute(p) ? p : resolve(projectRoot, p);
   if (allowOutside) return abs;
 
-  const realRoot = realpathOrSelf(projectRoot);
+  const realRoot = realpathOrSelf(boundary ?? projectRoot);
   const real = nearestRealPath(abs);
   const rel = relative(realRoot, real);
   if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) return abs;
 
   throw new PathError(
-    `${purpose ?? "path"} "${p}" resolves to ${real}, outside the project root ${realRoot}. ` +
+    `${purpose ?? "path"} "${p}" resolves to ${real}, outside ${boundary ? "the repository" : "the project root"} ${realRoot}. ` +
       `Pass --project-root if the file really lives elsewhere.`,
   );
+}
+
+/**
+ * The repository a project lives in, as the outer limit for its paths: a
+ * monorepo keeps screenshots in a sibling of the app's folder. Never the home
+ * directory or the root of the disk, even when one of them is a repository.
+ *
+ * @param {string} projectRoot
+ * @returns {string} the repository root, or `projectRoot` itself when there is none
+ */
+export function repositoryBoundary(projectRoot) {
+  const home = realpathOrSelf(homedir());
+  let dir = realpathOrSelf(projectRoot);
+  for (;;) {
+    if (existsSync(join(dir, ".git"))) {
+      return dir === home || dir === parse(dir).root ? projectRoot : dir;
+    }
+    const up = dirname(dir);
+    if (up === dir || dir === home) return projectRoot;
+    dir = up;
+  }
 }
 
 /** realpath, or the input unchanged when it does not exist yet. */

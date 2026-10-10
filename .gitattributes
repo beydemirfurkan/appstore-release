@@ -1,0 +1,6 @@
+# Every text file is LF in the working tree too: Prettier checks for it, and
+# the skill gate compares the launcher copies byte for byte.
+* text=auto eol=lf
+*.png binary
+*.gif binary
+*.mcpb binary

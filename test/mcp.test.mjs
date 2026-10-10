@@ -165,6 +165,19 @@ test("asc_validate_config needs neither credentials nor a network", async () => 
   assert.match(res.content[0].text, /emoji/i);
 });
 
+test("asc_validate_config with preflight reads the app itself, still offline", async () => {
+  const projectDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures/preflight/native-bad");
+  const res = await connect({}).call("asc_validate_config", {
+    config: { bundleId: "com.example.pantry", locale: "en-US" },
+    preflight: true,
+    projectDir,
+  });
+  assert.equal(res.structuredContent.valid, true);
+  assert.equal(res.structuredContent.preflight.kind, "native");
+  assert.match(res.content[0].text, /\*\*will be rejected:\*\* No NSLocationWhenInUseUsageDescription/);
+  assert.match(res.content[0].text, /\[app\.permission\.missing\.NSLocationWhenInUseUsageDescription\]/);
+});
+
 test("asc_generate_credentials stays off until the operator turns it on", async () => {
   const refused = await connect({}).call("asc_generate_credentials", { confirm: true });
   assert.match(refused.content[0].text, /APPSTORE_RELEASE_ALLOW_LOCAL_WRITES/);

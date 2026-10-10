@@ -799,6 +799,37 @@
           "description": "Send the build to beta app review when an external group has it. Defaults to true."
         }
       }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The offline check of the app itself (`appstore-release preflight`, and the App section of `check`).",
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "ignore": {
+          "type": "array",
+          "description": "Findings that do not apply to this app. Each stays in the report as information, with its reason, so the decision is on record.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "reason"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^app\\.",
+                "description": "A finding id, e.g. app.account-deletion; it also covers ids under it (app.permission.default-text covers every key)."
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 3,
+                "description": "Why it does not apply. Required: a waiver without a reason is just a hidden warning."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

@@ -25,6 +25,7 @@
  * @property {string|null} locale       the primary locale the report is about
  * @property {string[]} locales         every locale the config describes
  * @property {string[]} errors          sections we could not read, by name
+ * @property {import("../preflight/index.mjs").PreflightResult} [preflight]  the app on disk, read offline (set by getReadinessReport)
  */
 
 import { localeCodes } from "../core/locales.mjs";

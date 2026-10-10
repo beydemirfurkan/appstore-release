@@ -7,6 +7,9 @@
 import { versionState, APPROVED_STATES } from "../core/status.mjs";
 import { Severity } from "../core/findings.mjs";
 import { getAppSnapshot } from "./snapshot.mjs";
+import { runPreflight } from "../preflight/index.mjs";
+
+import * as app from "./checks/app.mjs";
 
 import * as version from "./checks/version.mjs";
 import * as metadata from "./checks/metadata.mjs";
@@ -16,7 +19,7 @@ import * as review from "./checks/review.mjs";
 import * as subscription from "./checks/subscription.mjs";
 
 /** Order matters: it is the order the sections are reported and acted on. */
-export const CHECKS = [version, store, metadata, screenshots, subscription, review];
+export const CHECKS = [app, version, store, metadata, screenshots, subscription, review];
 
 /**
  * @typedef {"ready"|"blocked"|"needs-human"|"in-review"|"approved"|"live"|"rejected"} Verdict
@@ -35,6 +38,8 @@ export const CHECKS = [version, store, metadata, screenshots, subscription, revi
  * @property {Verdict} verdict
  * @property {Array<{order: number, kind: "run"|"human"|"wait", label: string, command?: string, clicks?: string[], findingIds: string[]}>} nextActions
  * @property {string[]} errors     sections of App Store Connect we could not read
+ * @property {{ projectDir: string, found: boolean, kind: string|null, notes: string[], manualChecks: string[] } | null} preflight
+ *           what the offline read of the app could and could not see, and what to test by hand
  */
 
 /**
@@ -91,8 +96,20 @@ export function buildReport({ snapshot, config = null, resolvePath, now }) {
     verdict: verdictFor(snapshot, findings),
     nextActions: nextActions(findings),
     errors: snapshot.errors ?? [],
+    preflight: snapshot.preflight
+      ? {
+          projectDir: snapshot.preflight.projectDir,
+          found: snapshot.preflight.found,
+          kind: snapshot.preflight.kind,
+          notes: snapshot.preflight.notes,
+          manualChecks: snapshot.preflight.manualChecks,
+        }
+      : null,
   };
 }
+
+/** @type {WeakMap<object, import("../preflight/index.mjs").PreflightResult>} */
+const preflightRuns = new WeakMap();
 
 /**
  * Fetch and judge in one call.
@@ -102,6 +119,11 @@ export function buildReport({ snapshot, config = null, resolvePath, now }) {
  */
 export async function getReadinessReport(ctx, { locale } = {}) {
   const snapshot = await getAppSnapshot(ctx, { locale });
+  // Read once per context: `check --wait` asks again every poll, and the app on
+  // disk does not change because App Review moved.
+  if (!preflightRuns.has(ctx))
+    preflightRuns.set(ctx, runPreflight({ projectDir: ctx.projectRoot, config: ctx.config }));
+  snapshot.preflight = preflightRuns.get(ctx);
   return buildReport({ snapshot, config: ctx.config, resolvePath: ctx.resolvePath });
 }
 

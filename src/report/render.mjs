@@ -3,7 +3,7 @@
 // ways — so the CLI and an agent can never disagree about what is wrong.
 
 import { versionState } from "../core/status.mjs";
-import { Severity } from "../core/findings.mjs";
+import { FixOwner, Severity } from "../core/findings.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { PLAIN } from "../cli/style.mjs";
 
@@ -43,8 +43,10 @@ export function renderReportText(report, { style = PLAIN, compact = false } = {}
   const lines = [];
   const byId = new Map(report.findings.map((f) => [f.id, f]));
   const blocking = report.findings.filter((f) => f.severity === Severity.BLOCKER);
-  const fixable = blocking.filter((f) => !f.uiOnly);
-  const human = blocking.filter((f) => f.uiOnly);
+  // "Fixable here" is only what this tool can do; a missing build or a change to
+  // the app's own code is the person's, like the UI-only steps.
+  const fixable = blocking.filter((f) => !f.uiOnly && f.fixOwner !== FixOwner.EXTERNAL);
+  const human = blocking.filter((f) => f.uiOnly || f.fixOwner === FixOwner.EXTERNAL);
 
   const app = report.app?.name ?? "app";
   const version = report.version ? `${report.version.versionString} · ${report.version.state}` : "no editable version";
@@ -71,7 +73,7 @@ export function renderReportText(report, { style = PLAIN, compact = false } = {}
     }
   }
 
-  const plan = planLines(report, fixable, s);
+  const plan = planLines(report, s);
   if (plan.length) lines.push("", ...plan);
 
   const warnings = report.findings.filter((f) => f.severity === Severity.WARNING);
@@ -92,6 +94,7 @@ function summaryLine(verdict, fixable, human) {
     case "ready":
       return "nothing is blocking submission";
     case "blocked":
+      if (!fixable) return `${things(human)} in the way · ${human === 1 ? "it needs" : "all need"} you`;
       return human
         ? `${things(fixable + human)} in the way · ${fixable} fixable here, ${human} need you`
         : `${things(fixable)} in the way · all fixable here`;
@@ -115,19 +118,28 @@ function summaryLine(verdict, fixable, human) {
  * otherwise each command; then what only a person can do; then submit.
  *
  * @param {import("./report.mjs").ReadinessReport} report
- * @param {import("../core/findings.mjs").Finding[]} fixable
  * @param {import("../cli/style.mjs").Style} s
  */
-function planLines(report, fixable, s) {
+function planLines(report, s) {
+  const byId = new Map(report.findings.map((f) => [f.id, f]));
   const run = report.nextActions.filter((a) => a.kind === "run" && a.command);
+  // Blockers with no command: a build to upload, or a change to the app itself.
+  const yours = report.nextActions.filter(
+    (a) => a.kind === "run" && !a.command && byId.get(a.findingIds[0])?.fixOwner === FixOwner.EXTERNAL,
+  );
   const human = report.nextActions.filter((a) => a.kind === "human");
   const wait = report.nextActions.find((a) => a.kind === "wait");
   const steps = [];
 
+  for (const a of yours) {
+    const f = byId.get(a.findingIds[0]);
+    const where = f?.location ? `${f.location.file}${f.location.line ? `:${f.location.line}` : ""}` : "";
+    steps.push([`you: ${clip(f?.title ?? a.label, 56)}`, where]);
+  }
   const pipelineOnly =
     run.length > 1 && run.every((a) => PIPELINE.includes(String(a.command).replace(/^appstore-release /, "")));
   if (pipelineOnly) {
-    steps.push([`$ appstore-release release`, `fixes all ${fixable.length}`]);
+    steps.push([`$ appstore-release release`, `fixes all ${run.reduce((n, a) => n + a.findingIds.length, 0)}`]);
   } else {
     for (const a of run) steps.push([`$ ${a.command}`, `${a.findingIds.length} to fix`]);
   }
@@ -171,16 +183,20 @@ export function renderReportMarkdown(report) {
   if (blocking.length) {
     out.push("", "## Blocking", "", "| what | who fixes it | how |", "| --- | --- | --- |");
     for (const f of blocking) {
-      const who = f.uiOnly ? "you (no API exists)" : "this tool";
+      const who = f.uiOnly
+        ? "you (no API exists)"
+        : f.fixOwner === FixOwner.EXTERNAL
+          ? "you, outside App Store Connect"
+          : "this tool";
       const how = f.fixCommand ? `\`${f.fixCommand}\`` : f.fixClicks?.length ? f.fixClicks.join(" → ") : f.fix;
-      out.push(`| ${f.title} | ${who} | ${how} |`);
+      out.push(`| ${f.title}${provenance(f)} | ${who} | ${how} |`);
     }
   }
 
   const warnings = report.findings.filter((f) => f.severity === Severity.WARNING);
   if (warnings.length) {
     out.push("", "## Warnings", "");
-    for (const f of warnings) out.push(`- **${f.title}** — ${f.detail} _${f.fix}_`);
+    for (const f of warnings) out.push(`- **${f.title}**${provenance(f)} — ${f.detail} _${f.fix}_`);
   }
 
   if (report.nextActions.length) {
@@ -191,11 +207,33 @@ export function renderReportMarkdown(report) {
     }
   }
 
-  if (report.errors.length) {
-    out.push("", "## Could not read", "", ...report.errors.map((e) => `- ${e}`));
+  const manual = report.preflight?.manualChecks ?? [];
+  if (manual.length) {
+    out.push(
+      "",
+      "## Test on a device",
+      "",
+      "A static read cannot prove these work:",
+      "",
+      ...manual.map((m) => `- ${m}`),
+    );
+  }
+
+  const unread = [...report.errors, ...(report.preflight?.notes ?? [])];
+  if (unread.length) {
+    out.push("", "## Could not read", "", ...unread.map((e) => `- ${e}`));
   }
 
   return out.join("\n");
+}
+
+/** " (5.1.1(v), `src/auth.ts:12`)" — the guideline and where, when known. @param {import("../core/findings.mjs").Finding} f */
+function provenance(f) {
+  const parts = [
+    f.guideline ? `Guideline ${f.guideline}` : "",
+    f.location ? `\`${f.location.file}${f.location.line ? `:${f.location.line}` : ""}\`` : "",
+  ].filter(Boolean);
+  return parts.length ? ` (${parts.join(", ")})` : "";
 }
 
 /**

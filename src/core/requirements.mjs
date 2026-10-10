@@ -70,7 +70,10 @@ export function checkRequirements(config, needs = []) {
     // only required when there are no sets.
     .filter(
       (path) =>
-        !(path === "screenshots.dir" && Array.isArray(config.screenshots?.sets) && config.screenshots.sets.length),
+        !(
+          path === "screenshots.dir" &&
+          ((Array.isArray(config.screenshots?.sets) && config.screenshots.sets.length) || config.screenshots?.from)
+        ),
     )
     .map((path) =>
       finding({

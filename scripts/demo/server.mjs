@@ -19,7 +19,8 @@ createServer(async (req, res) => {
   const body = Buffer.concat(chunks);
   const response = await fake.fetchImpl(`${base}${req.url}`, {
     method: req.method,
-    body: body.length && !req.url?.startsWith("/__upload/") ? body.toString("utf8") : undefined,
+    // JSON for the API, raw bytes for uploads (the fake reads their pixel size).
+    body: !body.length ? undefined : req.url?.startsWith("/__upload/") ? body : body.toString("utf8"),
   });
   // A little latency, so the recording looks like the network it stands in for.
   await new Promise((r) => setTimeout(r, 25));

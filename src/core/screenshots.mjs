@@ -9,6 +9,10 @@
 //   sets: [{ displayType, dir }]         several display types
 //   dir + per-locale subdirectories      ./shots/tr/*.png overrides ./shots/*.png
 //
+// Or point `from` at whatever a screenshot generator exported — any layout, any
+// depth. Files are grouped by pixel size into device sets (iPhone, iPad, Duo),
+// and a top-level folder named after a configured locale belongs to it.
+//
 // A set may name an App Asset Library `placementGroup` instead of (or as well as)
 // a legacy `displayType` — the only way to target groups the old enumeration
 // never had, such as iPhone Duo. With neither, the asset-library path infers the
@@ -18,7 +22,8 @@
 // from turning into a matrix the user has to write out by hand.
 
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
+import { readPngHeader, displayTypeForSize } from "../asc/png.mjs";
 
 export const DEFAULT_DISPLAY_TYPE = "APP_IPHONE_67";
 
@@ -43,6 +48,7 @@ export const DEFAULT_DISPLAY_TYPE = "APP_IPHONE_67";
  */
 export function resolveScreenshotSets(config, resolvePath, locales, overrides = {}) {
   const cfg = config.screenshots ?? {};
+  if (cfg.from) return setsFromExport(resolvePath(cfg.from, "config.screenshots.from"), locales);
   const declared = declaredSets(config, overrides).map((d, i) => ({
     ...d,
     dir: cfg.sets?.length ? (cfg.sets[i].dir ?? cfg.dir) : cfg.dir,
@@ -84,6 +90,61 @@ export function resolveScreenshotSets(config, resolvePath, locales, overrides = 
   }
 
   return { sets, missing };
+}
+
+/**
+ * Group an exported folder into sets by pixel size. Orientation does not split a
+ * device: 2868×1320 and 1320×2868 are the same set.
+ *
+ * @param {string} base  absolute
+ * @param {string[]} locales
+ * @returns {{ sets: ScreenshotSet[], missing: Array<{displayType: string, key: string, locale: string, dir: string}> }}
+ */
+function setsFromExport(base, locales) {
+  if (!isDirectory(base)) {
+    return { sets: [], missing: locales.map((locale) => ({ displayType: "", key: "from", locale, dir: base })) };
+  }
+  const all = walkPngs(base);
+  const isLocaleDir = (/** @type {string} */ rel) => locales.includes(rel.split(sep)[0]) && rel.includes(sep);
+  const shared = all.filter((rel) => !isLocaleDir(rel));
+
+  /** @type {ScreenshotSet[]} */
+  const sets = [];
+  /** @type {Array<{displayType: string, key: string, locale: string, dir: string}>} */
+  const missing = [];
+  for (const locale of locales) {
+    // A locale's own folder replaces the shared files for that locale, as with `dir`.
+    const own = all.filter((rel) => rel.split(sep)[0] === locale && rel.includes(sep));
+    const files = own.length ? own : shared;
+    /** @type {Map<string, { displayType: string, files: string[] }>} */
+    const groups = new Map();
+    for (const rel of files) {
+      const header = readPngHeader(join(base, rel));
+      if (!header) continue;
+      const [w, h] = [Math.min(header.width, header.height), Math.max(header.width, header.height)];
+      const key = displayTypeForSize(w, h) ?? `${w}x${h}`;
+      if (!groups.has(key)) groups.set(key, { displayType: displayTypeForSize(w, h) ?? "", files: [] });
+      groups.get(key)?.files.push(rel);
+    }
+    if (!groups.size) missing.push({ displayType: "", key: "from", locale, dir: base });
+    for (const [key, g] of groups) {
+      sets.push({ displayType: g.displayType, placementGroup: null, key, locale, dir: base, files: g.files });
+    }
+  }
+  return { sets, missing };
+}
+
+/** PNGs under `dir`, as paths relative to it, in display (path) order. @param {string} dir */
+function walkPngs(dir, prefix = "") {
+  /** @type {string[]} */
+  const out = [];
+  for (const entry of readdirSync(join(dir, prefix), { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const rel = prefix ? join(prefix, entry.name) : entry.name;
+    if (entry.isDirectory()) out.push(...walkPngs(dir, rel));
+    else if (entry.name.toLowerCase().endsWith(".png")) out.push(rel);
+  }
+  return out.sort();
 }
 
 function isDirectory(path) {

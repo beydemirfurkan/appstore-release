@@ -28,7 +28,18 @@ export function check({ snapshot, config, resolvePath, now = Date.now() }) {
   if (!snapshot.version) return out;
 
   const locales = snapshot.locales?.length ? snapshot.locales : localeCodes(config);
-  const declared = declaredSets(config);
+  // With `from`, the sets are whatever the export folder holds, by pixel size.
+  const declared =
+    config?.screenshots?.from && resolvePath
+      ? [
+          ...new Map(
+            resolveScreenshotSets(config, resolvePath, locales).sets.map((x) => [
+              x.key,
+              { displayType: x.displayType, placementGroup: null, key: x.key },
+            ]),
+          ).values(),
+        ]
+      : declaredSets(config);
   const placements = snapshot.placements ?? [];
   const multi = declared.length > 1 || locales.length > 1;
   /** Only qualify a finding id when there is more than one set to confuse it with. */
@@ -46,7 +57,10 @@ export function check({ snapshot, config, resolvePath, now = Date.now() }) {
           p.locale === locale &&
           (set.placementGroup
             ? p.placementGroup === set.placementGroup
-            : p.width && p.height && displayTypeForSize(p.width, p.height) === set.displayType),
+            : set.displayType
+              ? p.width && p.height && displayTypeForSize(p.width, p.height) === set.displayType
+              : // a size-keyed set from `screenshots.from`, e.g. "1398x2034"
+                p.width && p.height && `${Math.min(p.width, p.height)}x${Math.max(p.width, p.height)}` === set.key),
       );
 
       if (!legacy.length && !placed.length) {

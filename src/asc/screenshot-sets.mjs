@@ -11,6 +11,8 @@
  * @param {{ localizationId: string, displayType: string,
  *           local: Array<{ file: string, path: string, checksum: string, size: number }>, prune: boolean }} params
  */
+import { basename } from "node:path";
+
 export async function syncScreenshotSet({ client, uploader, dryRun }, { localizationId, displayType, local, prune }) {
   const verLoc = { id: localizationId };
 
@@ -53,7 +55,7 @@ export async function syncScreenshotSet({ client, uploader, dryRun }, { localiza
         !claimed.has(r.id) &&
         (r.attributes.sourceFileChecksum
           ? r.attributes.sourceFileChecksum === item.checksum
-          : r.attributes.fileName === item.file && r.attributes.fileSize === item.size),
+          : r.attributes.fileName === basename(item.file) && r.attributes.fileSize === item.size),
     );
 
   const ordered = [];
@@ -70,7 +72,7 @@ export async function syncScreenshotSet({ client, uploader, dryRun }, { localiza
       type: "appScreenshots",
       relationships: { appScreenshotSet: { data: { type: "appScreenshotSets", id: remoteSet.id } } },
       filePath: item.path,
-      fileName: item.file,
+      fileName: basename(item.file),
     });
     ordered.push(id);
     uploaded.push(item.file);

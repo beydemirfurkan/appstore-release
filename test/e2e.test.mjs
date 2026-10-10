@@ -149,3 +149,50 @@ test("check --wait follows the review to its outcome, and exits 8 when time runs
   assert.equal(approved.code, Exit.OK);
   assert.equal(verdictOf(approved.json), "approved");
 });
+
+test("screenshots.from takes any export folder and sorts it into device sets by pixel size", async () => {
+  const { root, fake, cli } = setup();
+  const { readFileSync, writeFileSync, mkdirSync } = await import("node:fs");
+  const { headerOnlyPng } = await import("./helpers/fixture-project.mjs");
+  // The shape a screenshot generator might export: nested, mixed devices, odd names.
+  const out = join(root, "exports", "run-42");
+  mkdirSync(join(out, "phone"), { recursive: true });
+  mkdirSync(join(out, "foldable"), { recursive: true });
+  for (const n of [1, 2]) writeFileSync(join(out, "phone", `screen-${n}.png`), headerOnlyPng(1320, 2868, `p${n}`));
+  for (const n of [1, 2]) writeFileSync(join(out, "foldable", `screen-${n}.png`), headerOnlyPng(1398, 2034, `d${n}`));
+
+  const path = join(root, "appstore.config.json");
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  config.screenshots = { from: "./exports" };
+  writeFileSync(path, JSON.stringify(config));
+
+  const release = await cli("release");
+  assert.equal(
+    verdictOf(release.json),
+    "ready",
+    JSON.stringify(
+      release.json.findings.filter((f) => f.severity === "blocker"),
+      null,
+      2,
+    ),
+  );
+  const groups = fake
+    .all("appAssetLibraryPlacements")
+    .map((p) => p.attributes.placementGroup)
+    .sort();
+  assert.deepEqual(groups, [
+    "IPHONE_DUO_OUTER_PROFILE",
+    "IPHONE_DUO_OUTER_PROFILE",
+    "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE",
+    "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE",
+  ]);
+  const uploaded = fake.all("appAssetLibraryImages").map((i) => i.attributes.fileName);
+  assert.ok(
+    uploaded.every((n) => !n.includes("/")),
+    "uploads are named by file, not by path",
+  );
+
+  const writes = fake.mutations().length;
+  await cli("release");
+  assert.equal(fake.mutations().length, writes, "and a second run sends nothing");
+});

@@ -232,7 +232,7 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
         attributes: { category: "APP_SCREENSHOTS_AND_PREVIEWS", referenceName },
         relationships: { assetLibrary: { data: { type: "appAssetLibraries", id: library.id } } },
         filePath: item.path,
-        fileName: item.file,
+        fileName: basename(item.file),
         commit: "uploaded",
       });
       uploaded.push(item.file);

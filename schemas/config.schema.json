@@ -322,6 +322,10 @@
           ],
           "description": "The single device size, when `sets` is not used (legacy display type). APP_IPHONE_67 covers 6.7\" and 6.9\" (1320×2868, 1290×2796, 1260×2736) — there is no APP_IPHONE_69. Defaults to APP_IPHONE_67."
         },
+        "from": {
+          "type": "string",
+          "description": "A folder exported by any screenshot tool, relative to this config. Every PNG under it is grouped by pixel size into device sets (iPhone 6.9\", iPad 13\", iPhone Duo…); a top-level folder named after a configured locale belongs to that locale. Use instead of `dir`/`sets`."
+        },
         "placementGroup": {
           "type": "string",
           "pattern": "^[A-Z0-9_]+$",

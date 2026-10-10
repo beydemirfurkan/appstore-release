@@ -386,17 +386,7 @@ export function createFakeAsc({
         (p) => rel(p, "appStoreVersionLocalization")?.id === m[1] && (!group || p.attributes.placementGroup === group),
       )
       .sort((a, b) => (a.attributes.position ?? 0) - (b.attributes.position ?? 0));
-    const images = placed.map((p) => {
-      const img = /** @type {Resource} */ (get("appAssetLibraryImages", rel(p, "image")?.id));
-      const dims = /(\d+)x(\d+)/.exec(img?.attributes.fileName ?? "") ?? [];
-      return {
-        ...img,
-        attributes: {
-          ...img?.attributes,
-          imageAsset: { width: Number(dims[1]) || 1320, height: Number(dims[2]) || 2868 },
-        },
-      };
-    });
+    const images = placed.map((p) => get("appAssetLibraryImages", rel(p, "image")?.id));
     return ok(placed, images);
   });
   on("GET", `/v1/appStoreVersionLocalizations/:id/appScreenshotSets`, () => ok([], []));
@@ -502,7 +492,16 @@ export function createFakeAsc({
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(String(input));
     const method = (init.method ?? "GET").toUpperCase();
-    if (url.pathname.startsWith("/__upload/")) return new Response(null, { status: 200 });
+    if (url.pathname.startsWith("/__upload/")) {
+      // Remember the pixel size Apple would compute during processing.
+      const [, , type, id] = url.pathname.split("/");
+      const bytes = Buffer.from(/** @type {any} */ (init.body ?? []));
+      const asset = get(type, id);
+      if (asset && bytes.length >= 24 && bytes.subarray(12, 16).toString("latin1") === "IHDR") {
+        asset.attributes.imageAsset = { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+      }
+      return new Response(null, { status: 200 });
+    }
     const body = typeof init.body === "string" && init.body ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: url.pathname + url.search, body });
 

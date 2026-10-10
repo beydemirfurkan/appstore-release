@@ -355,3 +355,21 @@ test("a key whose role cannot read reports is told which role can", async () => 
     assert.match(json.results[0].message, /Sales and Reports .* App Manager key is refused/, argv[0]);
   }
 });
+
+test("the subscription report is summarised as subscribers by plan, not units", () => {
+  const head = [
+    "Subscription Name",
+    "Active Standard Price Subscriptions",
+    "Active Free Trial Introductory Offer Subscriptions",
+    "Free Trial Offer Code Subscriptions",
+    "Billing Retry",
+    "Grace Period",
+  ].join("\t");
+  const table = parseTsv(`${head}\nMonthly\t3\t2\t0\t1\t0\nYearly\t1\t0\t4\t0\t0\nMonthly\t1\t0\t0\t0\t0\n`);
+  const { headline, lines } = summarize(table);
+  assert.equal(headline, "5 paying, 2 in a free trial, 4 on an offer, 1 in billing retry");
+  assert.deepEqual(lines, [
+    "Monthly: 4 paying, 2 in a free trial, 1 in billing retry",
+    "Yearly: 1 paying, 4 on an offer",
+  ]);
+});

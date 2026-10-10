@@ -121,9 +121,10 @@ export async function run(ctx, args = {}) {
     // No sales that day is a 404 with a sentence, not a failure.
     if (res.error?.status === 403) return { status: Status.ERROR, message: REPORTS_ROLE };
     if (res.error?.status === 404) {
+      const said = res.error?.errors?.[0]?.detail ?? res.error?.errors?.[0]?.title ?? "none was found";
       return {
         status: Status.OK,
-        message: `no ${type.toLowerCase()} report for ${args.date ?? "the latest day"}: ${res.error.message}`,
+        message: `no ${type.toLowerCase()} report for ${args.date ?? "the latest day"}: ${said}`,
       };
     }
     return { status: Status.ERROR, message: res.error?.message ?? "the report could not be downloaded" };
@@ -184,6 +185,7 @@ export function parseTsv(text) {
  * @param {{ columns: string[], rows: Array<Record<string, string>> }} table
  */
 export function summarize({ columns, rows }) {
+  if (columns.includes("Active Standard Price Subscriptions")) return summarizeSubscriptions(rows);
   /** @type {{ units: number, proceeds: Record<string, number>, byTitle: Record<string, number> }} */
   // Prototype-free maps: a product titled "constructor" is just a title.
   const totals = { units: 0, proceeds: Object.create(null), byTitle: Object.create(null) };
@@ -205,4 +207,68 @@ export function summarize({ columns, rows }) {
     .slice(0, 10)
     .map(([title, units]) => `${String(units).padStart(7)}  ${title}`);
   return { headline: `${totals.units} units${money.length ? ` · proceeds ${money.join(", ")}` : ""}`, lines, totals };
+}
+
+/** Subscription report columns that count subscribers, by what they mean. */
+const SUBSCRIBER_COLUMNS = Object.freeze({
+  paid: ["Active Standard Price Subscriptions"],
+  trial: ["Active Free Trial Introductory Offer Subscriptions"],
+  intro: [
+    "Active Pay Up Front Introductory Offer Subscriptions",
+    "Active Pay As You Go Introductory Offer Subscriptions",
+  ],
+  offers: [
+    "Free Trial Promotional Offer Subscriptions",
+    "Pay Up Front Promotional Offer Subscriptions",
+    "Pay As You Go Promotional Offer Subscriptions",
+    "Free Trial Offer Code Subscriptions",
+    "Pay Up Front Offer Code Subscriptions",
+    "Pay As You Go Offer Code Subscriptions",
+    "Free Trial Win-back Offers",
+    "Pay Up Front Win-back Offers",
+    "Pay As You Go Win-back Offers",
+  ],
+  billingRetry: ["Billing Retry"],
+  gracePeriod: ["Grace Period"],
+});
+
+/**
+ * The Subscription report: active subscribers on the day, by plan — paying at
+ * the standard price, in a free trial, on an introductory or other offer, and
+ * the ones whose payment is failing (billing retry, grace period).
+ *
+ * @param {Array<Record<string, string>>} rows
+ */
+export function summarizeSubscriptions(rows) {
+  const count = (/** @type {Record<string, string>} */ r, /** @type {readonly string[]} */ cols) =>
+    cols.reduce((n, c) => n + (Number(r[c]) || 0), 0);
+  /** @type {Record<string, Record<string, number>>} */
+  const byPlan = Object.create(null);
+  /** @type {Record<string, number>} */
+  const total = Object.create(null);
+  for (const r of rows) {
+    const plan = r["Subscription Name"] || "?";
+    byPlan[plan] ??= Object.create(null);
+    for (const [kind, cols] of Object.entries(SUBSCRIBER_COLUMNS)) {
+      const n = count(r, cols);
+      byPlan[plan][kind] = (byPlan[plan][kind] ?? 0) + n;
+      total[kind] = (total[kind] ?? 0) + n;
+    }
+  }
+  const phrase = (/** @type {Record<string, number>} */ t) =>
+    [
+      `${t.paid ?? 0} paying`,
+      t.trial ? `${t.trial} in a free trial` : "",
+      t.intro ? `${t.intro} on an intro price` : "",
+      t.offers ? `${t.offers} on an offer` : "",
+      t.billingRetry ? `${t.billingRetry} in billing retry` : "",
+      t.gracePeriod ? `${t.gracePeriod} in a grace period` : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
+  return {
+    headline: phrase(total),
+    lines: Object.entries(byPlan).map(([plan, t]) => `${plan}: ${phrase(t)}`),
+    totals: { units: 0, proceeds: Object.create(null), byTitle: Object.create(null), subscribers: total },
+  };
 }

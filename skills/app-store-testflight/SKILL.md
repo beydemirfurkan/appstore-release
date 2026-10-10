@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager or Admin). The build must already be uploaded and processed (eas submit, Xcode or Transporter).
 metadata:
   author: Furkan Beydemir
-  version: "4.3.1"
+  version: "4.3.2"
   guidelines: "2026-06-08"
 ---
 

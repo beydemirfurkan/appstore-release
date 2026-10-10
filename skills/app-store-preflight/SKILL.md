@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+. Works offline with no App Store Connect credentials; reads the project directory only. --expo-config runs `npx expo config` in the project.
 metadata:
   author: Furkan Beydemir
-  version: "4.3.1"
+  version: "4.3.2"
   guidelines: "2026-06-08"
 ---
 

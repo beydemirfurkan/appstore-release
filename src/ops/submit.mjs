@@ -3,12 +3,13 @@
 //
 // Since App Store Connect API 4.4.1, subscriptions and subscription groups have
 // versions, and reviewSubmissionItems accepts `subscriptionVersion` and
-// `subscriptionGroupVersion`. That closed the old gap where a FIRST subscription
-// could only be attached in the web UI. Apple's rule still holds: a first
-// subscription goes to review in the same submission as an app version, and a new
-// subscription travels with its group — so all of them are added to one submission.
+// `subscriptionGroupVersion`. That made LATER subscriptions submittable here, in
+// the same submission as the app version. The app's FIRST subscription still
+// goes to review from appstoreconnect.apple.com together with the binary —
+// Apple says so in as many words — so it is never added by this operation.
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
+import { isFirstSubscription } from "../core/subscriptions.mjs";
 
 /** A draft submission we may add items to and finalize. */
 const DRAFT_STATES = ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"];
@@ -159,8 +160,11 @@ export async function run(ctx, args = {}) {
  */
 async function subscriptionItems({ client, discovery }, productId) {
   if (!productId) return [];
-  const { sub, group } = await discovery.subscription(productId);
+  const { sub, group, all } = await discovery.subscription(productId);
   if (!sub || sub.attributes.state !== "READY_TO_SUBMIT") return [];
+  // A first subscription is attached to the version in the web UI, not here;
+  // the readiness report says so, with the clicks.
+  if (isFirstSubscription(all)) return [];
 
   const items = [];
   const groupVersion = group ? await draftVersion(client, "subscriptionGroups", group.id) : null;

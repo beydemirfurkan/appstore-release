@@ -1,6 +1,6 @@
 ---
 name: asc-subscriptions
-description: Get an iOS auto-renewable subscription ready for App Review and submitted with the app version through the App Store Connect API — group and subscription localizations, price at Apple's nearest price point, the paywall review screenshot, and the versioned submission (ASC API 4.4.1) that lets even a first subscription go through the API. Use when the user says "set up my subscription", "subscription is missing metadata", "submit the in-app purchase", "subscription stuck in READY_TO_SUBMIT", "paywall screenshot", "change subscription price", or when an App Store readiness check reports subscription.* findings.
+description: Get an iOS auto-renewable subscription ready for App Review and submitted with the app version through the App Store Connect API — group and subscription localizations, price at Apple's nearest price point, the paywall review screenshot, and submission — later subscriptions by API (versioned, ASC API 4.4.1), the app's first one from the App Store Connect website as Apple requires. Use when the user says "set up my subscription", "subscription is missing metadata", "submit the in-app purchase", "subscription stuck in READY_TO_SUBMIT", "paywall screenshot", "change subscription price", or when an App Store readiness check reports subscription.* findings.
 license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). The subscription product itself must already exist in App Store Connect.
 metadata:
@@ -10,7 +10,7 @@ metadata:
 
 # Subscriptions
 
-A subscription leaves `MISSING_METADATA` only when four things exist: a **group localization** (display name), a **subscription localization** (name and description), a **price**, and a **review screenshot** of the paywall. Then it is submitted for review **together with an app version** — Apple requires the first subscription of a group to ride with a version, in the same submission.
+A subscription leaves `MISSING_METADATA` only when four things exist: a **group localization** (display name), a **subscription localization** (name and description), a **price**, and a **review screenshot** of the paywall. Then it goes to review with an app version. The app's **first** subscription is submitted from the App Store Connect website together with the binary — Apple's rule; every later one can be submitted by `asc submit`.
 
 ## Running the CLI
 
@@ -58,7 +58,9 @@ asc check          # subscription.missing-metadata should be gone; state READY_T
 asc submit --submit      # ask the user first — this is irreversible
 ```
 
-`submit` builds one review submission containing the `appStoreVersion`, the `subscriptionGroupVersion` and the `subscriptionVersion` (the versioned model from ASC API 4.4.1), then submits it. That is what makes a **first** subscription possible without the App Store Connect UI. Later subscriptions in the same group can be submitted the same way, with or without a version.
+**First subscription of the app?** `check` reports `subscription.first.ui-only`. Apple requires it to be submitted from the website with the binary: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Do not try to work around it.
+
+**Any later subscription:** `submit` adds its `subscriptionVersion` (the versioned model from ASC API 4.4.1) to the same review submission as the `appStoreVersion`, then submits.
 
 Afterwards `asc status` should show the version and the subscription as `WAITING_FOR_REVIEW`.
 

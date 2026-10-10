@@ -80,13 +80,14 @@ function spec(shortName, width, height) {
 }
 
 /**
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
   appName = "Wellness",
   baseUrl = "https://api.appstoreconnect.apple.com",
   assetLibrary = true,
+  firstSubscription = false,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -170,6 +171,23 @@ export function createFakeAsc({
     { productId: "com.example.wellness.monthly", name: "Monthly", state: "MISSING_METADATA" },
     { group: ref("subscriptionGroups", "grp-1") },
   );
+  // Unless asked otherwise, the app already sells an approved yearly plan, so the
+  // monthly one is not its first subscription and may be submitted by API —
+  // Apple sends a first subscription through the website with the binary.
+  if (!firstSubscription) {
+    put(
+      "subscriptions",
+      "sub-0",
+      { productId: "com.example.wellness.yearly", name: "Yearly", state: "APPROVED" },
+      { group: ref("subscriptionGroups", "grp-1") },
+    );
+    put(
+      "subscriptionGroupVersions",
+      "grpver-0",
+      { state: "APPROVED", version: 1 },
+      { subscriptionGroup: ref("subscriptionGroups", "grp-1") },
+    );
+  }
   for (const [id, price] of [
     ["spp-299", "2.99"],
     ["spp-499", "4.99"],

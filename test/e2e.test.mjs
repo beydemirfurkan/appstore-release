@@ -92,15 +92,12 @@ test("check → release → check → submit reaches App Review, and a second re
   const submit = await cli("submit", "--submit");
   assert.equal(submit.code, Exit.OK, JSON.stringify(submit.json.results, null, 2));
   assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
-  // API 4.4.1: the first subscription goes in the same submission, by API.
+  // The app already sells an approved plan, so this one goes in the same
+  // submission, by API (API 4.4.1 versioned subscriptions).
   const items = fake.all("reviewSubmissionItems");
   assert.ok(
     items.some((i) => i.relationships?.subscriptionVersion),
     "subscription version submitted",
-  );
-  assert.ok(
-    items.some((i) => i.relationships?.subscriptionGroupVersion),
-    "its group travels with it",
   );
   assert.equal(fake.get("subscriptions", "sub-1")?.attributes.state, "WAITING_FOR_REVIEW");
 
@@ -195,4 +192,40 @@ test("screenshots.from takes any export folder and sorts it into device sets by 
   const writes = fake.mutations().length;
   await cli("release");
   assert.equal(fake.mutations().length, writes, "and a second run sends nothing");
+});
+
+test("an app's first subscription stops at needs-human with the clicks, as Apple requires", async () => {
+  const root = mkdtempSync(join(tmpdir(), "asr-e2e-first-"));
+  writeWellnessProject(root);
+  const fake = createFakeAsc({ firstSubscription: true });
+  const env = {
+    ASC_KEY_ID: "ABCDE12345",
+    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+    ASC_P8: testPrivateKey(),
+    ASC_APP_ID: "1234567890",
+  };
+  const run = async (/** @type {string[]} */ ...argv) => {
+    const out = [];
+    const io = {
+      stdout: { write: (s) => out.push(s) },
+      stderr: { write: () => {} },
+      env,
+      cwd: root,
+      fetchImpl: fake.fetchImpl,
+    };
+    return { code: await main([...argv, "--json"], io), json: JSON.parse(out.join("")) };
+  };
+
+  const release = await run("release");
+  assert.equal(verdictOf(release.json), "needs-human");
+  assert.equal(release.code, Exit.NEEDS_HUMAN);
+  const first = release.json.findings.find((f) => f.id === "subscription.first.ui-only");
+  assert.ok(first?.fixClicks?.includes("Add for Review"));
+
+  // Forced through, the version goes alone: the first subscription is never added by API.
+  await run("submit", "--submit", "--force");
+  assert.equal(
+    fake.all("reviewSubmissionItems").some((i) => i.relationships?.subscriptionVersion),
+    false,
+  );
 });

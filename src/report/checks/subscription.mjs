@@ -1,6 +1,7 @@
 // Subscriptions: whether the configured one exists, is complete, and goes to review.
 
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
+import { isFirstSubscription } from "../../core/subscriptions.mjs";
 
 export const section = { id: "subscription", title: "Subscriptions" };
 
@@ -43,10 +44,34 @@ export function check({ snapshot, config }) {
     );
   }
 
-  // Since API 4.4.1 a subscription has versions that review submissions accept,
-  // so READY_TO_SUBMIT is no longer a hand-off: `submit` adds the subscription
-  // (and its group, for a new one) to the same submission as the app version.
-  if (sub.state === "READY_TO_SUBMIT") {
+  if (sub.state === "READY_TO_SUBMIT" && isFirstSubscription(snapshot.subscriptions)) {
+    // Apple: the app's first subscription is submitted together with the binary
+    // through appstoreconnect.apple.com. Later ones go through the API.
+    out.push(
+      finding({
+        id: "subscription.first.ui-only",
+        severity: Severity.BLOCKER,
+        category: Category.ASC_STATE,
+        title: "The first subscription is submitted from App Store Connect",
+        detail:
+          `${productId} is ready, and it is the app's first subscription. Apple requires the first one to go to ` +
+          "review together with the app version, from the website; every later subscription can be submitted here.",
+        fixOwner: FixOwner.UI,
+        uiOnly: true,
+        fix: "Attach it to the version and submit both, in App Store Connect.",
+        fixClicks: [
+          "the version page",
+          "In-App Purchases and Subscriptions",
+          "Select",
+          productId,
+          "Done",
+          "Add for Review",
+          "Submit to App Review",
+        ],
+        docs: "references/gotchas.md#subscriptions--iaps",
+      }),
+    );
+  } else if (sub.state === "READY_TO_SUBMIT") {
     out.push(
       finding({
         id: "subscription.ready-to-submit",
@@ -54,8 +79,8 @@ export function check({ snapshot, config }) {
         category: Category.ASC_STATE,
         title: `${productId} is ready and will be submitted with the version`,
         detail:
-          "submit adds its subscription version — and its group's, if the group was never approved — to the same " +
-          "review submission, as Apple requires for a first subscription.",
+          "The app already has an approved subscription, so this one can go by API: submit adds its subscription " +
+          "version to the same review submission as the app version.",
         fix: "Nothing; submit includes it.",
         fixCommand: "appstore-release submit --submit",
       }),

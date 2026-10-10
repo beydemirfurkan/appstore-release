@@ -42,7 +42,7 @@ Credentials come from `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_P8_PATH` (or `ASC_P8`)
 2. **Ask the user before `submit --submit`** (or `asc_submit_for_review`) — it is irreversible. It refuses unless the readiness verdict is `ready`; only use `--force` when the user insists, and tell them Apple will reject it.
 3. **Ask before `credentials --allow-new-cert`** — Apple caps an account at three distribution certificates.
 4. **Let `check` plan.** Work through its `nextActions` in order instead of inventing a sequence.
-5. **Do not pretend Apple has an API it does not.** App Privacy is UI-only; set `review.privacyPublished: true` only after the user confirms they published it.
+5. **Do not pretend Apple has an API it does not.** App Privacy is UI-only; set `review.privacyPublished: true` only after the user confirms they published it. An app's first subscription is submitted from the App Store Connect website with the binary; never try to work around that.
 6. **Dry-run first** when showing the user what will change: every mutating command accepts `--dry-run`, enforced at the HTTP client.
 
 ## Working on this repository

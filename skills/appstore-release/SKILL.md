@@ -105,7 +105,7 @@ asc release              # apply it, then a fresh check
 
 `release` runs attach-build, metadata, pricing, content-rights, age-rating, category, review-info, release-options, screenshots and subscription — each one idempotent. Run any of them alone by name.
 
-### 6. Hand off the one UI-only step
+### 6. Hand off what Apple keeps in the UI
 
 **App Privacy → Data Collection.** Apple has no API for it. Ask the user to declare the data types matching the app's privacy manifest and press **Publish** (App Store Connect → the app → App Privacy). Then record that they did, so the readiness report can reach `ready`:
 
@@ -115,6 +115,8 @@ asc release              # apply it, then a fresh check
 
 The API cannot verify this flag — only set it when the user confirms. If Publish is greyed out, see "NSUserTracking conflict" in [references/gotchas.md](references/gotchas.md#app-privacy-ui-only).
 
+**The app's first subscription** (`subscription.first.ui-only`). Apple requires an app's first subscription to go to review together with the version, from the website. `check` gives the clicks: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Once one subscription has been approved, later ones are submitted by `asc submit`.
+
 ### 7. Submit
 
 ```bash
@@ -122,7 +124,7 @@ asc check
 asc submit --submit
 ```
 
-**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. A configured subscription is submitted together with the version — including a first subscription. If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`.
+**Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. A configured subscription is submitted together with the version when the app already has an approved one; a first subscription is submitted from the website (step 6). If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`.
 
 On rejection, switch to **asc-rejection**.
 

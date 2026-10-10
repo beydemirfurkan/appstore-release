@@ -77,6 +77,6 @@
 <text x="44" y="606" class="s h" text-anchor="start">App Store Connect API 4.5</text>
 <text x="270" y="606" class="m c ac" text-anchor="start">App Asset Library · versioned subscriptions</text>
 <rect x="652" y="570" width="284" height="62" rx="12" fill="#2a2213" stroke="#d29922" stroke-width="1.25" stroke-dasharray="5 5"/>
-<text x="672" y="597" class="s b" text-anchor="start">Only one UI-only step</text>
-<text x="672" y="620" class="s c mu" text-anchor="start">App Privacy — Apple has no API</text>
+<text x="672" y="597" class="s b" text-anchor="start">Kept in Apple’s UI</text>
+<text x="672" y="620" class="s c mu" text-anchor="start">App Privacy · first subscription</text>
 </svg>

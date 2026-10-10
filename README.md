@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml/badge.svg)](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE) [![iOS 27](https://img.shields.io/badge/iOS-27-black)](docs/reference.md#updated-for-ios-27)
 
-<img src="docs/media/hero.gif" alt="appstore-release: check finds twelve blockers, release fixes them, submit sends the app and its first subscription to App Review" width="860">
+<img src="docs/media/hero.gif" alt="appstore-release: check finds twelve blockers, release fixes them, submit sends the app and its new subscription to App Review" width="860">
 
 <sub>Real output, recorded against the demo below.</sub>
 
@@ -41,9 +41,9 @@ The demo runs against a local stand-in for App Store Connect, so nothing leaves 
 
 **`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscription. It is idempotent; a second run sends nothing.
 
-**`submit`** sends the version, and a first subscription with it. It refuses unless `check` says ready.
+**`submit`** sends the version, with any new subscription. It refuses unless `check` says ready.
 
-Apple keeps one step out of its API: the App Privacy label. For that step, `check` tells you exactly where to click.
+Apple keeps two things in its web UI: the App Privacy label and an app's first subscription. For those, `check` tells you exactly where to click.
 
 ## Skills
 

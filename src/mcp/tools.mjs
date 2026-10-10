@@ -398,7 +398,8 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       title: "Configure a subscription",
       description:
         "Write a subscription's localizations, price and App Review paywall screenshot, so it leaves " +
-        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends it together with the app version.",
+        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends it with the app version — unless it is the " +
+          "app's first subscription, which Apple requires to be submitted from the website.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {

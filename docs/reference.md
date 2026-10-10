@@ -5,7 +5,7 @@ Everything the [README](../README.md) leaves out: every install path, setup for 
 - [Every way to install](#every-way-to-install)
 - [Why not just an API wrapper](#why-not-just-an-api-wrapper)
 - [Updated for iOS 27](#updated-for-ios-27)
-- [The one step Apple keeps in the UI](#the-one-step-apple-keeps-in-the-ui)
+- [What Apple keeps in the UI](#what-apple-keeps-in-the-ui)
 - [Quick start with a real app](#quick-start-with-a-real-app)
 - [Commands](#commands) · [MCP server](#mcp-server) · [Safety](#safety) · [Architecture](#architecture) · [Requirements](#requirements) · [Contributing](#contributing)
 
@@ -56,15 +56,16 @@ App Store Connect API 4.4.1 and 4.5.1 (September/October 2026) changed how submi
 
 - **App Asset Library.** Screenshots upload through the library, the only place iPhone Duo screenshots exist. Placement groups and exact pixel specs are read from `appAssetLibraryRefData`, so a new device needs no update here. Files are deduplicated across locales. The deprecated screenshot-set API remains a fallback (`screenshots.api`).
 - **iPhone Duo.** Add a set with `placementGroup`; `screenshots --list-groups` prints what Apple offers. `check` reminds you before Apple's April 2027 requirement for apps built with the iOS 27.1 SDK.
-- **First subscriptions go through the API.** Versioned subscriptions and groups are added to the same review submission as the app version. This used to be a manual step in the web UI.
+- **Later subscriptions go through the API.** Versioned subscriptions are added to the same review submission as the app version. An app's _first_ subscription is still submitted from the website with the binary, as Apple requires; `check` gives the clicks.
 - **Age rating.** `INFREQUENT`/`FREQUENT` (older spellings still accepted), `socialMedia` and `socialMediaAgeRestricted` (required since September 2026), and `ageRatingOverrideV2`.
 - **Sizes.** Every accepted 6.9" and 13" size and landscape. Screenshots with an alpha channel are refused before upload.
 
 What no API exposes, and the skills therefore cover as guidance: builds must use the iOS 27 SDK from April 2027, and an iOS 27 SDK build needs a launch screen and the scene lifecycle.
 
-## The one step Apple keeps in the UI
+## What Apple keeps in the UI
 
-**App Privacy → Data Collection.** Every `appDataUsages*` endpoint returns 404. `check` blocks with the exact clicks until you publish the label in App Store Connect and set `"review": { "privacyPublished": true }`. That records your word for it; it is not presented as verified.
+1. **App Privacy → Data Collection.** Every `appDataUsages*` endpoint returns 404. `check` blocks with the exact clicks until you publish the label in App Store Connect and set `"review": { "privacyPublished": true }`. That records your word for it; it is not presented as verified.
+2. **An app's first subscription.** Apple: _"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com. For subsequent subscriptions, submit using the API endpoints."_ `check` reports it with the clicks; every later subscription is submitted by `submit`.
 
 ## Quick start with a real app
 

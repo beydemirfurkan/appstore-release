@@ -49,6 +49,7 @@ const MAX_WALK = 100000;
  * @property {any} expoConfig         the `expo` object, when readable
  * @property {boolean} dynamicConfig  app.config.js/ts exists and was not evaluated
  * @property {Map<string, PlistEntry>} infoPlist
+ * @property {Set<string>} disabledKeys  keys an Expo plugin option turned off with `false`
  * @property {Array<{ source: string, types: Array<{ type: string, reasons: string[] }> }>} privacyManifests
  * @property {boolean} aggregationDisabled
  * @property {Array<{ file: string, text: string }>} sources
@@ -64,7 +65,8 @@ export function loadProject(dir, { expoConfig } = {}) {
   /** @type {string[]} */
   const notes = [];
   const pkg = readJson(join(dir, "package.json"));
-  const deps = new Set([...Object.keys(pkg?.dependencies ?? {}), ...Object.keys(pkg?.devDependencies ?? {})]);
+  // What ships: devDependencies (test runners, linters) never reach the app.
+  const deps = new Set(Object.keys(pkg?.dependencies ?? {}));
 
   const appJson = readJson(join(dir, "app.json")) ?? readJson(join(dir, "app.config.json"));
   const dynamicFile = ["app.config.js", "app.config.ts", "app.config.mjs", "app.config.cjs"].find((f) =>
@@ -93,6 +95,7 @@ export function loadProject(dir, { expoConfig } = {}) {
       expoConfig: null,
       dynamicConfig: false,
       infoPlist: new Map(),
+      disabledKeys: new Set(),
       privacyManifests: [],
       aggregationDisabled: false,
       sources: [],
@@ -109,13 +112,17 @@ export function loadProject(dir, { expoConfig } = {}) {
 
   // 1. Expo config: ios.infoPlist, then plugin options and their defaults, in
   //    Expo's own precedence (plugin option > ios.infoPlist > default; false removes).
+  /** @type {Set<string>} */
+  const disabledKeys = new Set();
   const appInfoPlist = expo?.ios?.infoPlist ?? {};
   for (const [k, v] of Object.entries(appInfoPlist)) set(k, v, "app.json ios.infoPlist");
   for (const [name, options] of pluginsOf(expo)) {
     for (const p of EXPO_PERMISSION_PLUGINS[name] ?? []) {
       const option = options?.[p.option];
-      if (option === false) infoPlist.delete(p.key);
-      else if (typeof option === "string") set(p.key, option, `plugin ${name}`);
+      if (option === false) {
+        infoPlist.delete(p.key);
+        disabledKeys.add(p.key);
+      } else if (typeof option === "string") set(p.key, option, `plugin ${name}`);
       else if (!infoPlist.has(p.key)) set(p.key, p.default, `plugin ${name} (default text)`);
     }
   }
@@ -128,7 +135,7 @@ export function loadProject(dir, { expoConfig } = {}) {
   const walk = { visited: 0, truncated: false };
   const plists = findFiles(dir, (f) => f.endsWith("Info.plist"), walk);
   for (const file of plists) {
-    const parsed = parsePlist(readFileSync(file, "utf8"));
+    const parsed = parsePlist(readText(file) ?? "");
     if ("error" in parsed) {
       notes.push(`${rel(dir, file)}: ${parsed.error}, not read`);
       continue;
@@ -136,7 +143,7 @@ export function loadProject(dir, { expoConfig } = {}) {
     for (const [k, v] of Object.entries(parsed.value ?? {})) set(k, v, rel(dir, file));
   }
   for (const file of findFiles(dir, (f) => f.endsWith("project.pbxproj"), walk)) {
-    const text = readFileSync(file, "utf8");
+    const text = readText(file) ?? "";
     for (const m of text.matchAll(/INFOPLIST_KEY_(\w+)\s*=\s*("((?:[^"\\]|\\.)*)"|[^;\s]+)\s*;/g)) {
       const value = m[3] !== undefined ? m[3].replace(/\\"/g, '"') : m[2];
       set(m[1], value === "YES" ? true : value === "NO" ? false : value, rel(dir, file));
@@ -149,7 +156,7 @@ export function loadProject(dir, { expoConfig } = {}) {
     privacyManifests.push({ source: "app.json ios.privacyManifests", types: accessedTypes(expo.ios.privacyManifests) });
   }
   for (const file of findFiles(dir, (f) => f.endsWith("PrivacyInfo.xcprivacy"), walk)) {
-    const parsed = parsePlist(readFileSync(file, "utf8"));
+    const parsed = parsePlist(readText(file) ?? "");
     if ("error" in parsed) {
       notes.push(`${rel(dir, file)}: ${parsed.error}, not read`);
       continue;
@@ -188,6 +195,7 @@ export function loadProject(dir, { expoConfig } = {}) {
     expoConfig: expo,
     dynamicConfig,
     infoPlist,
+    disabledKeys,
     privacyManifests,
     aggregationDisabled,
     sources,
@@ -250,7 +258,8 @@ function findFiles(dir, test, budget) {
       if (e.isDirectory()) {
         if (SKIP_DIRS.has(e.name) || e.name.endsWith("Tests") || e.name.endsWith("UITests")) continue;
         if (e.name.endsWith(".xcodeproj")) {
-          if (test(join(p, "project.pbxproj"))) out.push(join(p, "project.pbxproj"));
+          const pbxproj = join(p, "project.pbxproj");
+          if (test(pbxproj) && existsSync(pbxproj)) out.push(pbxproj);
           continue;
         }
         walk(p);
@@ -267,6 +276,15 @@ function isDir(path) {
     return statSync(path).isDirectory();
   } catch {
     return false;
+  }
+}
+
+/** A file's text, or null when it cannot be read (a broken symlink, a permission). @param {string} path */
+function readText(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
   }
 }
 

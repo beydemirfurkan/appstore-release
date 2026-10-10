@@ -13,7 +13,7 @@ import { renderReportMarkdown, renderReportText } from "../src/report/render.mjs
 import { validateConfig } from "../src/core/requirements.mjs";
 import { main } from "../src/cli.mjs";
 import { Exit } from "../src/core/status.mjs";
-import { Severity } from "../src/core/findings.mjs";
+import { Severity, finding } from "../src/core/findings.mjs";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures/preflight");
 const fixture = (/** @type {string} */ name) => join(FIXTURES, name);
@@ -202,15 +202,16 @@ test("expo-good: nothing to block or warn about", () => {
   assert.ok(result.manualChecks.some((m) => /NSCameraUsageDescription/.test(m)));
 });
 
-test("native-bad: a native API without its usage description blocks, pointing at the code", () => {
+test("native-bad: what is read off the app blocks; what is inferred from the code warns, pointing at it", () => {
   const result = runPreflight({ projectDir: fixture("native-bad") });
   assert.equal(result.kind, "native");
   assert.deepEqual(ofSeverity(result, Severity.BLOCKER).sort(), [
-    "app.permission.missing.NSLocationWhenInUseUsageDescription",
     "app.privacy-manifest.invalid-reason.NSPrivacyAccessedAPICategoryFileTimestamp",
     "app.privacy-manifest.unknown-category.NSPrivacyAccessedAPICategoryClipboard",
   ]);
   const f = byId(result);
+  // A symbol in the source may be used for something else: a warning, not a certainty.
+  assert.equal(f.get("app.permission.missing.NSLocationWhenInUseUsageDescription").severity, Severity.WARNING);
   assert.deepEqual(f.get("app.permission.missing.NSLocationWhenInUseUsageDescription").location, {
     file: "ios/Pantry/StoreLocator.swift",
     line: 4,
@@ -359,15 +360,43 @@ test("the readiness report puts the App section first and asks the person to fix
 
   const text = renderReportText(report);
   assert.match(text, /✗ App\b/);
-  assert.match(text, /you: No NSLocationWhenInUseUsageDescription.*ios\/Pantry\/StoreLocator\.swift:4/);
+  assert.match(text, /✗ App\s+Invalid reason XXXX\.1/, "the section line shows a blocker before a warning");
+  assert.match(text, /you: Invalid reason XXXX\.1 for NSPrivacyAccessedAPICategory/);
   // The app's own blockers are the person's, beside what this tool can still do.
-  assert.match(text, /5 things in the way · 2 fixable here, 3 need you/);
+  assert.match(text, /4 things in the way · 2 fixable here, 2 need you/);
 
   const md = renderReportMarkdown(report);
+  assert.match(md, /\| Invalid reason XXXX\.1 .* \| you, outside App Store Connect \|/);
   assert.match(
     md,
-    /\| No NSLocationWhenInUseUsageDescription, but the app uses location.* \(Guideline 5\.1\.1\(ii\), `ios\/Pantry\/StoreLocator\.swift:4`\) \| you, outside App Store Connect \|/,
+    /- \*\*No NSLocationWhenInUseUsageDescription, but the app uses location.*\*\* \(Guideline 5\.1\.1\(ii\), `ios\/Pantry\/StoreLocator\.swift:4`\)/,
   );
+
+  // A blocker that knows where it is says so in the plan.
+  const located = buildReport({
+    snapshot: {
+      generatedAt: "",
+      app: null,
+      version: null,
+      versions: [],
+      screenshotSets: [],
+      subscriptions: [],
+      pricing: { hasSchedule: true },
+      errors: [],
+      preflight: {
+        findings: [
+          finding({
+            id: "app.example",
+            category: "app",
+            fixOwner: "external",
+            title: "Something certain",
+            location: { file: "src/a.ts", line: 3 },
+          }),
+        ],
+      },
+    },
+  });
+  assert.match(renderReportText(located), /you: Something certain\s+src\/a\.ts:3/);
 });
 
 test("a snapshot without a preflight reads as an App section with nothing in it", () => {
@@ -386,4 +415,41 @@ test("a snapshot without a preflight reads as an App section with nothing in it"
   assert.equal(report.sections[0].id, "app");
   assert.equal(report.sections[0].state, "ok");
   assert.equal(report.preflight, null);
+});
+
+test("what the app does not ship is not counted: devDependencies, and keys a plugin turned off", () => {
+  const dir = project({
+    "package.json": JSON.stringify({
+      dependencies: { expo: "54", "expo-av": "16" },
+      devDependencies: { "expo-camera": "17", "@react-native-google-signin/google-signin": "16" },
+    }),
+    "app.json": JSON.stringify({ expo: { plugins: [["expo-av", { microphonePermission: false }]] } }),
+    "ios/App.xcodeproj/project.pbxproj": "// nothing",
+    "ios/App/Info.plist": '<plist version="1.0"><dict><key>CFBundleName</key><string>App</string></dict></plist>',
+  });
+  const result = runPreflight({ projectDir: dir });
+  const ids = [...byId(result).keys()];
+  assert.equal(
+    ids.some((id) => id.startsWith("app.permission.missing")),
+    false,
+    ids.join(", "),
+  );
+  assert.equal(ids.includes("app.login.equivalent-option"), false);
+  assert.equal(ids.includes("app.privacy-manifest.sdk"), false);
+});
+
+test("a project that is half there is reported, not crashed on", () => {
+  const dir = project({
+    "package.json": JSON.stringify({ dependencies: { expo: "54" } }),
+    "ios/Template.xcodeproj/README": "no pbxproj in here",
+  });
+  mkdirSync(join(dir, "ios", "Empty.xcodeproj"), { recursive: true });
+  const result = runPreflight({ projectDir: dir });
+  assert.equal(result.found, true);
+  assert.deepEqual(ofSeverity(result, Severity.BLOCKER), []);
+});
+
+test("a package.json with neither Expo nor Xcode has no kind", () => {
+  const result = runPreflight({ projectDir: project({ "package.json": "{}" }) });
+  assert.equal(result.kind, null);
 });

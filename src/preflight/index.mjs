@@ -23,7 +23,7 @@ export const RULES = [permissions, privacyManifest, accounts, commerce, platform
  * @typedef {Object} PreflightResult
  * @property {string} projectDir
  * @property {boolean} found
- * @property {"expo"|"expo-prebuilt"|"native"|null} kind
+ * @property {"expo"|"expo-prebuilt"|"native"|null} kind  null: a package.json with neither Expo nor an Xcode project
  * @property {import("../core/findings.mjs").Finding[]} findings
  * @property {string[]} notes          what could not be read, said plainly
  * @property {string[]} manualChecks   what a static pass cannot prove; test it on a device
@@ -55,7 +55,7 @@ export function runPreflight({ projectDir, config = null, expoConfig }) {
           severity: Severity.INFO,
           title: "No app project next to the config",
           detail: `Nothing in ${projectDir} looks like an Expo or Xcode project, so the app itself was not checked.`,
-          fix: "Run preflight with --project-dir pointing at the app.",
+          fix: "Point preflight at the app: --project-root on the command line, projectDir over MCP.",
         }),
       ],
       notes: [],
@@ -91,7 +91,7 @@ export function runPreflight({ projectDir, config = null, expoConfig }) {
   return {
     projectDir,
     found: true,
-    kind: project.native ? (project.expo ? "expo-prebuilt" : "native") : "expo",
+    kind: project.native ? (project.expo ? "expo-prebuilt" : "native") : project.expo ? "expo" : null,
     findings,
     notes,
     manualChecks: manualChecks(project, sellsProducts),

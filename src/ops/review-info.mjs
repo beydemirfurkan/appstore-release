@@ -5,13 +5,15 @@
 import { Status } from "../core/status.mjs";
 import { runPreflight } from "../preflight/index.mjs";
 import { purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
+import { checkRequirements } from "../core/requirements.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
   id: "review-info",
   title: "App Review info",
   phase: "listing",
-  needs: ["review"],
+  // Checked in run(): drafting notes needs no contact details, writing them does.
+  needs: [],
   mutates: true,
   args: {
     draftNotes: {
@@ -25,8 +27,6 @@ export const meta = {
 /** @param {import("../core/context.mjs").Context} ctx @param {{ draftNotes?: boolean }} [args] */
 export async function run(ctx, args = {}) {
   const { client, discovery, config } = ctx;
-  const r = config?.review;
-  if (!r) return { status: Status.ERROR, message: "config.review is required" };
 
   if (args.draftNotes) {
     const { signals } = runPreflight({ projectDir: ctx.projectRoot, config });
@@ -38,6 +38,12 @@ export async function run(ctx, args = {}) {
       details: { notes },
     };
   }
+
+  const missing = checkRequirements(config, ["review"]);
+  if (missing.length) {
+    return { status: Status.ERROR, message: missing.map((f) => f.title).join("; "), findings: missing };
+  }
+  const r = config.review;
 
   const version = await discovery.editableVersion();
   const attributes = {

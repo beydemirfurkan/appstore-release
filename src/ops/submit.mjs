@@ -14,7 +14,10 @@ import { finding, Category, FixOwner } from "../core/findings.mjs";
 import { getReadinessReport } from "../report/report.mjs";
 import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { FIRST_PRODUCT_CLICKS, isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
-import { explainRefusal } from "../asc/refusals.mjs";
+import { explainRefusal, isProductLine, refusedKinds } from "../asc/refusals.mjs";
+
+/** Review submission item relationships that carry a product rather than the app. */
+const PRODUCT_RELATIONSHIPS = ["subscriptionGroupVersion", "subscriptionVersion", "inAppPurchaseVersion"];
 
 /** What to run after a submission, to follow it to Apple's answer. */
 export const FOLLOW_COMMAND = "appstore-release check --wait 30";
@@ -156,7 +159,7 @@ export async function run(ctx, args = {}) {
   }
   const products = wanted.filter((i) => i.product);
 
-  /** related id → reviewSubmissionItem id, for everything the submission already holds */
+  /** related id → its reviewSubmissionItem, for everything the submission already holds */
   const present = await existingItems(client, submission.id);
   const added = [];
   for (const item of wanted) {
@@ -185,11 +188,29 @@ export async function run(ctx, args = {}) {
         findings: [...findings, ...(res.error.hints ?? [])],
       };
     }
-    if (res.data?.id) present.set(item.id, res.data.id);
+    if (res.data?.id) present.set(item.id, { itemId: res.data.id, relationship: item.relationship });
     added.push(item.label);
   }
 
-  const contents = wanted.map((i) => i.label).join(" + ");
+  // The app alone means the app alone: product items an earlier run left in the
+  // draft come out too, or they would go to review with it.
+  if (args.skipProducts) {
+    const { removed, stuck } = await removeProductItems(client, present);
+    if (stuck.length) {
+      return {
+        status: Status.ERROR,
+        message:
+          `could not take ${stuck.length} product item(s) out of submission ${submission.id}; ` +
+          "remove them in App Store Connect before sending the app alone",
+        details: { submissionId: submission.id, removed, stuck },
+      };
+    }
+    if (removed.length) added.push(...removed.map((id) => `−${id}`));
+  }
+
+  const others = [...present.keys()].filter((id) => !wanted.some((w) => w.id === id)).length;
+  const contents =
+    wanted.map((i) => i.label).join(" + ") + (others ? ` + ${others} other item(s) already in the draft` : "");
   const skipped =
     args.skipProducts && configuredProducts
       ? ` — products left out (--skip-products); they go to review with a later version`
@@ -230,7 +251,7 @@ export async function run(ctx, args = {}) {
   if (done.error) {
     const explained = explainRefusal(done.error);
     // About a product: take the products out so the app is not held hostage to them.
-    if (explained.productRelated && products.length) {
+    if (explained.productRelated && [...present.values()].some((v) => PRODUCT_RELATIONSHIPS.includes(v.relationship))) {
       return refuseProducts(ctx, { submission, products, present, error: done.error });
     }
     // About the app (App Privacy, price, screenshots…): the draft stays as it is —
@@ -255,37 +276,39 @@ export async function run(ctx, args = {}) {
 
 /**
  * App Store Connect would not take a product with this submission. Nothing is
- * submitted: every product item the submission holds for this config is removed
- * again, so the draft is back to the app version alone. For an app's first
- * product that leaves the website, whose clicks are given; for a later one, the
- * reason, and the choice to send the app without it.
+ * submitted: every product item the submission holds is removed again, so the
+ * draft is back to the app version alone. For an app's first product that
+ * leaves the website, whose clicks are given; for a later one, the reason. Any
+ * reason about the app itself is kept, and `--skip-products` is only offered
+ * when nothing else stands in the way.
  *
  * @param {import("../core/context.mjs").Context} ctx
- * @param {{ submission: any, products: Item[], present: Map<string, string>, error: any, item?: Item }} input
+ * @param {{ submission: any, products: Item[], present: Map<string, { itemId: string, relationship: string }>, error: any, item?: Item }} input
  */
 async function refuseProducts({ client }, { submission, products, present, error, item }) {
-  const removed = [];
-  const stuck = [];
-  for (const p of products) {
-    const itemId = present.get(p.id);
-    if (!itemId) continue;
-    const res = await client.delete(`/v1/reviewSubmissionItems/${itemId}`, { throwOnError: false });
-    if (res?.error) stuck.push(p.label);
-    else removed.push(p.label);
-  }
-
+  const { removed, stuck } = await removeProductItems(client, present);
   const { lines, findings } = explainRefusal(error);
+  const appFindings = findings.filter((f) => !isProductLine(f.detail));
   const said = lines.length ? `"${lines.join(" · ")}"` : error.message;
   const undone = [
-    removed.length ? `${removed.join(", ")} taken back out of the draft` : "",
+    removed.length ? `${removed.length} product item(s) taken back out of the draft` : "",
     stuck.length
-      ? `could not remove ${stuck.join(", ")} — remove ${stuck.length === 1 ? "it" : "them"} in App Store Connect`
+      ? `could not remove ${stuck.length} — remove ${stuck.length === 1 ? "it" : "them"} in App Store Connect`
       : "",
   ]
     .filter(Boolean)
     .join("; ");
+  const alone =
+    appFindings.length || stuck.length ? "" : " Or send the app alone with submit --submit --skip-products.";
+
+  // Whose refusal it is: the item being added, or the kinds the sentences name.
+  const kinds = item ? [item.product] : refusedKinds(lines);
   const firsts = [
-    ...new Set(products.filter((p) => p.first && p.productId).map((p) => /** @type {string} */ (p.productId))),
+    ...new Set(
+      products
+        .filter((p) => p.first && p.productId && kinds.includes(p.product) && (!item || item.first))
+        .map((p) => /** @type {string} */ (p.productId)),
+    ),
   ];
   const who = item ? `the ${item.label}` : "the products";
 
@@ -294,7 +317,8 @@ async function refuseProducts({ client }, { submission, products, present, error
       status: Status.ERROR,
       message:
         `App Store Connect would not take ${who} with ${submission.id}: ${said}. Nothing was submitted` +
-        `${undone ? `; ${undone}` : ""}. Fix the product, or send the app alone with submit --submit --skip-products.`,
+        `${undone ? `; ${undone}` : ""}. Fix what it names and submit again.${alone}`,
+      details: { submissionId: submission.id, refused: lines, removed, stuck },
       findings,
     };
   }
@@ -304,22 +328,48 @@ async function refuseProducts({ client }, { submission, products, present, error
     message:
       `App Store Connect would not take the first ${firsts.length === 1 ? "product" : "products"} ` +
       `(${firsts.join(", ")}) by API: ${said}. Nothing was submitted${undone ? `; ${undone}` : ""}. ` +
-      "Submit the version with them from App Store Connect, or send the app alone with submit --submit --skip-products.",
+      `Submit the version with ${firsts.length === 1 ? "it" : "them"} from App Store Connect.${alone}`,
     details: { submissionId: submission.id, refused: lines, removed, stuck },
-    findings: firsts.map((productId) =>
-      finding({
-        id: `product.first.refused.${productId}`,
-        category: Category.ASC_STATE,
-        title: `Submit ${productId} with the version from App Store Connect`,
-        detail: `App Store Connect refused it by API: ${said}`,
-        fixOwner: FixOwner.UI,
-        uiOnly: true,
-        fix: "Attach it to the version and submit both, in App Store Connect.",
-        fixClicks: FIRST_PRODUCT_CLICKS(productId),
-        docs: "references/gotchas.md#subscriptions--iaps",
-      }),
-    ),
+    findings: [
+      ...appFindings,
+      ...firsts.map((productId) =>
+        finding({
+          id: `product.first.refused.${productId}`,
+          category: Category.ASC_STATE,
+          title: `Submit ${productId} with the version from App Store Connect`,
+          detail: `App Store Connect refused it by API: ${said}`,
+          fixOwner: FixOwner.UI,
+          uiOnly: true,
+          fix: "Attach it to the version and submit both, in App Store Connect.",
+          fixClicks: FIRST_PRODUCT_CLICKS(productId),
+          docs: "references/gotchas.md#subscriptions--iaps",
+        }),
+      ),
+    ],
   };
+}
+
+/**
+ * Delete every product item the submission holds, and forget them.
+ *
+ * @param {import("../asc/client.mjs").AscClient} client
+ * @param {Map<string, { itemId: string, relationship: string }>} present
+ */
+async function removeProductItems(client, present) {
+  /** @type {string[]} */
+  const removed = [];
+  /** @type {string[]} */
+  const stuck = [];
+  for (const [relatedId, { itemId, relationship }] of [...present]) {
+    if (!PRODUCT_RELATIONSHIPS.includes(relationship)) continue;
+    const res = await client.delete(`/v1/reviewSubmissionItems/${itemId}`, { throwOnError: false });
+    if (res?.error) stuck.push(itemId);
+    else {
+      removed.push(itemId);
+      present.delete(relatedId);
+    }
+  }
+  return { removed, stuck };
 }
 
 /**
@@ -433,15 +483,16 @@ async function draftVersion(client, parentType, parentId) {
 }
 
 /**
- * Everything already in the submission, as related id → item id, so re-running
- * adds nothing twice and a refused product can be taken back out.
+ * Everything already in the submission, as related id → its item and what kind
+ * of thing it carries, so re-running adds nothing twice and a product can be
+ * taken back out.
  *
  * @param {import("../asc/client.mjs").AscClient} client
  * @param {string} submissionId
- * @returns {Promise<Map<string, string>>}
+ * @returns {Promise<Map<string, { itemId: string, relationship: string }>>}
  */
 async function existingItems(client, submissionId) {
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, { itemId: string, relationship: string }>} */
   const out = new Map();
   if (submissionId.startsWith("dry:")) return out; // planned under --dry-run; nothing to read
   // Relationship ids come back only for what is included — without it every
@@ -452,9 +503,9 @@ async function existingItems(client, submissionId) {
     { limit: 50 },
   );
   for (const item of items) {
-    for (const rel of Object.values(item.relationships ?? {})) {
+    for (const [relationship, rel] of Object.entries(item.relationships ?? {})) {
       const id = /** @type {any} */ (rel)?.data?.id;
-      if (id) out.set(id, item.id);
+      if (id) out.set(id, { itemId: item.id, relationship });
     }
   }
   return out;

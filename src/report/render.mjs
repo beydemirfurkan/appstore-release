@@ -65,7 +65,11 @@ export function renderReportText(report, { style = PLAIN, compact = false } = {}
     lines.push("");
     const width = Math.max(...sections.map((x) => x.title.length));
     for (const section of sections) {
-      const wrong = section.findingIds.map((id) => byId.get(id)).filter((f) => f && f.severity !== Severity.INFO);
+      // What blocks comes first: the line shows the worst thing in the section.
+      const wrong = section.findingIds
+        .map((id) => byId.get(id))
+        .filter((f) => f && f.severity !== Severity.INFO)
+        .sort((a, b) => Number(a?.severity !== Severity.BLOCKER) - Number(b?.severity !== Severity.BLOCKER));
       const mark = section.state === "ok" ? s.green("✓") : section.state === "incomplete" ? s.yellow("·") : s.red("✗");
       const first = wrong[0] ? clip(/** @type {any} */ (wrong[0]).title, 44) : "";
       const more = wrong.length > 1 ? s.dim(` +${wrong.length - 1}`) : "";

@@ -76,6 +76,21 @@ export const REFUSALS = [
 
 /** A sentence about a subscription or an in-app purchase rather than the app. */
 const PRODUCT_RE = /subscription|in-app purchase|inAppPurchase|in app purchase/i;
+const IAP_RE = /in-app purchase|inAppPurchase|in app purchase/i;
+
+/** @param {string} text */
+export const isProductLine = (text) => PRODUCT_RE.test(text);
+
+/**
+ * Which kinds of product a refusal is about, from its sentences; both when it
+ * does not say. @param {string[]} lines @returns {Array<"subscription"|"iap">}
+ */
+export function refusedKinds(lines) {
+  const kinds = /** @type {Array<"subscription"|"iap">} */ ([]);
+  if (lines.some((l) => /subscription/i.test(l))) kinds.push("subscription");
+  if (lines.some((l) => IAP_RE.test(l))) kinds.push("iap");
+  return kinds.length ? kinds : ["subscription", "iap"];
+}
 
 /**
  * Every sentence in an Apple error, the nested ones included.

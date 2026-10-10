@@ -123,8 +123,15 @@ export async function getReadinessReport(ctx, { locale } = {}) {
   const snapshot = await getAppSnapshot(ctx, { locale });
   // Read once per context: `check --wait` asks again every poll, and the app on
   // disk does not change because App Review moved.
-  if (!preflightRuns.has(ctx))
-    preflightRuns.set(ctx, runPreflight({ projectDir: ctx.projectRoot, config: ctx.config }));
+  // A project that cannot be read must not stop the App Store Connect side of
+  // the report: say so with the other unreadable sections.
+  if (!preflightRuns.has(ctx)) {
+    try {
+      preflightRuns.set(ctx, runPreflight({ projectDir: ctx.projectRoot, config: ctx.config }));
+    } catch (e) {
+      snapshot.errors = [...(snapshot.errors ?? []), `app preflight: ${e instanceof Error ? e.message : String(e)}`];
+    }
+  }
   snapshot.preflight = preflightRuns.get(ctx);
   return buildReport({ snapshot, config: ctx.config, resolvePath: ctx.resolvePath });
 }

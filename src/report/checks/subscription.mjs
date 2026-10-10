@@ -139,7 +139,11 @@ export function check({ snapshot, config }) {
             detail:
               `submit adds it to the same review submission as the app version. If App Store Connect will not take ` +
               "a first product by API, nothing is submitted, it is taken back out, and the website's clicks are shown.",
-            fix: "Nothing; submit includes it. To send the app alone: submit --submit --skip-products.",
+            // App Store Connect keeps no record of a refused attempt, so this cannot
+            // know about one: the submit result is where a refusal shows.
+            fix:
+              "Nothing; submit includes it. If submit already reported that App Store Connect refused it, " +
+              "do not retry: use these clicks, or submit --submit --skip-products to send the app alone.",
             fixCommand: "appstore-release submit --submit",
             fixClicks: FIRST_PRODUCT_CLICKS(productId),
             docs: "references/gotchas.md#subscriptions--iaps",

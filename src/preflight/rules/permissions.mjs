@@ -1,6 +1,10 @@
 // Guideline 5.1.1(ii): "Ensure your purpose strings clearly and completely
 // describe your use of the data." A usage description that is missing makes the
 // app crash when it asks; one left at a generic default reads as no explanation.
+//
+// A missing key is always a warning: it is inferred — from a dependency that
+// may never ask, or from a symbol in the source that may be used for something
+// else (a torch, a save-only photo write) — never read off the app.
 
 import { EXPO_DEFAULT_TEXTS, EXPO_PERMISSION_PLUGINS, NATIVE_PERMISSION_SYMBOLS } from "../data.mjs";
 import { appFinding, locate, Severity } from "./util.mjs";
@@ -32,19 +36,19 @@ export function permissions(project) {
   }
 
   for (const [key, { why, where }] of needed) {
-    if (project.infoPlist.has(key)) continue;
+    // Turned off on purpose with the plugin's `false` option.
+    if (project.infoPlist.has(key) || project.disabledKeys.has(key)) continue;
     const plugin = Object.entries(EXPO_PERMISSION_PLUGINS).find(([, list]) => list.some((p) => p.key === key));
     const option = plugin?.[1].find((p) => p.key === key)?.option;
     out.push(
       appFinding({
         id: `app.permission.missing.${key}`,
         guideline: "5.1.1(ii)",
-        // Certain only where the Info.plist is in front of us; in a managed Expo
-        // project some plugins are applied at prebuild without being listed.
-        severity: project.managed ? Severity.WARNING : Severity.BLOCKER,
+        severity: Severity.WARNING,
         title: `No ${key}, but the app uses ${why}`,
         detail:
-          "Without a usage description iOS terminates the app when it asks for access, and App Review rejects it.",
+          "If the app asks for this access, iOS terminates it without a usage description, and App Review rejects it. " +
+          "Inferred from the dependency or the code; if the app never asks, waive it in preflight.ignore.",
         fix:
           project.expo && plugin && option
             ? `Add ["${plugin[0]}", { "${option}": "<what you use it for, in the user's terms>" }] to expo.plugins in app.json.`

@@ -174,7 +174,8 @@ test("asc_validate_config with preflight reads the app itself, still offline", a
   });
   assert.equal(res.structuredContent.valid, true);
   assert.equal(res.structuredContent.preflight.kind, "native");
-  assert.match(res.content[0].text, /\*\*will be rejected:\*\* No NSLocationWhenInUseUsageDescription/);
+  assert.match(res.content[0].text, /\*\*will be rejected:\*\* Invalid reason XXXX\.1/);
+  assert.match(res.content[0].text, /likely questioned: No NSLocationWhenInUseUsageDescription/);
   assert.match(res.content[0].text, /\[app\.permission\.missing\.NSLocationWhenInUseUsageDescription\]/);
 });
 

@@ -86,9 +86,11 @@ function spec(shortName, width, height) {
  * "refuse-on-submit" takes the item and refuses the final submit. The refusal
  * wording is modelled, not Apple's verbatim text. `appPrivacyPublished: false`
  * refuses the final submit the way App Store Connect does when the App Privacy
- * answers were never published.
+ * answers were never published; both reasons are returned together when both
+ * apply. `refuseProductIds` refuses those products' review items outright, as
+ * App Store Connect does for an incomplete product.
  *
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[] }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
@@ -99,6 +101,7 @@ export function createFakeAsc({
   approvedPurchase = false,
   firstProductPolicy = "accept",
   appPrivacyPublished = true,
+  refuseProductIds = [],
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -797,6 +800,27 @@ export function createFakeAsc({
         rel(i, "reviewSubmission")?.id === submission.id && JSON.stringify(i.relationships) === JSON.stringify(rels),
     );
     if (already) return conflict("ENTITY_ERROR.RELATIONSHIP.INVALID", "The item is already in this submission.");
+    const productOf = rels.inAppPurchaseVersion
+      ? get(
+          "inAppPurchases",
+          rel(
+            /** @type {Resource} */ (get("inAppPurchaseVersions", rels.inAppPurchaseVersion.data.id)),
+            "inAppPurchase",
+          )?.id,
+        )
+      : rels.subscriptionVersion
+        ? get(
+            "subscriptions",
+            rel(/** @type {Resource} */ (get("subscriptionVersions", rels.subscriptionVersion.data.id)), "subscription")
+              ?.id,
+          )
+        : undefined;
+    if (productOf && refuseProductIds.includes(productOf.attributes.productId)) {
+      return conflict(
+        "STATE_ERROR.ENTITY_STATE_INVALID",
+        `The in-app purchase ${productOf.attributes.productId} is missing its review screenshot.`,
+      );
+    }
     if (firstProductPolicy === "refuse" && firstProductItem(rels)) {
       return conflict("STATE_ERROR.ENTITY_STATE_INVALID", FIRST_PRODUCT_REFUSAL);
     }
@@ -815,7 +839,20 @@ export function createFakeAsc({
     if (body.data.attributes?.submitted) {
       const items = all("reviewSubmissionItems").filter((i) => rel(i, "reviewSubmission")?.id === s.id);
       // As Apple does: a generic top-level error, the reasons under associatedErrors.
-      const refuse = (/** @type {string} */ path, /** @type {string} */ detail) => ({
+      /** @type {Record<string, Array<{ code: string, detail: string }>>} */
+      const reasons = {};
+      if (!appPrivacyPublished) {
+        reasons["/v1/appStoreVersions/ver-1"] = [
+          {
+            code: "STATE_ERROR",
+            detail: "You must have published answers to your app's data usages before you can submit for review.",
+          },
+        ];
+      }
+      if (firstProductPolicy === "refuse-on-submit" && items.some((i) => firstProductItem(i.relationships ?? {}))) {
+        reasons["/v1/subscriptions"] = [{ code: "STATE_ERROR", detail: FIRST_PRODUCT_REFUSAL }];
+      }
+      const refuse = () => ({
         status: 409,
         body: {
           errors: [
@@ -824,20 +861,12 @@ export function createFakeAsc({
               code: "STATE_ERROR.ENTITY_STATE_INVALID",
               title: "The request cannot be fulfilled because of the state of another resource.",
               detail: `reviewSubmissions with id '${s.id}' cannot be submitted.`,
-              meta: { associatedErrors: { [path]: [{ code: "STATE_ERROR", detail }] } },
+              meta: { associatedErrors: reasons },
             },
           ],
         },
       });
-      if (!appPrivacyPublished) {
-        return refuse(
-          "/v1/appStoreVersions/ver-1",
-          "You must have published answers to your app's data usages before you can submit for review.",
-        );
-      }
-      if (firstProductPolicy === "refuse-on-submit" && items.some((i) => firstProductItem(i.relationships ?? {}))) {
-        return refuse("/v1/subscriptions", FIRST_PRODUCT_REFUSAL);
-      }
+      if (Object.keys(reasons).length) return refuse();
       s.attributes = { ...s.attributes, submitted: true, state: "WAITING_FOR_REVIEW" };
       for (const item of all("reviewSubmissionItems").filter((i) => rel(i, "reviewSubmission")?.id === s.id)) {
         const v = rel(item, "appStoreVersion");

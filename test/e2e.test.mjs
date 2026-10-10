@@ -267,6 +267,75 @@ test("a refusal about the app itself keeps the draft and says what to do", async
   assert.equal(productItems(fake).length, 2, "products are not to blame, so they stay in the draft");
 });
 
+test("--skip-products takes out product items an earlier run left in the draft", async () => {
+  const { fake, run } = await firstSubscriptionProject();
+  await run("release");
+  await run("submit"); // prepares the draft, products included
+  assert.equal(productItems(fake).length, 2);
+
+  const alone = await run("submit", "--submit", "--skip-products");
+  assert.equal(alone.code, Exit.OK, JSON.stringify(alone.json.results, null, 2));
+  assert.equal(productItems(fake).length, 0, "nothing but the version goes to review");
+  assert.equal(fake.all("reviewSubmissions")[0].attributes.state, "WAITING_FOR_REVIEW");
+});
+
+test("a refused later product is its own problem, not the first subscription's", async () => {
+  const { fake, run } = await productsProject(
+    { firstSubscription: true, approvedPurchase: true, refuseProductIds: ["com.example.wellness.lifetime"] },
+    (config) => ({
+      ...config,
+      inAppPurchases: [
+        {
+          productId: "com.example.wellness.lifetime",
+          name: "Lifetime",
+          localeName: "Lifetime access",
+          priceAmount: 49.99,
+          reviewScreenshot: "./assets/paywall-1320x2868.png",
+        },
+      ],
+    }),
+  );
+  await run("release");
+  const refused = await run("submit", "--submit");
+  const result = refused.json.results[0];
+  assert.equal(result.status, "error", result.message);
+  assert.match(result.message, /lifetime is missing its review screenshot/);
+  assert.equal(
+    refused.json.findings.some((f) => f.id.startsWith("product.first.refused")),
+    false,
+    "the first subscription was not what App Store Connect refused",
+  );
+  assert.equal(fake.all("reviewSubmissionItems").filter((i) => !i.relationships?.appStoreVersion).length, 0);
+  assert.equal(fake.all("reviewSubmissions")[0].attributes.state, "READY_FOR_REVIEW");
+});
+
+test("a refusal about both the app and a first product keeps both, and does not offer the app alone", async () => {
+  const { run } = await firstSubscriptionProject({
+    appPrivacyPublished: false,
+    firstProductPolicy: "refuse-on-submit",
+  });
+  await run("release");
+  const refused = await run("submit", "--submit");
+  const result = refused.json.results[0];
+  assert.equal(result.status, "manual");
+  assert.ok(
+    refused.json.findings.some((f) => f.id === "refusal.app-privacy"),
+    "App Privacy is not lost",
+  );
+  assert.ok(refused.json.findings.some((f) => f.id === "product.first.refused.com.example.wellness.monthly"));
+  assert.doesNotMatch(result.message, /--skip-products/, "the app alone would be refused too");
+});
+
+test("review-info --draft-notes needs no App Review contact details", async () => {
+  const { run } = await productsProject({}, ({ review, ...config }) => config);
+  const drafted = await run("review-info", "--draft-notes");
+  assert.equal(drafted.code, Exit.OK, JSON.stringify(drafted.json.results, null, 2));
+  assert.match(drafted.json.results[0].details.notes, /^Sign-in\n/);
+  const write = await run("review-info");
+  assert.equal(write.json.results[0].status, "error");
+  assert.match(write.json.results[0].message, /review\.contactFirstName/);
+});
+
 test("review-info --draft-notes drafts from the config and the app, and writes nothing", async () => {
   const { fake, run } = await firstSubscriptionProject();
   const drafted = await run("review-info", "--draft-notes");

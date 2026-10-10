@@ -80,13 +80,15 @@ function spec(shortName, width, height) {
 }
 
 /**
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
   appName = "Wellness",
   baseUrl = "https://api.appstoreconnect.apple.com",
   assetLibrary = true,
+  firstSubscription = false,
+  approvedPurchase = false,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -129,6 +131,11 @@ export function createFakeAsc({
     processingState: "VALID",
     expired: false,
     uploadedDate: "2026-10-09T18:00:00Z",
+    usesNonExemptEncryption: null,
+  });
+  put("buildBetaDetails", "build-7", {
+    internalBuildState: "READY_FOR_BETA_TESTING",
+    externalBuildState: "READY_FOR_BETA_SUBMISSION",
   });
   put("ageRatingDeclarations", "age-1", {});
   put(
@@ -170,6 +177,33 @@ export function createFakeAsc({
     { productId: "com.example.wellness.monthly", name: "Monthly", state: "MISSING_METADATA" },
     { group: ref("subscriptionGroups", "grp-1") },
   );
+  // Unless asked otherwise, the app already sells an approved yearly plan, so the
+  // monthly one is not its first subscription and may be submitted by API —
+  // Apple sends a first subscription through the website with the binary.
+  // An approved one-time purchase already on sale, when asked for: later ones may
+  // then be submitted by API.
+  if (approvedPurchase) {
+    put(
+      "inAppPurchases",
+      "iap-0",
+      { productId: "com.example.wellness.tip", name: "Tip", state: "APPROVED", inAppPurchaseType: "CONSUMABLE" },
+      { app: ref("apps", appId) },
+    );
+  }
+  if (!firstSubscription) {
+    put(
+      "subscriptions",
+      "sub-0",
+      { productId: "com.example.wellness.yearly", name: "Yearly", state: "APPROVED" },
+      { group: ref("subscriptionGroups", "grp-1") },
+    );
+    put(
+      "subscriptionGroupVersions",
+      "grpver-0",
+      { state: "APPROVED", version: 1 },
+      { subscriptionGroup: ref("subscriptionGroups", "grp-1") },
+    );
+  }
   for (const [id, price] of [
     ["spp-299", "2.99"],
     ["spp-499", "4.99"],
@@ -189,15 +223,35 @@ export function createFakeAsc({
   const calls = [];
 
   // ── Derived state: what Apple computes, not what anyone writes ────────────
+  /** Apple's derived states: a product is READY_TO_SUBMIT once it has everything review needs. */
   function refreshSubscriptionState() {
-    const sub = /** @type {Resource} */ (get("subscriptions", "sub-1"));
-    if (["WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"].includes(sub.attributes.state)) return;
-    const hasLoc = all("subscriptionLocalizations").some((l) => rel(l, "subscription")?.id === "sub-1");
-    const hasGroupLoc = all("subscriptionGroupLocalizations").some((l) => rel(l, "subscriptionGroup")?.id === "grp-1");
-    const hasPrice = all("subscriptionPrices").some((p) => rel(p, "subscription")?.id === "sub-1");
-    const shot = all("subscriptionAppStoreReviewScreenshots").find((s) => rel(s, "subscription")?.id === "sub-1");
-    const complete = hasLoc && hasGroupLoc && hasPrice && shot?.attributes.assetDeliveryState?.state === "COMPLETE";
-    sub.attributes.state = complete ? "READY_TO_SUBMIT" : "MISSING_METADATA";
+    for (const sub of all("subscriptions")) {
+      if (["WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"].includes(sub.attributes.state)) continue;
+      const group = all("subscriptionGroups").find((g) =>
+        (g.relationships?.subscriptions?.data ?? []).some((/** @type {any} */ d) => d.id === sub.id),
+      );
+      const hasLoc = all("subscriptionLocalizations").some((l) => rel(l, "subscription")?.id === sub.id);
+      const hasGroupLoc = all("subscriptionGroupLocalizations").some(
+        (l) => rel(l, "subscriptionGroup")?.id === group?.id,
+      );
+      const hasPrice = all("subscriptionPrices").some((p) => rel(p, "subscription")?.id === sub.id);
+      const shot = all("subscriptionAppStoreReviewScreenshots").find((s) => rel(s, "subscription")?.id === sub.id);
+      const complete = hasLoc && hasGroupLoc && hasPrice && shot?.attributes.assetDeliveryState?.state === "COMPLETE";
+      sub.attributes.state = complete ? "READY_TO_SUBMIT" : "MISSING_METADATA";
+    }
+    for (const iap of all("inAppPurchases")) {
+      if (["WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"].includes(iap.attributes.state)) continue;
+      const versions = all("inAppPurchaseVersions").filter((v) => rel(v, "inAppPurchase")?.id === iap.id);
+      const hasLoc = all("inAppPurchaseLocalizations").some((l) =>
+        versions.some((v) => v.id === rel(l, "version")?.id),
+      );
+      const hasAvailability = all("inAppPurchaseAvailabilities").some((a) => rel(a, "inAppPurchase")?.id === iap.id);
+      const hasPrice = all("inAppPurchasePrices").some((p) => rel(p, "inAppPurchaseV2")?.id === iap.id);
+      const shot = all("inAppPurchaseAppStoreReviewScreenshots").find((s) => rel(s, "inAppPurchaseV2")?.id === iap.id);
+      const complete =
+        hasLoc && hasAvailability && hasPrice && shot?.attributes.assetDeliveryState?.state === "COMPLETE";
+      iap.attributes.state = complete ? "READY_TO_SUBMIT" : "MISSING_METADATA";
+    }
   }
 
   // ── Routing ───────────────────────────────────────────────────────────────
@@ -386,17 +440,7 @@ export function createFakeAsc({
         (p) => rel(p, "appStoreVersionLocalization")?.id === m[1] && (!group || p.attributes.placementGroup === group),
       )
       .sort((a, b) => (a.attributes.position ?? 0) - (b.attributes.position ?? 0));
-    const images = placed.map((p) => {
-      const img = /** @type {Resource} */ (get("appAssetLibraryImages", rel(p, "image")?.id));
-      const dims = /(\d+)x(\d+)/.exec(img?.attributes.fileName ?? "") ?? [];
-      return {
-        ...img,
-        attributes: {
-          ...img?.attributes,
-          imageAsset: { width: Number(dims[1]) || 1320, height: Number(dims[2]) || 2868 },
-        },
-      };
-    });
+    const images = placed.map((p) => get("appAssetLibraryImages", rel(p, "image")?.id));
     return ok(placed, images);
   });
   on("GET", `/v1/appStoreVersionLocalizations/:id/appScreenshotSets`, () => ok([], []));
@@ -414,8 +458,8 @@ export function createFakeAsc({
   on("POST", `/v1/subscriptionLocalizations`, create("subscriptionLocalizations", "sloc"));
   on("PATCH", `/v1/subscriptionLocalizations/:id`, patch("subscriptionLocalizations"));
   on("GET", `/v1/subscriptions/:id/pricePoints`, () => ok(all("subscriptionPricePoints")));
-  on("GET", `/v1/subscriptions/:id/prices`, () => {
-    const prices = all("subscriptionPrices");
+  on("GET", `/v1/subscriptions/:id/prices`, (m) => {
+    const prices = all("subscriptionPrices").filter((p) => rel(p, "subscription")?.id === m[1]);
     return ok(
       prices,
       prices.map((p) => get("subscriptionPricePoints", rel(p, "subscriptionPricePoint")?.id)).filter(Boolean),
@@ -451,6 +495,165 @@ export function createFakeAsc({
     );
   }
 
+  // Creating subscriptions and groups, and introductory offers
+  on("POST", `/v1/subscriptionGroups`, (_m, { body }) => {
+    const g = put("subscriptionGroups", nextId("grp"), body.data.attributes, {
+      ...body.data.relationships,
+      subscriptions: { data: [] },
+    });
+    return created(g);
+  });
+  on("POST", `/v1/subscriptions`, (_m, { body }) => {
+    const sub = put(
+      "subscriptions",
+      nextId("sub"),
+      { ...body.data.attributes, state: "MISSING_METADATA" },
+      body.data.relationships,
+    );
+    const g = get("subscriptionGroups", body.data.relationships.group.data.id);
+    if (g)
+      g.relationships = {
+        ...g.relationships,
+        subscriptions: {
+          data: [...(g.relationships?.subscriptions?.data ?? []), { type: "subscriptions", id: sub.id }],
+        },
+      };
+    return created(sub);
+  });
+  on("GET", `/v1/subscriptions/:id/introductoryOffers`, (m) =>
+    ok(all("subscriptionIntroductoryOffers").filter((o) => rel(o, "subscription")?.id === m[1])),
+  );
+  on("POST", `/v1/subscriptionIntroductoryOffers`, create("subscriptionIntroductoryOffers", "offer"));
+
+  // One-time in-app purchases (API 4.4.1 shapes)
+  on("GET", `/v1/apps/${appId}/inAppPurchasesV2`, (_m, { url }) => {
+    const productId = url.searchParams.get("filter[productId]");
+    return ok(all("inAppPurchases").filter((p) => !productId || p.attributes.productId === productId));
+  });
+  on("POST", `/v2/inAppPurchases`, create("inAppPurchases", "iap", { state: "MISSING_METADATA" }));
+  on("GET", `/v2/inAppPurchases/:id/versions`, (m) =>
+    ok(all("inAppPurchaseVersions").filter((v) => rel(v, "inAppPurchase")?.id === m[1])),
+  );
+  on("POST", `/v1/inAppPurchaseVersions`, (_m, { body }) => {
+    const iapId = body.data.relationships.inAppPurchase.data.id;
+    const n = all("inAppPurchaseVersions").filter((v) => rel(v, "inAppPurchase")?.id === iapId).length + 1;
+    return created(
+      put(
+        "inAppPurchaseVersions",
+        nextId("iapver"),
+        { state: "PREPARE_FOR_SUBMISSION", version: n },
+        body.data.relationships,
+      ),
+    );
+  });
+  on("GET", `/v1/inAppPurchaseVersions/:id/localizations`, (m) =>
+    ok(all("inAppPurchaseLocalizations").filter((l) => rel(l, "version")?.id === m[1])),
+  );
+  on("POST", `/v2/inAppPurchaseLocalizations`, create("inAppPurchaseLocalizations", "iaploc"));
+  on("PATCH", `/v2/inAppPurchaseLocalizations/:id`, patch("inAppPurchaseLocalizations"));
+  on("GET", `/v2/inAppPurchases/:id/inAppPurchaseAvailability`, (m) => {
+    const a = all("inAppPurchaseAvailabilities").find((x) => rel(x, "inAppPurchase")?.id === m[1]);
+    return a ? ok(a) : notFound();
+  });
+  on("POST", `/v1/inAppPurchaseAvailabilities`, create("inAppPurchaseAvailabilities", "iapavail"));
+  on("GET", `/v1/territories`, () =>
+    ok(["USA", "GBR", "DEU", "TUR", "JPN"].map((id) => ({ type: "territories", id, attributes: { currency: "" } }))),
+  );
+  on("GET", `/v2/inAppPurchases/:id/pricePoints`, () =>
+    ok(
+      [
+        ["ipp-999", "9.99"],
+        ["ipp-2999", "29.99"],
+        ["ipp-4999", "49.99"],
+      ].map(([id, price]) => ({ type: "inAppPurchasePricePoints", id, attributes: { customerPrice: price } })),
+    ),
+  );
+  on("GET", `/v1/inAppPurchasePriceSchedules/:id/manualPrices`, (m) =>
+    ok(all("inAppPurchasePrices").filter((p) => rel(p, "inAppPurchaseV2")?.id === m[1])),
+  );
+  on("POST", `/v1/inAppPurchasePriceSchedules`, (_m, { body }) => {
+    const iapId = body.data.relationships.inAppPurchase.data.id;
+    for (const p of all("inAppPurchasePrices"))
+      if (rel(p, "inAppPurchaseV2")?.id === iapId) table("inAppPurchasePrices").delete(p.id);
+    for (const inc of body.included ?? [])
+      put("inAppPurchasePrices", nextId("iapprice"), inc.attributes ?? {}, inc.relationships ?? {});
+    refreshSubscriptionState();
+    return created({ type: "inAppPurchasePriceSchedules", id: iapId, attributes: {} });
+  });
+  on("GET", `/v2/inAppPurchases/:id/appStoreReviewScreenshot`, (m) => {
+    const s = all("inAppPurchaseAppStoreReviewScreenshots").find((x) => rel(x, "inAppPurchaseV2")?.id === m[1]);
+    return s ? ok(s) : notFound();
+  });
+  on("POST", `/v1/inAppPurchaseAppStoreReviewScreenshots`, reserve("inAppPurchaseAppStoreReviewScreenshots", "iaprs"));
+  on("PATCH", `/v1/inAppPurchaseAppStoreReviewScreenshots/:id`, (m, { body }) => {
+    const s = get("inAppPurchaseAppStoreReviewScreenshots", m[1]);
+    if (!s) return notFound();
+    Object.assign(s.attributes, body.data.attributes, { assetDeliveryState: { state: "COMPLETE" } });
+    refreshSubscriptionState();
+    return ok(s);
+  });
+  on("DELETE", `/v1/inAppPurchaseAppStoreReviewScreenshots/:id`, remove("inAppPurchaseAppStoreReviewScreenshots"));
+
+  // TestFlight
+  on("GET", `/v1/builds/:id`, (m) => (get("builds", m[1]) ? ok(get("builds", m[1])) : notFound()));
+  on("PATCH", `/v1/builds/:id`, patch("builds"));
+  on("GET", `/v1/betaBuildLocalizations`, (_m, { url }) => {
+    const build = url.searchParams.get("filter[build]");
+    return ok(all("betaBuildLocalizations").filter((l) => rel(l, "build")?.id === build));
+  });
+  on("POST", `/v1/betaBuildLocalizations`, create("betaBuildLocalizations", "bbloc"));
+  on("PATCH", `/v1/betaBuildLocalizations/:id`, patch("betaBuildLocalizations"));
+  on("GET", `/v1/betaAppLocalizations`, () => ok(all("betaAppLocalizations")));
+  on("POST", `/v1/betaAppLocalizations`, create("betaAppLocalizations", "baloc"));
+  on("PATCH", `/v1/betaAppLocalizations/:id`, patch("betaAppLocalizations"));
+  on("GET", `/v1/apps/${appId}/betaAppReviewDetail`, () =>
+    ok(get("betaAppReviewDetails", appId) ?? put("betaAppReviewDetails", appId, {})),
+  );
+  on("PATCH", `/v1/betaAppReviewDetails/:id`, patch("betaAppReviewDetails"));
+  on("GET", `/v1/apps/${appId}/betaGroups`, () => ok(all("betaGroups")));
+  on("POST", `/v1/betaGroups`, create("betaGroups", "bg"));
+  on("GET", `/v1/betaGroups/:id/relationships/builds`, (m) =>
+    ok(get("betaGroups", m[1])?.relationships?.builds?.data ?? []),
+  );
+  on("POST", `/v1/betaGroups/:id/relationships/builds`, (m, { body }) => {
+    const g = get("betaGroups", m[1]);
+    if (!g) return notFound();
+    g.relationships = {
+      ...g.relationships,
+      builds: { data: [...(g.relationships?.builds?.data ?? []), ...body.data] },
+    };
+    return noContent();
+  });
+  on("GET", `/v1/betaTesters`, (_m, { url }) => {
+    const email = url.searchParams.get("filter[email]");
+    return ok(all("betaTesters").filter((t) => t.attributes.email === email));
+  });
+  on("POST", `/v1/betaTesters`, create("betaTesters", "tester", { state: "INVITED" }));
+  on("POST", `/v1/betaGroups/:id/relationships/betaTesters`, (_m, { body }) => {
+    for (const d of body.data) {
+      const t = get("betaTesters", d.id);
+      if (t)
+        t.relationships = {
+          ...t.relationships,
+          betaGroups: { data: [...(t.relationships?.betaGroups?.data ?? []), { type: "betaGroups", id: _m[1] }] },
+        };
+    }
+    return noContent();
+  });
+  on("GET", `/v1/builds/:id/buildBetaDetail`, (m) => ok(get("buildBetaDetails", m[1])));
+  on("POST", `/v1/betaAppReviewSubmissions`, (_m, { body }) => {
+    const detail = get("buildBetaDetails", body.data.relationships.build.data.id);
+    if (detail) detail.attributes.externalBuildState = "WAITING_FOR_BETA_REVIEW";
+    return created(
+      put(
+        "betaAppReviewSubmissions",
+        nextId("bars"),
+        { betaReviewState: "WAITING_FOR_REVIEW" },
+        body.data.relationships,
+      ),
+    );
+  });
+
   // Review submissions
   on("GET", `/v1/reviewSubmissions`, (_m, { url }) => {
     const states = (url.searchParams.get("filter[state]") ?? "").split(",").filter(Boolean);
@@ -462,9 +665,20 @@ export function createFakeAsc({
     `/v1/reviewSubmissions`,
     create("reviewSubmissions", "rs", { state: "READY_FOR_REVIEW", submitted: false }),
   );
-  on("GET", `/v1/reviewSubmissions/:id/items`, (m) =>
-    ok(all("reviewSubmissionItems").filter((i) => rel(i, "reviewSubmission")?.id === m[1])),
-  );
+  // As Apple does: relationship data only for what `include` asks for.
+  on("GET", `/v1/reviewSubmissions/:id/items`, (m, { url }) => {
+    const included = (url.searchParams.get("include") ?? "").split(",").filter(Boolean);
+    const items = all("reviewSubmissionItems")
+      .filter((i) => rel(i, "reviewSubmission")?.id === m[1])
+      .map((i) => ({
+        ...i,
+        relationships: Object.fromEntries(
+          Object.entries(i.relationships ?? {}).map(([k, v]) => [k, included.includes(k) ? v : { links: {} }]),
+        ),
+      }));
+    return ok(items);
+  });
+  on("PATCH", `/v1/reviewSubmissionItems/:id`, patch("reviewSubmissionItems"));
   on("POST", `/v1/reviewSubmissionItems`, (_m, { body }) => {
     const rels = body.data.relationships;
     const submission = /** @type {Resource} */ (get("reviewSubmissions", rels.reviewSubmission.data.id));
@@ -490,8 +704,12 @@ export function createFakeAsc({
       for (const item of all("reviewSubmissionItems").filter((i) => rel(i, "reviewSubmission")?.id === s.id)) {
         const v = rel(item, "appStoreVersion");
         if (v) /** @type {Resource} */ (get("appStoreVersions", v.id)).attributes.appStoreState = "WAITING_FOR_REVIEW";
-        if (rel(item, "subscriptionVersion"))
-          /** @type {Resource} */ (get("subscriptions", "sub-1")).attributes.state = "WAITING_FOR_REVIEW";
+        const subVersion = get("subscriptionVersions", rel(item, "subscriptionVersion")?.id);
+        const sub = subVersion && get("subscriptions", rel(subVersion, "subscription")?.id);
+        if (sub) sub.attributes.state = "WAITING_FOR_REVIEW";
+        const iapVersion = get("inAppPurchaseVersions", rel(item, "inAppPurchaseVersion")?.id);
+        const iap = iapVersion && get("inAppPurchases", rel(iapVersion, "inAppPurchase")?.id);
+        if (iap) iap.attributes.state = "WAITING_FOR_REVIEW";
       }
     }
     return ok(s);
@@ -502,7 +720,16 @@ export function createFakeAsc({
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(String(input));
     const method = (init.method ?? "GET").toUpperCase();
-    if (url.pathname.startsWith("/__upload/")) return new Response(null, { status: 200 });
+    if (url.pathname.startsWith("/__upload/")) {
+      // Remember the pixel size Apple would compute during processing.
+      const [, , type, id] = url.pathname.split("/");
+      const bytes = Buffer.from(/** @type {any} */ (init.body ?? []));
+      const asset = get(type, id);
+      if (asset && bytes.length >= 24 && bytes.subarray(12, 16).toString("latin1") === "IHDR") {
+        asset.attributes.imageAsset = { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+      }
+      return new Response(null, { status: 200 });
+    }
     const body = typeof init.body === "string" && init.body ? JSON.parse(init.body) : undefined;
     calls.push({ method, path: url.pathname + url.search, body });
 
@@ -530,4 +757,18 @@ export function createFakeAsc({
     get,
     all,
   };
+}
+
+/**
+ * Apple's side of a rejection: the version goes back to REJECTED, the open
+ * submission to UNRESOLVED_ISSUES, and its items to REJECTED, unresolved.
+ *
+ * @param {ReturnType<typeof createFakeAsc>} fake
+ */
+export function rejectSubmission(fake) {
+  const version = fake.get("appStoreVersions", "ver-1");
+  if (version) version.attributes.appStoreState = "REJECTED";
+  for (const s of fake.all("reviewSubmissions")) s.attributes = { ...s.attributes, state: "UNRESOLVED_ISSUES" };
+  for (const i of fake.all("reviewSubmissionItems"))
+    i.attributes = { ...i.attributes, state: "REJECTED", resolved: false };
 }

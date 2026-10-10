@@ -8,8 +8,15 @@
     },
     {
       "title": "Focused skills",
-      "description": "One App Store Connect job each — usable alone, or handed off to by the pipeline.",
-      "skills": ["asc-screenshots", "asc-age-rating", "asc-subscriptions", "asc-rejection", "asc-credentials"]
+      "description": "One App Store Connect job each \u2014 usable alone, or handed off to by the pipeline.",
+      "skills": [
+        "asc-screenshots",
+        "asc-age-rating",
+        "asc-subscriptions",
+        "asc-rejection",
+        "asc-credentials",
+        "asc-testflight"
+      ]
     }
   ]
 }

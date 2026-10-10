@@ -27,6 +27,7 @@ export const Exit = Object.freeze({
   NEEDS_HUMAN: 5, // nothing left we can fix; UI-only steps remain
   API: 6, // App Store Connect refused us, after retries
   CONFIRM: 7, // destructive operation refused for want of confirmation
+  WAITING: 8, // `check --wait` ran out of time with the version still in review
 });
 
 /**
@@ -44,8 +45,46 @@ export const VersionStates = Object.freeze({
     "INVALID_BINARY",
   ]),
   /** With Apple, or approved and waiting on the developer: not editable, not yet live. */
-  IN_FLIGHT: Object.freeze(["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE"]),
+  IN_FLIGHT: Object.freeze([
+    "READY_FOR_REVIEW",
+    "WAITING_FOR_REVIEW",
+    "IN_REVIEW",
+    "WAITING_FOR_EXPORT_COMPLIANCE",
+    "PENDING_DEVELOPER_RELEASE",
+    "PENDING_APPLE_RELEASE",
+    "ACCEPTED",
+    "PROCESSING_FOR_DISTRIBUTION",
+  ]),
 });
+
+/** Pre-2025 spellings of `appStoreState`, as `appVersionState` names them. */
+const LEGACY_VERSION_STATES = Object.freeze({
+  READY_FOR_SALE: "READY_FOR_DISTRIBUTION",
+  PROCESSING_FOR_APP_STORE: "PROCESSING_FOR_DISTRIBUTION",
+});
+
+/**
+ * An App Store version's state. Apple deprecated `appStoreState` for
+ * `appVersionState`; this reads the new one and falls back to the old, with the
+ * old names translated, so every caller sees one vocabulary.
+ *
+ * @param {{ attributes?: { appVersionState?: string, appStoreState?: string } } | null | undefined} version
+ * @returns {string}
+ */
+export function versionState(version) {
+  const a = version?.attributes ?? {};
+  if (a.appVersionState) return a.appVersionState;
+  const old = a.appStoreState ?? "";
+  return /** @type {Record<string,string>} */ (LEGACY_VERSION_STATES)[old] ?? old;
+}
+
+/** Approved, and on its way out: with the developer, Apple, or processing. */
+export const APPROVED_STATES = Object.freeze([
+  "PENDING_DEVELOPER_RELEASE",
+  "PENDING_APPLE_RELEASE",
+  "ACCEPTED",
+  "PROCESSING_FOR_DISTRIBUTION",
+]);
 
 /** The version a report or a new-version call is about: editable, else in flight. */
 export const isCurrentVersionState = (/** @type {string} */ state) =>

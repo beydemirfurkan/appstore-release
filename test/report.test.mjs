@@ -178,24 +178,39 @@ test("reserved-but-uncommitted screenshots are reported, not counted as present"
   assert.ok(ids(report).includes("screenshots.upload.incomplete"));
 });
 
-test("a ready subscription travels with the version; a broken one is fixable", () => {
+test("a first subscription goes through App Store Connect; a later one travels with the version", () => {
   const config = {
     locale: "en-US",
     subscription: { productId: "com.example.pro" },
     review: { privacyPublished: true },
   };
 
-  const ready = buildReport({
+  // Apple: the app's FIRST subscription is submitted with the binary from the website.
+  const first = buildReport({
     snapshot: healthySnapshot({ subscriptions: [{ id: "s", productId: "com.example.pro", state: "READY_TO_SUBMIT" }] }),
     config,
   });
-  // API 4.4.1 made first subscriptions submittable: no longer a hand-off.
+  const uiOnly = first.findings.find((f) => f.id === "subscription.first.ui-only");
+  assert.equal(uiOnly?.uiOnly, true);
+  assert.equal(uiOnly?.severity, "blocker");
+  assert.equal(first.verdict, "needs-human");
+
+  // With an approved plan already on sale, a new one is submitted by API.
+  const later = buildReport({
+    snapshot: healthySnapshot({
+      subscriptions: [
+        { id: "y", productId: "com.example.yearly", state: "APPROVED" },
+        { id: "s", productId: "com.example.pro", state: "READY_TO_SUBMIT" },
+      ],
+    }),
+    config,
+  });
   assert.equal(
-    ready.findings.find((f) => f.id === "subscription.first.ui-only"),
+    later.findings.find((f) => f.id === "subscription.first.ui-only"),
     undefined,
   );
-  assert.equal(ready.findings.find((f) => f.id === "subscription.ready-to-submit")?.severity, "info");
-  assert.equal(ready.verdict, "ready");
+  assert.equal(later.findings.find((f) => f.id === "subscription.ready-to-submit")?.severity, "info");
+  assert.equal(later.verdict, "ready");
 
   const missing = buildReport({
     snapshot: healthySnapshot({

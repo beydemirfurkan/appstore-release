@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). Producing images optionally uses the iOS Simulator (macOS) or headless Chrome/Chromium.
 metadata:
   author: Furkan Beydemir
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # App Store screenshots
@@ -55,7 +55,15 @@ One device size:
 "screenshots": { "dir": "./assets/screenshots" }
 ```
 
-Several (iPhone + iPad + Duo):
+Whatever a screenshot generator exported — any folder layout, any file names, devices mixed:
+
+```json
+"screenshots": { "from": "./exports" }
+```
+
+Every PNG under it is grouped by pixel size into device sets (iPhone 6.9", iPad 13", iPhone Duo…). A top-level folder named after a configured locale (`./exports/tr/…`) belongs to that locale. This is the handoff from a screenshot-generating skill: produce with it, point `from` at its output.
+
+Several, explicitly (iPhone + iPad + Duo):
 
 ```json
 "screenshots": {

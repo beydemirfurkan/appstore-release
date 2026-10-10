@@ -4,7 +4,7 @@
 // correctly refuses to target a live version, and then nothing could create one.
 // Every update needs this before any listing work can start.
 
-import { Status, VersionStates, isCurrentVersionState } from "../core/status.mjs";
+import { Status, VersionStates, isCurrentVersionState, versionState } from "../core/status.mjs";
 import { resolveRelease } from "./release-options.mjs";
 import { finding, Severity, Category, FixOwner } from "../core/findings.mjs";
 
@@ -35,16 +35,16 @@ export const meta = {
  */
 export async function run({ client, discovery, config }, args = {}) {
   const versions = await client.all(
-    `/v1/apps/${discovery.appId}/appStoreVersions?fields[appStoreVersions]=versionString,appStoreState,platform`,
+    `/v1/apps/${discovery.appId}/appStoreVersions?fields[appStoreVersions]=versionString,appStoreState,appVersionState,platform`,
     { limit: 50 },
   );
 
-  const editable = versions.find((v) => isCurrentVersionState(v.attributes.appStoreState));
+  const editable = versions.find((v) => isCurrentVersionState(versionState(v)));
   if (editable) {
-    const open = VersionStates.EDITABLE.includes(editable.attributes.appStoreState);
+    const open = VersionStates.EDITABLE.includes(versionState(editable));
     return {
       status: Status.OK,
-      message: `v${editable.attributes.versionString} is already ${open ? "open for editing" : "in progress"} (${editable.attributes.appStoreState})`,
+      message: `v${editable.attributes.versionString} is already ${open ? "open for editing" : "in progress"} (${versionState(editable)})`,
       details: { versionId: editable.id, versionString: editable.attributes.versionString, created: false },
     };
   }

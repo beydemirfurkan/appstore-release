@@ -1,5 +1,6 @@
 // Is there a version we may edit, and does it have a build?
 
+import { versionState } from "../../core/status.mjs";
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 
 export const section = { id: "version", title: "Version and build" };
@@ -17,7 +18,7 @@ export function check({ snapshot }) {
         category: Category.ASC_STATE,
         title: "No editable version",
         detail: live
-          ? `The newest version is ${live.attributes.versionString} in state ${live.attributes.appStoreState}, which cannot be edited.`
+          ? `The newest version is ${live.attributes.versionString} in state ${versionState(live)}, which cannot be edited.`
           : "This app has no App Store version yet.",
         fixOwner: FixOwner.CLI,
         fix: "Open the next version before preparing its listing.",

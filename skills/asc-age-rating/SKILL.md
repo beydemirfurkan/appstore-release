@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager).
 metadata:
   author: Furkan Beydemir
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # Age rating

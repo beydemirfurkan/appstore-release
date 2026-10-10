@@ -19,6 +19,7 @@
  * @property {any[]} placements           App Asset Library screenshot placements
  * @property {any} pricing
  * @property {any[]} subscriptions
+ * @property {any[]} inAppPurchases
  * @property {any} reviewDetail
  * @property {any} submission
  * @property {string|null} locale       the primary locale the report is about
@@ -27,7 +28,7 @@
  */
 
 import { localeCodes } from "../core/locales.mjs";
-import { isCurrentVersionState, pickEditableAppInfo } from "../core/status.mjs";
+import { isCurrentVersionState, pickEditableAppInfo, versionState } from "../core/status.mjs";
 
 /**
  * Gather everything the readiness checks need.
@@ -66,14 +67,14 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     "versions",
     () =>
       client.all(
-        `/v1/apps/${appId}/appStoreVersions?fields[appStoreVersions]=versionString,appStoreState,platform,copyright`,
+        `/v1/apps/${appId}/appStoreVersions?fields[appStoreVersions]=versionString,appStoreState,appVersionState,platform,copyright`,
         { limit: 50 },
       ),
     [],
   );
   // Deliberately null rather than "whatever came back first": targeting a live
   // version because no editable one exists is worse than reporting that fact.
-  const version = versions.find((v) => isCurrentVersionState(v.attributes.appStoreState)) ?? null;
+  const version = versions.find((v) => isCurrentVersionState(versionState(v))) ?? null;
 
   const build = version
     ? await section(
@@ -230,6 +231,24 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     [],
   );
 
+  const inAppPurchases = await section(
+    "inAppPurchases",
+    async () => {
+      const r = await client.get(
+        `/v1/apps/${appId}/inAppPurchasesV2?fields[inAppPurchases]=productId,name,state,inAppPurchaseType&limit=200`,
+        { throwOnError: false },
+      );
+      return (r.error ? [] : (r.data ?? [])).map((p) => ({
+        id: p.id,
+        productId: p.attributes?.productId,
+        name: p.attributes?.name,
+        state: p.attributes?.state,
+        type: p.attributes?.inAppPurchaseType,
+      }));
+    },
+    [],
+  );
+
   const reviewDetail = version
     ? await section(
         "reviewDetail",
@@ -280,6 +299,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     placements,
     pricing,
     subscriptions,
+    inAppPurchases,
     reviewDetail,
     submission,
     locale: primary,

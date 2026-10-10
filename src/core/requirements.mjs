@@ -20,12 +20,9 @@ export const REQUIREMENTS = Object.freeze({
   category: ["category.primary"],
   review: ["review.contactFirstName", "review.contactLastName", "review.contactPhone", "review.contactEmail"],
   screenshots: ["screenshots.dir"],
-  subscription: [
-    "subscription.productId",
-    "subscription.priceTerritory",
-    "subscription.priceAmount",
-    "subscription.reviewScreenshot",
-  ],
+  // Products are checked per product by their operations (core/products.mjs):
+  // an app that sells nothing must not fail the pipeline for want of a price.
+  subscription: [],
   credentials: ["bundleId"],
 });
 
@@ -70,7 +67,10 @@ export function checkRequirements(config, needs = []) {
     // only required when there are no sets.
     .filter(
       (path) =>
-        !(path === "screenshots.dir" && Array.isArray(config.screenshots?.sets) && config.screenshots.sets.length),
+        !(
+          path === "screenshots.dir" &&
+          ((Array.isArray(config.screenshots?.sets) && config.screenshots.sets.length) || config.screenshots?.from)
+        ),
     )
     .map((path) =>
       finding({
@@ -142,6 +142,76 @@ const LIMITS = [
 ];
 
 /**
+ * Text App Review rejects as unfinished (Guideline 2.1). "Todo" alone is left
+ * out on purpose: it is a perfectly good word in a to-do app's listing.
+ */
+const PLACEHOLDER_RE = /lorem ipsum|\bTBD\b|\bFIXME\b|\bTODO:|\bXXX\b|\[insert|\bplaceholder\b|coming soon/i;
+const TEXT_FIELDS = ["name", "subtitle", "description", "keywords", "promotionalText", "whatsNew"];
+
+/**
+ * Advice rather than rules: none of these is an API error, so they are
+ * warnings — but each one is either a likely rejection or wasted search reach.
+ *
+ * @param {Record<string, any>} metadata
+ * @param {(field: string) => string} keyFor
+ */
+function listingLints(metadata, keyFor) {
+  const out = [];
+  for (const field of TEXT_FIELDS) {
+    const value = metadata[field];
+    const hit = typeof value === "string" ? PLACEHOLDER_RE.exec(value) : null;
+    if (!hit) continue;
+    const path = keyFor(field);
+    out.push(
+      finding({
+        id: `config.${path}.placeholder`,
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: `config.${path} looks unfinished ("${hit[0]}")`,
+        detail: "App Review rejects listings with placeholder text under Guideline 2.1 (App Completeness).",
+        fixOwner: FixOwner.CLI,
+        fix: `Replace the placeholder in config.${path}.`,
+        docs: "references/metadata.md",
+      }),
+    );
+  }
+
+  if (typeof metadata.keywords !== "string") return out;
+  const path = keyFor("keywords");
+  const words = metadata.keywords
+    .split(",")
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean);
+  const seen = new Set();
+  const duplicates = [...new Set(words.filter((w) => seen.has(w) || !seen.add(w)))];
+  // Apple already indexes the name and subtitle; repeating their words in the
+  // keyword field spends the 100 characters on nothing.
+  const indexed = new Set(`${metadata.name ?? ""} ${metadata.subtitle ?? ""}`.toLowerCase().split(/[^\p{L}\p{N}]+/u));
+  const redundant = words.filter((w) => !w.includes(" ") && indexed.has(w));
+  const spaces = (metadata.keywords.match(/,\s+/g) ?? []).reduce((n, m) => n + m.length - 1, 0);
+
+  const waste = [];
+  if (duplicates.length) waste.push(`repeated: ${duplicates.join(", ")}`);
+  if (redundant.length) waste.push(`already in the name or subtitle: ${redundant.join(", ")}`);
+  if (spaces) waste.push(`${spaces} space${spaces === 1 ? "" : "s"} after commas`);
+  if (waste.length) {
+    out.push(
+      finding({
+        id: `config.${path}.wasted`,
+        severity: Severity.WARNING,
+        category: Category.CONFIG,
+        title: `config.${path} spends characters on nothing`,
+        detail: `${waste.join("; ")}. The keyword field is 100 characters; every one should be a new search term.`,
+        fixOwner: FixOwner.CLI,
+        fix: "Drop repeats and words from the name or subtitle, and separate with commas only.",
+        docs: "references/metadata.md",
+      }),
+    );
+  }
+  return out;
+}
+
+/**
  * @param {object|null} config
  * @returns {import("./findings.mjs").Finding[]}
  */
@@ -175,6 +245,8 @@ export function checkSemantics(config) {
         }),
       );
     }
+
+    out.push(...listingLints(metadata, keyFor));
 
     const description = metadata.description;
     if (typeof description === "string" && EMOJI_RE.test(description)) {

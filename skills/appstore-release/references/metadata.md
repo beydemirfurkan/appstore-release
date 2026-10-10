@@ -49,3 +49,8 @@ Limits are characters, not bytes. The validator checks them offline in every loc
 ## Writing a description that converts
 
 The first three lines show above the fold. Lead with the outcome, not the feature list. Then short uppercase-headed sections (KEY FEATURES, PRIVACY, SUBSCRIPTION TERMS). If the app has auto-renewing subscriptions, the description must state the price, period and that it renews automatically, with links to the terms and privacy policy (guideline 3.1.2).
+
+## Warnings `check` raises before Apple does
+
+- **Placeholder text** (`config.*.placeholder`): "Lorem ipsum", "TBD", "FIXME", "TODO:", "[insert", "coming soon" anywhere in the listing. App Review rejects unfinished listings under Guideline 2.1. A plain "todo" is fine — plenty of apps are to-do apps.
+- **Wasted keyword characters** (`config.*.keywords.wasted`): repeated keywords, words already in the name or subtitle (Apple indexes those already), and spaces after commas. The field is 100 characters; spend each on a new search term.

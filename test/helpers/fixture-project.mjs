@@ -43,7 +43,7 @@ export function writeWellnessProject(root) {
       name: "Wellness",
       subtitle: "Small habits, every day",
       description: "Track the habits that keep you well. Gentle reminders, honest insights, no streak shaming.",
-      keywords: "habits,wellness,health,routine,tracker",
+      keywords: "health,routine,tracker,mood,sleep,mindfulness,journal",
       supportUrl: "https://example.com/support",
       marketingUrl: "https://example.com",
       privacyPolicyUrl: "https://example.com/privacy",

@@ -14,6 +14,8 @@ import * as category from "./category.mjs";
 import * as reviewInfo from "./review-info.mjs";
 import * as screenshots from "./screenshots.mjs";
 import * as subscription from "./subscription.mjs";
+import * as inAppPurchases from "./in-app-purchases.mjs";
+import * as testflight from "./testflight.mjs";
 import * as submit from "./submit.mjs";
 import * as newVersion from "./new-version.mjs";
 import * as releaseOptions from "./release-options.mjs";
@@ -50,6 +52,8 @@ export const OPERATIONS = {
   "release-options": releaseOptions,
   screenshots,
   subscription,
+  "in-app-purchases": inAppPurchases,
+  testflight,
 };
 
 /**
@@ -67,6 +71,7 @@ export const PIPELINE = Object.freeze([
   "release-options",
   "screenshots",
   "subscription",
+  "in-app-purchases",
 ]);
 
 /** @param {string} id */

@@ -218,3 +218,69 @@ test("$schema and $comment are allowed everywhere; nothing else undeclared is", 
   const ok = validateConfig({ $schema: "https://x", $comment: "note", locale: "en-US", metadata: { $comment: "n" } });
   assert.deepEqual(ok.findings, []);
 });
+
+test("placeholder text and wasted keyword characters are flagged, as warnings", async () => {
+  const { checkSemantics } = await import("../src/core/requirements.mjs");
+  const ids = (metadata) => checkSemantics({ locale: "en-US", metadata }).map((f) => `${f.severity} ${f.id}`);
+
+  assert.deepEqual(
+    ids({ name: "Todo Pro", description: "A todo list that stays out of your way." }),
+    [],
+    "'todo' is a word, not a placeholder",
+  );
+  assert.deepEqual(ids({ description: "Lorem ipsum dolor sit amet." }), [
+    "warning config.metadata.description.placeholder",
+  ]);
+  assert.deepEqual(ids({ promotionalText: "TBD" }), ["warning config.metadata.promotionalText.placeholder"]);
+
+  const wasted = checkSemantics({
+    locale: "en-US",
+    metadata: { name: "Wellness", subtitle: "Small habits", keywords: "habits, sleep,sleep,mood" },
+  }).find((f) => f.id === "config.metadata.keywords.wasted");
+  assert.equal(wasted?.severity, "warning");
+  assert.match(wasted?.detail ?? "", /repeated: sleep/);
+  assert.match(wasted?.detail ?? "", /already in the name or subtitle: habits/);
+  assert.match(wasted?.detail ?? "", /1 space after commas/);
+  assert.deepEqual(ids({ name: "Wellness", keywords: "sleep,mood,journal" }), [], "clean keywords pass");
+});
+
+test("version state reads appVersionState first, and translates the deprecated appStoreState names", async () => {
+  const { versionState, isCurrentVersionState } = await import("../src/core/status.mjs");
+  assert.equal(versionState({ attributes: { appVersionState: "PREPARE_FOR_SUBMISSION" } }), "PREPARE_FOR_SUBMISSION");
+  assert.equal(
+    versionState({ attributes: { appVersionState: "IN_REVIEW", appStoreState: "WAITING_FOR_REVIEW" } }),
+    "IN_REVIEW",
+    "the current attribute wins",
+  );
+  assert.equal(versionState({ attributes: { appStoreState: "READY_FOR_SALE" } }), "READY_FOR_DISTRIBUTION");
+  assert.equal(
+    versionState({ attributes: { appStoreState: "PROCESSING_FOR_APP_STORE" } }),
+    "PROCESSING_FOR_DISTRIBUTION",
+  );
+  assert.equal(isCurrentVersionState("ACCEPTED"), true, "approved versions are still the one being reported on");
+});
+
+test("an EAS Metadata file translates into our config, and ours wins where both speak", async () => {
+  const { fromStoreConfig, mergeConfig } = await import("../src/core/eas.mjs");
+  const translated = fromStoreConfig({
+    configVersion: 0,
+    apple: {
+      info: { tr: { title: "Sağlık" }, "en-US": { title: "Wellness", keywords: ["a", "b"], releaseNotes: "Fixes" } },
+      categories: [["GAMES", "GAMES_CARD"], "ENTERTAINMENT"],
+      release: { automaticRelease: "2026-11-01T10:00:00Z", phasedRelease: true },
+      advisory: { ageRatingOverrideV2: "THIRTEEN_PLUS", seventeenPlus: false, gambling: false },
+      review: { demoUsername: "demo", demoRequired: true },
+    },
+  });
+  assert.equal(translated.locale, "en-US", "en-US is primary when present");
+  assert.deepEqual(translated.metadata, { name: "Wellness", whatsNew: "Fixes", keywords: "a,b" });
+  assert.deepEqual(translated.locales, { tr: { name: "Sağlık" } });
+  assert.deepEqual(translated.category, { primary: "GAMES", secondary: "ENTERTAINMENT" });
+  assert.deepEqual(translated.release, { type: "SCHEDULED", earliestDate: "2026-11-01T10:00:00Z", phased: true });
+  assert.equal(translated.ageRating.override, "THIRTEEN_PLUS");
+  assert.equal("seventeenPlus" in translated.ageRating, false, "keys Apple removed are dropped");
+  assert.deepEqual(translated.review, { demoAccountName: "demo", demoAccountRequired: true });
+  assert.deepEqual(mergeConfig({ metadata: { name: "A", subtitle: "S" } }, { metadata: { name: "B" } }), {
+    metadata: { name: "B", subtitle: "S" },
+  });
+});

@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml/badge.svg)](https://github.com/beydemirfurkan/appstore-release/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE) [![iOS 27](https://img.shields.io/badge/iOS-27-black)](docs/reference.md#updated-for-ios-27)
 
-<img src="docs/media/hero.gif" alt="appstore-release: check finds twelve blockers, release fixes them, submit sends the app and its first subscription to App Review" width="860">
+<img src="docs/media/hero.gif" alt="appstore-release: check finds twelve blockers, release fixes them, submit sends the app and its new subscription to App Review" width="860">
 
 <sub>Real output, recorded against the demo below.</sub>
 
@@ -39,11 +39,13 @@ The demo runs against a local stand-in for App Store Connect, so nothing leaves 
 
 **`check`** reads the whole app and returns a verdict with an ordered plan. Each finding says whether the tool can fix it or only you can.
 
-**`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscription. It is idempotent; a second run sends nothing.
+**`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscriptions and in-app purchases. It is idempotent; a second run sends nothing.
 
-**`submit`** sends the version, and a first subscription with it. It refuses unless `check` says ready.
+**`submit`** sends the version with any new plans and purchases, and refuses unless `check` says ready. `check --wait` then follows the review to its outcome.
 
-Apple keeps one step out of its API: the App Privacy label. For that step, `check` tells you exactly where to click.
+Apple keeps two things in its web UI: the App Privacy label and an app's first subscription or in-app purchase. For those, `check` tells you exactly where to click.
+
+Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they are.
 
 ## Skills
 
@@ -51,9 +53,10 @@ Apple keeps one step out of its API: the App Privacy label. For that step, `chec
 
 - **asc-screenshots**: exact sizes, iPhone Duo, iPad
 - **asc-age-rating**: the 2026 questionnaire
-- **asc-subscriptions**: pricing, paywall screenshot, first submission
+- **asc-subscriptions**: plans, free trials, lifetime purchases
 - **asc-rejection**: read the reviewer's message, fix, resubmit
 - **asc-credentials**: EAS certificates and provisioning profiles
+- **asc-testflight**: groups, testers, What to Test, beta review
 
 ## Also runs as
 

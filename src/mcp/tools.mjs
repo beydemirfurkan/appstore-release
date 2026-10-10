@@ -19,12 +19,14 @@ import { createContext } from "../core/context.mjs";
 import { runOperation, runPipeline } from "../index.mjs";
 import { getAppSnapshot } from "../report/snapshot.mjs";
 import { getReadinessReport } from "../report/report.mjs";
+import { waitForReview } from "../report/wait.mjs";
+import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { renderReportMarkdown } from "../report/render.mjs";
 import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { Severity } from "../core/findings.mjs";
-import { Status } from "../core/status.mjs";
+import { Status, versionState } from "../core/status.mjs";
 
 // Input schemas are plain JSON Schema. That is what goes on the wire anyway —
 // zod existed only to be converted into this — and it means the same validator
@@ -164,10 +166,29 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         "Read-only. Returns findings with a verdict and an ordered list of next actions, each marked as something this " +
         "tool can fix or something only a human in App Store Connect can. Start here.",
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
-      inputSchema: input({ appId, configPath, locale: str("Locale to report on.") }),
+      inputSchema: input({
+        appId,
+        configPath,
+        locale: str("Locale to report on."),
+        waitMinutes: {
+          type: "number",
+          minimum: 0,
+          maximum: 15,
+          description:
+            "After a submission: keep re-checking for up to this many minutes while the version is in review. " +
+            "Review usually takes hours; call again later rather than waiting long.",
+        },
+      }),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
+        if (args.waitMinutes > 0) {
+          const { report, timedOut, waitedMinutes } = await waitForReview(ctx, {
+            minutes: Math.min(args.waitMinutes, 15),
+          });
+          const note = timedOut ? `\n\nStill in review after ${waitedMinutes} min. Check again later.` : "";
+          return structured(renderReportMarkdown(report) + note, { ...report, timedOut, waitedMinutes });
+        }
         const report = await getReadinessReport(ctx, { locale: args.locale });
         return structured(renderReportMarkdown(report), report);
       },
@@ -188,7 +209,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         const lines = [
           `# ${snapshot.app?.attributes?.name ?? "app"} (${snapshot.app?.attributes?.bundleId ?? "?"})`,
           "",
-          `Editable version: ${snapshot.version ? `${snapshot.version.attributes.versionString} (${snapshot.version.attributes.appStoreState})` : "none"}`,
+          `Editable version: ${snapshot.version ? `${snapshot.version.attributes.versionString} (${versionState(snapshot.version)})` : "none"}`,
           `Attached build: ${snapshot.build?.attributes?.version ?? "none"}`,
           `Price schedule: ${snapshot.pricing.hasSchedule ? "set" : "not set"}`,
           `Screenshot sets: ${snapshot.screenshotSets.map((s) => `${s.displayType} (${s.screenshots.length})`).join(", ") || "none"}`,
@@ -375,17 +396,21 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
 
     {
       name: "asc_configure_subscription",
-      title: "Configure a subscription",
+      title: "Configure subscriptions and in-app purchases",
       description:
-        "Write a subscription's localizations, price and App Review paywall screenshot, so it leaves " +
-        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends it together with the app version.",
+        "Create any missing subscription plans and one-time purchases from the config, then write their " +
+        "localizations, prices, introductory offers and App Review screenshots, so they leave " +
+        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends them with the app version — except the " +
+        "app's first subscription and first in-app purchase, which Apple requires to be submitted from the website.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
-        const res = await runOperation("subscription", ctx);
-        return structured(`${res.status.toUpperCase()} — ${res.message}`, res);
+        const subs = await runOperation("subscription", ctx);
+        const iaps = await runOperation("in-app-purchases", ctx);
+        const text = [subs, iaps].map((r) => `${r.title}: ${r.status.toUpperCase()} — ${r.message}`).join("\n");
+        return structured(text, { subscriptions: subs, inAppPurchases: iaps });
       },
     },
 
@@ -401,6 +426,10 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           appId,
           configPath,
           force: bool("Submit even though blockers remain. Apple will reject it.", false),
+          resolved: bool(
+            "After a rejection: the user has addressed what App Review asked for in Resolution Center. Resubmits.",
+            false,
+          ),
           confirm,
         },
         ["confirm"],
@@ -412,7 +441,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         // The guardrail a generic API wrapper structurally cannot offer: we know
         // what "ready" means, so we can decline to waste a review cycle.
         const report = await getReadinessReport(ctx);
-        if (report.verdict !== "ready" && !args.force) {
+        const resubmit =
+          report.verdict === "rejected" &&
+          args.resolved &&
+          !report.findings.some((f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id));
+        if (report.verdict !== "ready" && !args.force && !resubmit) {
           return structured(
             [
               `Refusing to submit: the readiness verdict is **${report.verdict}**.`,
@@ -425,7 +458,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           );
         }
 
-        const res = await runOperation("submit", ctx, { submit: true, force: Boolean(args.force) });
+        const res = await runOperation("submit", ctx, {
+          submit: true,
+          force: Boolean(args.force),
+          resolved: Boolean(args.resolved),
+        });
         // Only a CHANGED result means the PATCH went through; an OK can be "already
         // in review" and an ERROR is a refusal — neither is a submission.
         const submitted = res.status === Status.CHANGED;

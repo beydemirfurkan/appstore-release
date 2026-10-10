@@ -3,12 +3,14 @@
 //
 // Since App Store Connect API 4.4.1, subscriptions and subscription groups have
 // versions, and reviewSubmissionItems accepts `subscriptionVersion` and
-// `subscriptionGroupVersion`. That closed the old gap where a FIRST subscription
-// could only be attached in the web UI. Apple's rule still holds: a first
-// subscription goes to review in the same submission as an app version, and a new
-// subscription travels with its group — so all of them are added to one submission.
+// `subscriptionGroupVersion`. That made LATER subscriptions submittable here, in
+// the same submission as the app version. The app's FIRST subscription still
+// goes to review from appstoreconnect.apple.com together with the binary —
+// Apple says so in as many words — so it is never added by this operation.
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
+import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
+import { isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
 
 /** A draft submission we may add items to and finalize. */
 const DRAFT_STATES = ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"];
@@ -35,6 +37,11 @@ export const meta = {
       type: "boolean",
       default: false,
       description: "submit even though the readiness report still has blockers",
+    },
+    resolved: {
+      type: "boolean",
+      default: false,
+      description: "after a rejection: you have addressed what App Review asked for — resubmit",
     },
   },
 };
@@ -64,10 +71,22 @@ export async function run(ctx, args = {}) {
   // Only checked when actually finalizing — preparing is harmless.
   if (args.submit && !args.force) {
     const report = await getReadinessReport(ctx);
-    if (report.verdict !== "ready") {
+    // A rejected version is resubmittable once the user says the reviewer's
+    // points are addressed — the API cannot read Resolution Center to check —
+    // and nothing else is still in the way.
+    const othersBlocking = report.findings.filter(
+      (f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id),
+    );
+    const resubmit = report.verdict === "rejected" && args.resolved && !othersBlocking.length;
+    if (report.verdict !== "ready" && !resubmit) {
       return {
         status: Status.ERROR,
-        message: `not ready to submit (${report.verdict}); pass --force to submit anyway`,
+        message:
+          report.verdict === "rejected"
+            ? othersBlocking.length
+              ? `rejected, and ${othersBlocking.length} other blocker(s) remain — run release, then submit --submit --resolved`
+              : "Apple rejected this version: read Resolution Center, fix it, then submit --submit --resolved"
+            : `not ready to submit (${report.verdict}); pass --force to submit anyway`,
         details: report,
         findings: report.findings,
       };
@@ -97,7 +116,18 @@ export async function run(ctx, args = {}) {
       label: `v${version.attributes.versionString}`,
     },
   ];
-  wanted.push(...(await subscriptionItems(ctx, config?.subscription?.productId)));
+  wanted.push(
+    ...(await subscriptionItems(
+      ctx,
+      subscriptionConfigs(config).map((p) => p.productId),
+    )),
+  );
+  wanted.push(
+    ...(await purchaseItems(
+      ctx,
+      purchaseConfigs(config).map((p) => p.productId),
+    )),
+  );
 
   const present = await existingItemIds(client, submission.id);
   const added = [];
@@ -137,6 +167,18 @@ export async function run(ctx, args = {}) {
     };
   }
 
+  // After a rejection the submission sits in UNRESOLVED_ISSUES with its items
+  // unresolved. Marking them resolved is the API's "Resubmit to App Review" —
+  // do it only when actually submitting, once the fixes are in.
+  if (submission.attributes?.state === "UNRESOLVED_ISSUES") {
+    const items = await client.all(`/v1/reviewSubmissions/${submission.id}/items`, { limit: 50 });
+    for (const item of items.filter((i) => i.attributes?.resolved === false || i.attributes?.state === "REJECTED")) {
+      await client.patch(`/v1/reviewSubmissionItems/${item.id}`, {
+        data: { type: "reviewSubmissionItems", id: item.id, attributes: { resolved: true } },
+      });
+    }
+  }
+
   const done = await client.patch(
     `/v1/reviewSubmissions/${submission.id}`,
     { data: { type: "reviewSubmissions", id: submission.id, attributes: { submitted: true } } },
@@ -151,35 +193,74 @@ export async function run(ctx, args = {}) {
 }
 
 /**
- * The subscription (and, for a new one, its group) as versioned review items.
- * A subscription already approved or already in review contributes nothing.
+ * Configured subscriptions that are ready, as versioned review items — with
+ * their group's version when the group was never approved. Nothing when the app
+ * has never had a subscription approved: Apple takes the first one from the
+ * website, with the binary.
  *
  * @param {import("../core/context.mjs").Context} ctx
- * @param {string|undefined} productId
+ * @param {string[]} productIds
  */
-async function subscriptionItems({ client, discovery }, productId) {
-  if (!productId) return [];
-  const { sub, group } = await discovery.subscription(productId);
-  if (!sub || sub.attributes.state !== "READY_TO_SUBMIT") return [];
+async function subscriptionItems({ client, discovery }, productIds) {
+  if (!productIds.length) return [];
+  const r = await client.get(`/v1/apps/${discovery.appId}/subscriptionGroups?include=subscriptions&limit=50`);
+  const all = (r.included ?? []).filter((x) => x.type === "subscriptions");
+  if (isFirstProduct(all)) return [];
 
   const items = [];
-  const groupVersion = group ? await draftVersion(client, "subscriptionGroups", group.id) : null;
-  if (groupVersion) {
-    items.push({
-      relationship: "subscriptionGroupVersion",
-      type: "subscriptionGroupVersions",
-      id: groupVersion.id,
-      label: "subscription group",
-    });
+  for (const productId of productIds) {
+    const sub = all.find((s) => s.attributes.productId === productId);
+    if (!sub || sub.attributes.state !== "READY_TO_SUBMIT") continue;
+    const group = (r.data ?? []).find((g) => (g.relationships?.subscriptions?.data ?? []).some((d) => d.id === sub.id));
+    const groupVersion = group ? await draftVersion(client, "subscriptionGroups", group.id) : null;
+    if (groupVersion && !items.some((i) => i.id === groupVersion.id)) {
+      items.push({
+        relationship: "subscriptionGroupVersion",
+        type: "subscriptionGroupVersions",
+        id: groupVersion.id,
+        label: "subscription group",
+      });
+    }
+    const subVersion = await draftVersion(client, "subscriptions", sub.id);
+    if (subVersion) {
+      items.push({
+        relationship: "subscriptionVersion",
+        type: "subscriptionVersions",
+        id: subVersion.id,
+        label: productId,
+      });
+    }
   }
-  const subVersion = await draftVersion(client, "subscriptions", sub.id);
-  if (subVersion) {
-    items.push({
-      relationship: "subscriptionVersion",
-      type: "subscriptionVersions",
-      id: subVersion.id,
-      label: "subscription",
-    });
+  return items;
+}
+
+/**
+ * Configured one-time purchases that are ready, as versioned review items.
+ * Nothing for an app's first in-app purchase, which Apple takes from the website.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {string[]} productIds
+ */
+async function purchaseItems({ client, discovery }, productIds) {
+  if (!productIds.length) return [];
+  const all = await client.all(`/v1/apps/${discovery.appId}/inAppPurchasesV2?fields[inAppPurchases]=productId,state`, {
+    limit: 200,
+  });
+  if (isFirstProduct(all)) return [];
+  const items = [];
+  for (const productId of productIds) {
+    const iap = all.find((p) => p.attributes?.productId === productId);
+    if (!iap || iap.attributes.state !== "READY_TO_SUBMIT") continue;
+    const versions = await client.all(`/v2/inAppPurchases/${iap.id}/versions`, { limit: 20 });
+    const draft = versions.find((v) => DRAFT_VERSION_STATES.includes(v.attributes?.state));
+    if (draft) {
+      items.push({
+        relationship: "inAppPurchaseVersion",
+        type: "inAppPurchaseVersions",
+        id: draft.id,
+        label: productId,
+      });
+    }
   }
   return items;
 }
@@ -219,7 +300,13 @@ async function draftVersion(client, parentType, parentId) {
 async function existingItemIds(client, submissionId) {
   const ids = new Set();
   if (submissionId.startsWith("dry:")) return ids; // planned under --dry-run; nothing to read
-  const items = await client.all(`/v1/reviewSubmissions/${submissionId}/items`, { limit: 50 });
+  // Relationship ids come back only for what is included — without it every
+  // item looks empty, and a re-run adds the same version again (409).
+  const items = await client.all(
+    `/v1/reviewSubmissions/${submissionId}/items` +
+      `?include=appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion`,
+    { limit: 50 },
+  );
   for (const item of items) {
     for (const rel of Object.values(item.relationships ?? {})) {
       const id = /** @type {any} */ (rel)?.data?.id;

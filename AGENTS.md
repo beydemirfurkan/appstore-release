@@ -15,14 +15,15 @@ Load the skill that matches the task. Each is self-contained under `skills/<name
 | [`appstore-release`](skills/appstore-release/SKILL.md)   | The whole submission: readiness check → fix → listing → submit. Start here.    |
 | [`asc-screenshots`](skills/asc-screenshots/SKILL.md)     | Sizes (6.9", iPhone Duo, 13" iPad), producing images, App Asset Library upload |
 | [`asc-age-rating`](skills/asc-age-rating/SKILL.md)       | The age-rating questionnaire, 13+/16+/18+ tiers, social media questions        |
-| [`asc-subscriptions`](skills/asc-subscriptions/SKILL.md) | Subscription metadata, price, paywall screenshot, versioned submission         |
+| [`asc-subscriptions`](skills/asc-subscriptions/SKILL.md) | Plans, free trials, lifetime purchases: metadata, price, review submission     |
+| [`asc-testflight`](skills/asc-testflight/SKILL.md)       | TestFlight: groups, testers, What to Test, beta review                         |
 | [`asc-rejection`](skills/asc-rejection/SKILL.md)         | Rejection → guideline → fix → reply → resubmit                                 |
 | [`asc-credentials`](skills/asc-credentials/SKILL.md)     | EAS signing: distribution certificate and App Store profile                    |
 
 Install them into your agent:
 
 ```bash
-npx skills add beydemirfurkan/appstore-release            # all six
+npx skills add beydemirfurkan/appstore-release            # all seven
 npx skills add beydemirfurkan/appstore-release -s asc-screenshots -a codex
 ```
 
@@ -42,7 +43,7 @@ Credentials come from `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_P8_PATH` (or `ASC_P8`)
 2. **Ask the user before `submit --submit`** (or `asc_submit_for_review`) — it is irreversible. It refuses unless the readiness verdict is `ready`; only use `--force` when the user insists, and tell them Apple will reject it.
 3. **Ask before `credentials --allow-new-cert`** — Apple caps an account at three distribution certificates.
 4. **Let `check` plan.** Work through its `nextActions` in order instead of inventing a sequence.
-5. **Do not pretend Apple has an API it does not.** App Privacy is UI-only; set `review.privacyPublished: true` only after the user confirms they published it.
+5. **Do not pretend Apple has an API it does not.** App Privacy is UI-only; set `review.privacyPublished: true` only after the user confirms they published it. An app's first subscription is submitted from the App Store Connect website with the binary; never try to work around that.
 6. **Dry-run first** when showing the user what will change: every mutating command accepts `--dry-run`, enforced at the HTTP client.
 
 ## Working on this repository

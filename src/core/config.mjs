@@ -4,7 +4,9 @@
 // Validation lives in requirements.mjs; this module only gets the object.
 
 import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
+
+import { fromStoreConfig, isStoreConfig, mergeConfig } from "./eas.mjs";
 
 export class ConfigError extends Error {}
 
@@ -18,6 +20,7 @@ export const CONFIG_CANDIDATES = Object.freeze([
   "appstore.config.json",
   ".appstore-release/config.json",
   "config.json", // still discovered, for configs written against v1
+  "store.config.json", // an Expo project's EAS Metadata, used as is when nothing else exists
 ]);
 
 /**
@@ -51,9 +54,23 @@ export function loadConfig(source) {
   } catch {
     throw new ConfigError(`Cannot read config at ${source}`);
   }
+  let parsed;
   try {
-    return { config: JSON.parse(raw), configPath: resolve(source) };
+    parsed = JSON.parse(raw);
   } catch (e) {
     throw new ConfigError(`Config is not valid JSON (${source}): ${e instanceof Error ? e.message : String(e)}`);
   }
+  const configPath = resolve(source);
+
+  // An EAS Metadata file on its own: translate it.
+  if (isStoreConfig(parsed)) return { config: fromStoreConfig(parsed), configPath };
+
+  // Ours, layered over an EAS Metadata file it names. Ours wins on overlap.
+  if (typeof parsed.easMetadata === "string") {
+    const easPath = resolve(dirname(configPath), parsed.easMetadata);
+    const { config: eas } = loadConfig(easPath);
+    const { easMetadata, ...own } = parsed;
+    return { config: { ...mergeConfig(eas ?? {}, own), easMetadata }, configPath };
+  }
+  return { config: parsed, configPath };
 }

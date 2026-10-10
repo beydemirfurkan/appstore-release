@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). The subscription product itself must already exist in App Store Connect.
 metadata:
   author: Furkan Beydemir
-  version: "4.3.1"
+  version: "4.3.2"
   guidelines: "2026-06-08"
 ---
 

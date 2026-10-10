@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.3.2
+
+### Changed
+
+- **`sales --type SUBSCRIPTION`** is summarised as what the report says: subscribers by plan — paying at the standard price, in a free trial, on an introductory price or an offer, in billing retry or a grace period — instead of a row count. Built from the report's columns as App Store Connect returned them for a live app.
+- A day with no report says Apple's sentence ("There were no sales for the date specified") instead of the whole request.
+
 ## 4.3.1
 
 ### Fixed

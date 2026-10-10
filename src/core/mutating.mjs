@@ -14,11 +14,13 @@ export const MUTATING_COMMANDS = Object.freeze([
   "content-rights",
   "age-rating",
   "category",
+  "accessibility",
   "review-info",
   "release-options",
   "screenshots",
   "subscription",
   "in-app-purchases",
+  "offer-codes",
   "testflight",
   "reply",
 ]);

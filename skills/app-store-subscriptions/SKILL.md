@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). The subscription product itself must already exist in App Store Connect.
 metadata:
   author: Furkan Beydemir
-  version: "4.0.2"
+  version: "4.1.0"
   guidelines: "2026-06-08"
 ---
 
@@ -69,6 +69,29 @@ node <skill-dir>/scripts/asc.mjs <command> [flags]
 - `introOffer`: `FREE_TRIAL` (no price), `PAY_AS_YOU_GO` (`periods` × discounted price) or `PAY_UP_FRONT`, with a `duration` from `THREE_DAYS` to `ONE_YEAR`. Paid offers are priced in `priceTerritory` only. An existing offer of the same shape is left alone.
 - `inAppPurchases`: one-time purchases, `NON_CONSUMABLE` (a lifetime unlock) by default. Created when missing, then localized, made available everywhere, priced, and given its review screenshot. `asc in-app-purchases` runs them alone.
 
+### Promotional offers and offer codes
+
+```json
+"subscriptions": [{
+  "productId": "pro_monthly",
+  "promotionalOffers": [
+    { "offerCode": "COMEBACK", "name": "Come back: 3 months at 1.99", "type": "PAY_AS_YOU_GO",
+      "duration": "ONE_MONTH", "periods": 3, "priceAmount": 1.99 }
+  ],
+  "offerCodes": [
+    { "name": "Ramadan", "type": "FREE_TRIAL", "duration": "ONE_MONTH", "eligibility": ["NEW", "EXPIRED"],
+      "customCodes": [{ "code": "RAMADAN", "count": 5000, "expires": "2027-03-31" }],
+      "oneTimeCodes": [{ "count": 500, "expires": "2027-03-31", "output": "./codes/ramadan.csv" }] }
+  ]
+}]
+```
+
+- **Promotional offers** go to existing or lapsed subscribers inside the app: the app passes `offerCode` to StoreKit with a signed offer. **Offer codes** are redeemed in the App Store: `customCodes` are codes you choose (one code, many redemptions), `oneTimeCodes` are batches of single-use codes.
+- Created when missing, as part of `asc subscription` (and `release`). Apple does not let an offer's terms change once created: a difference is reported (`subscription.promotional-offer.changed.*`, `subscription.offer-code.changed.*`) and nothing is written. To change the terms, use a new `offerCode` or `name`. `"active": false` deactivates an offer code or a custom code; nothing is ever deleted.
+- **Prices:** a paid offer needs `priceAmount` (in `priceTerritory`), plus `prices: { "USA": 1.99 }` for any other territory. Apple documents no equalization for offers, so a territory you do not list gets no offer. A `FREE_TRIAL` takes `territories` (default: `priceTerritory`).
+- `eligibility`: `NEW`, `EXISTING`, `EXPIRED` subscribers. `stackWithIntroOffer: true` lets a new subscriber get the introductory offer too.
+- **One-time codes are generated only when asked:** `asc offer-codes`. Each batch spends Apple's code quota and puts redeemable codes on disk, so `release` never does it. A batch is generated once (matched by count, expiry and environment) and written to `output` as CSV; if Apple is still generating it, run `asc offer-codes` again in a few minutes. Keep the file out of git — the command warns when it is not ignored.
+
 ## 3. Apply
 
 ```bash
@@ -112,6 +135,6 @@ App Review opens the paywall. Guideline 3.1.2 asks for all of this, in the app:
 - Products not loading in review usually means the Paid Apps Agreement is not active, or the product is still `MISSING_METADATA`.
 - Subscription changes after approval (price, localizations) go through review again with the next submission.
 - The old API had no `subscription` relationship on `reviewSubmissionItems` (409 _`'subscription' is not a relationship`_) — that is why older guides send people to the UI. The versioned model replaced it.
-- Introductory offers, promotional offers and offer codes are configured in App Store Connect; this tool does not manage them yet.
+- Win-back offers are not managed yet: Apple's API does not document how to price one.
 
 _Checked against the App Store Review Guidelines of June 8, 2026._

@@ -3,7 +3,10 @@
     "prompt": "Add a monthly plan with a one-week free trial.",
     "expects": ["asc subscription --dry-run", "asc subscription"]
   },
-  { "prompt": "Sell a lifetime unlock as a one-time purchase.", "expects": ["asc in-app-purchases"] },
+  {
+    "prompt": "Sell a lifetime unlock as a one-time purchase.",
+    "expects": ["asc in-app-purchases"]
+  },
   {
     "prompt": "Submit my first subscription together with the app version.",
     "expects": ["asc submit --submit --dry-run", "asc submit --submit"]
@@ -11,5 +14,13 @@
   {
     "prompt": "Apple won't take the first subscription by API. Just send the app on its own.",
     "expects": ["asc submit --submit --skip-products"]
+  },
+  {
+    "prompt": "Create offer codes for Ramadan: a custom code RAMADAN and 500 one-time codes.",
+    "expects": ["asc subscription --dry-run", "asc subscription", "asc offer-codes"]
+  },
+  {
+    "prompt": "Give lapsed subscribers three months at a discount when they come back.",
+    "expects": ["promotionalOffers", "asc subscription"]
   }
 ]

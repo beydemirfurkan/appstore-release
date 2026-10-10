@@ -76,12 +76,12 @@ export class AscClient {
   /**
    * @param {"GET"|"POST"|"PATCH"|"DELETE"} method
    * @param {string} path
-   * @param {{ body?: object, throwOnError?: boolean, dryRunResult?: () => any, timeoutMs?: number }} [opts]
+   * @param {{ body?: object, throwOnError?: boolean, dryRunResult?: () => any, timeoutMs?: number, text?: boolean }} [opts]
    *
    * When throwOnError is false, API errors resolve to `{ error: AscApiError }`
    * instead of throwing — callers must then check `.error` before `.data`.
    */
-  async request(method, path, { body, throwOnError = true, dryRunResult, timeoutMs } = {}) {
+  async request(method, path, { body, throwOnError = true, dryRunResult, timeoutMs, text = false } = {}) {
     if (this.dryRun && method !== "GET") return this._planned(method, path, body, dryRunResult);
 
     const url = `${this._baseUrl}${path}`;
@@ -116,6 +116,9 @@ export class AscClient {
         continue;
       }
 
+      // A few endpoints answer with a file rather than JSON (offer code values
+      // are text/csv). The caller asks for the body as text; errors stay JSON.
+      if (text && res.ok) return { text: await res.text() };
       return this._parse(res, method, path, throwOnError);
     }
   }

@@ -501,6 +501,221 @@
         "reviewScreenshot": {
           "type": "string",
           "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
+        },
+        "promotionalOffers": {
+          "type": "array",
+          "description": "Promotional offers for existing and lapsed subscribers, redeemed in the app with a signed offer. Created when missing; Apple does not allow changing one afterwards — create a new offerCode instead.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["offerCode", "name", "type", "duration"],
+            "properties": {
+              "$comment": {
+                "type": "string"
+              },
+              "offerCode": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+                "description": "The identifier the app passes to StoreKit. Unique per subscription."
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Reference name, shown only in App Store Connect."
+              },
+              "type": {
+                "type": "string",
+                "enum": ["FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"]
+              },
+              "duration": {
+                "type": "string",
+                "enum": [
+                  "THREE_DAYS",
+                  "ONE_WEEK",
+                  "TWO_WEEKS",
+                  "ONE_MONTH",
+                  "TWO_MONTHS",
+                  "THREE_MONTHS",
+                  "SIX_MONTHS",
+                  "ONE_YEAR"
+                ]
+              },
+              "periods": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "How many periods a PAY_AS_YOU_GO offer lasts. Default 1."
+              },
+              "priceAmount": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Price in the plan's priceTerritory, for PAY_AS_YOU_GO and PAY_UP_FRONT. The nearest price point is used."
+              },
+              "prices": {
+                "type": "object",
+                "description": "Prices in further territories, e.g. { \"USA\": 1.99 }. Apple documents no equalization for offers, so a territory not listed here gets no offer.",
+                "propertyNames": {
+                  "pattern": "^[A-Z]{3}$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "territories": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{3}$"
+                },
+                "description": "For a FREE_TRIAL: the territories it is offered in. Default: the plan's priceTerritory."
+              }
+            }
+          }
+        },
+        "offerCodes": {
+          "type": "array",
+          "description": "Offer codes: codes customers redeem in the App Store. Created when missing; their terms cannot change afterwards.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "type", "duration", "eligibility"],
+            "properties": {
+              "$comment": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "Reference name; also how this config finds the offer again."
+              },
+              "type": {
+                "type": "string",
+                "enum": ["FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"]
+              },
+              "duration": {
+                "type": "string",
+                "enum": [
+                  "THREE_DAYS",
+                  "ONE_WEEK",
+                  "TWO_WEEKS",
+                  "ONE_MONTH",
+                  "TWO_MONTHS",
+                  "THREE_MONTHS",
+                  "SIX_MONTHS",
+                  "ONE_YEAR"
+                ]
+              },
+              "periods": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "How many periods a PAY_AS_YOU_GO offer lasts. Default 1."
+              },
+              "priceAmount": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Price in the plan's priceTerritory, for PAY_AS_YOU_GO and PAY_UP_FRONT. The nearest price point is used."
+              },
+              "prices": {
+                "type": "object",
+                "description": "Prices in further territories, e.g. { \"USA\": 1.99 }. Apple documents no equalization for offers, so a territory not listed here gets no offer.",
+                "propertyNames": {
+                  "pattern": "^[A-Z]{3}$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "territories": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{3}$"
+                },
+                "description": "For a FREE_TRIAL: the territories it is offered in. Default: the plan's priceTerritory."
+              },
+              "eligibility": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "enum": ["NEW", "EXISTING", "EXPIRED"]
+                },
+                "description": "Who may redeem: new, existing or lapsed subscribers."
+              },
+              "stackWithIntroOffer": {
+                "type": "boolean",
+                "description": "true: a new subscriber gets the introductory offer too. Default false (the code replaces it)."
+              },
+              "autoRenew": {
+                "type": "boolean",
+                "description": "Whether the subscription renews after the offer. Default: Apple's."
+              },
+              "active": {
+                "type": "boolean",
+                "description": "false deactivates the offer and its codes. Default true."
+              },
+              "customCodes": {
+                "type": "array",
+                "description": "Codes you choose, such as RAMADAN. Created when missing.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["code", "count"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9]{1,64}$"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "How many redemptions the code allows."
+                    },
+                    "expires": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "YYYY-MM-DD. Default: no expiry."
+                    },
+                    "active": {
+                      "type": "boolean",
+                      "description": "false deactivates this code. Default true."
+                    }
+                  }
+                }
+              },
+              "oneTimeCodes": {
+                "type": "array",
+                "description": "Batches of single-use codes, generated only by `appstore-release offer-codes` and written to a CSV file.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["count", "expires", "output"],
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expires": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "YYYY-MM-DD"
+                    },
+                    "environment": {
+                      "type": "string",
+                      "enum": ["PRODUCTION", "SANDBOX"],
+                      "description": "Default PRODUCTION."
+                    },
+                    "output": {
+                      "type": "string",
+                      "description": "Where to write the codes (CSV), inside the repository. Keep it out of git."
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -632,6 +847,221 @@
           "reviewScreenshot": {
             "type": "string",
             "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
+          },
+          "promotionalOffers": {
+            "type": "array",
+            "description": "Promotional offers for existing and lapsed subscribers, redeemed in the app with a signed offer. Created when missing; Apple does not allow changing one afterwards — create a new offerCode instead.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["offerCode", "name", "type", "duration"],
+              "properties": {
+                "$comment": {
+                  "type": "string"
+                },
+                "offerCode": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.-]{1,64}$",
+                  "description": "The identifier the app passes to StoreKit. Unique per subscription."
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "description": "Reference name, shown only in App Store Connect."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"]
+                },
+                "duration": {
+                  "type": "string",
+                  "enum": [
+                    "THREE_DAYS",
+                    "ONE_WEEK",
+                    "TWO_WEEKS",
+                    "ONE_MONTH",
+                    "TWO_MONTHS",
+                    "THREE_MONTHS",
+                    "SIX_MONTHS",
+                    "ONE_YEAR"
+                  ]
+                },
+                "periods": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many periods a PAY_AS_YOU_GO offer lasts. Default 1."
+                },
+                "priceAmount": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Price in the plan's priceTerritory, for PAY_AS_YOU_GO and PAY_UP_FRONT. The nearest price point is used."
+                },
+                "prices": {
+                  "type": "object",
+                  "description": "Prices in further territories, e.g. { \"USA\": 1.99 }. Apple documents no equalization for offers, so a territory not listed here gets no offer.",
+                  "propertyNames": {
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "territories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "description": "For a FREE_TRIAL: the territories it is offered in. Default: the plan's priceTerritory."
+                }
+              }
+            }
+          },
+          "offerCodes": {
+            "type": "array",
+            "description": "Offer codes: codes customers redeem in the App Store. Created when missing; their terms cannot change afterwards.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "type", "duration", "eligibility"],
+              "properties": {
+                "$comment": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 64,
+                  "description": "Reference name; also how this config finds the offer again."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"]
+                },
+                "duration": {
+                  "type": "string",
+                  "enum": [
+                    "THREE_DAYS",
+                    "ONE_WEEK",
+                    "TWO_WEEKS",
+                    "ONE_MONTH",
+                    "TWO_MONTHS",
+                    "THREE_MONTHS",
+                    "SIX_MONTHS",
+                    "ONE_YEAR"
+                  ]
+                },
+                "periods": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "How many periods a PAY_AS_YOU_GO offer lasts. Default 1."
+                },
+                "priceAmount": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "Price in the plan's priceTerritory, for PAY_AS_YOU_GO and PAY_UP_FRONT. The nearest price point is used."
+                },
+                "prices": {
+                  "type": "object",
+                  "description": "Prices in further territories, e.g. { \"USA\": 1.99 }. Apple documents no equalization for offers, so a territory not listed here gets no offer.",
+                  "propertyNames": {
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "territories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  },
+                  "description": "For a FREE_TRIAL: the territories it is offered in. Default: the plan's priceTerritory."
+                },
+                "eligibility": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "enum": ["NEW", "EXISTING", "EXPIRED"]
+                  },
+                  "description": "Who may redeem: new, existing or lapsed subscribers."
+                },
+                "stackWithIntroOffer": {
+                  "type": "boolean",
+                  "description": "true: a new subscriber gets the introductory offer too. Default false (the code replaces it)."
+                },
+                "autoRenew": {
+                  "type": "boolean",
+                  "description": "Whether the subscription renews after the offer. Default: Apple's."
+                },
+                "active": {
+                  "type": "boolean",
+                  "description": "false deactivates the offer and its codes. Default true."
+                },
+                "customCodes": {
+                  "type": "array",
+                  "description": "Codes you choose, such as RAMADAN. Created when missing.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["code", "count"],
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9]{1,64}$"
+                      },
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "How many redemptions the code allows."
+                      },
+                      "expires": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "YYYY-MM-DD. Default: no expiry."
+                      },
+                      "active": {
+                        "type": "boolean",
+                        "description": "false deactivates this code. Default true."
+                      }
+                    }
+                  }
+                },
+                "oneTimeCodes": {
+                  "type": "array",
+                  "description": "Batches of single-use codes, generated only by `appstore-release offer-codes` and written to a CSV file.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["count", "expires", "output"],
+                    "properties": {
+                      "count": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "expires": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "YYYY-MM-DD"
+                      },
+                      "environment": {
+                        "type": "string",
+                        "enum": ["PRODUCTION", "SANDBOX"],
+                        "description": "Default PRODUCTION."
+                      },
+                      "output": {
+                        "type": "string",
+                        "description": "Where to write the codes (CSV), inside the repository. Keep it out of git."
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -826,6 +1256,241 @@
                 "minLength": 3,
                 "description": "Why it does not apply. Required: a waiver without a reason is just a hidden warning."
               }
+            }
+          }
+        }
+      }
+    },
+    "accessibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Accessibility Nutrition Labels: what the app supports, per device. A feature left out is not claimed. Written as a draft, and published when publish is true.",
+      "properties": {
+        "$comment": {
+          "type": "string"
+        },
+        "publish": {
+          "type": "boolean",
+          "description": "Publish the declarations on the App Store. Default false (draft only)."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "A page that describes the app's accessibility (App Information → Accessibility URL)."
+        },
+        "iphone": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "voiceover": {
+              "type": "boolean"
+            },
+            "voiceControl": {
+              "type": "boolean"
+            },
+            "largerText": {
+              "type": "boolean"
+            },
+            "darkInterface": {
+              "type": "boolean"
+            },
+            "differentiateWithoutColorAlone": {
+              "type": "boolean"
+            },
+            "sufficientContrast": {
+              "type": "boolean"
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            },
+            "captions": {
+              "type": "boolean"
+            },
+            "audioDescriptions": {
+              "type": "boolean"
+            }
+          }
+        },
+        "ipad": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "voiceover": {
+              "type": "boolean"
+            },
+            "voiceControl": {
+              "type": "boolean"
+            },
+            "largerText": {
+              "type": "boolean"
+            },
+            "darkInterface": {
+              "type": "boolean"
+            },
+            "differentiateWithoutColorAlone": {
+              "type": "boolean"
+            },
+            "sufficientContrast": {
+              "type": "boolean"
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            },
+            "captions": {
+              "type": "boolean"
+            },
+            "audioDescriptions": {
+              "type": "boolean"
+            }
+          }
+        },
+        "mac": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "voiceover": {
+              "type": "boolean"
+            },
+            "voiceControl": {
+              "type": "boolean"
+            },
+            "largerText": {
+              "type": "boolean"
+            },
+            "darkInterface": {
+              "type": "boolean"
+            },
+            "differentiateWithoutColorAlone": {
+              "type": "boolean"
+            },
+            "sufficientContrast": {
+              "type": "boolean"
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            },
+            "captions": {
+              "type": "boolean"
+            },
+            "audioDescriptions": {
+              "type": "boolean"
+            }
+          }
+        },
+        "appleTv": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "voiceover": {
+              "type": "boolean"
+            },
+            "voiceControl": {
+              "type": "boolean"
+            },
+            "largerText": {
+              "type": "boolean"
+            },
+            "darkInterface": {
+              "type": "boolean"
+            },
+            "differentiateWithoutColorAlone": {
+              "type": "boolean"
+            },
+            "sufficientContrast": {
+              "type": "boolean"
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            },
+            "captions": {
+              "type": "boolean"
+            },
+            "audioDescriptions": {
+              "type": "boolean"
+            }
+          }
+        },
+        "appleWatch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "voiceover": {
+              "type": "boolean"
+            },
+            "voiceControl": {
+              "type": "boolean"
+            },
+            "largerText": {
+              "type": "boolean"
+            },
+            "darkInterface": {
+              "type": "boolean"
+            },
+            "differentiateWithoutColorAlone": {
+              "type": "boolean"
+            },
+            "sufficientContrast": {
+              "type": "boolean"
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            },
+            "captions": {
+              "type": "boolean"
+            },
+            "audioDescriptions": {
+              "type": "boolean"
+            }
+          }
+        },
+        "vision": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "$comment": {
+              "type": "string"
+            },
+            "voiceover": {
+              "type": "boolean"
+            },
+            "voiceControl": {
+              "type": "boolean"
+            },
+            "largerText": {
+              "type": "boolean"
+            },
+            "darkInterface": {
+              "type": "boolean"
+            },
+            "differentiateWithoutColorAlone": {
+              "type": "boolean"
+            },
+            "sufficientContrast": {
+              "type": "boolean"
+            },
+            "reducedMotion": {
+              "type": "boolean"
+            },
+            "captions": {
+              "type": "boolean"
+            },
+            "audioDescriptions": {
+              "type": "boolean"
             }
           }
         }

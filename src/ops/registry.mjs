@@ -21,6 +21,8 @@ import * as reply from "./reply.mjs";
 import * as submit from "./submit.mjs";
 import * as newVersion from "./new-version.mjs";
 import * as releaseOptions from "./release-options.mjs";
+import * as accessibility from "./accessibility.mjs";
+import * as offerCodes from "./offer-codes.mjs";
 
 /**
  * @typedef {Object} OperationMeta
@@ -51,11 +53,13 @@ export const OPERATIONS = {
   "content-rights": contentRights,
   "age-rating": ageRating,
   category,
+  accessibility,
   "review-info": reviewInfo,
   "release-options": releaseOptions,
   screenshots,
   subscription,
   "in-app-purchases": inAppPurchases,
+  "offer-codes": offerCodes,
   testflight,
   reviews,
   reply,
@@ -72,6 +76,7 @@ export const PIPELINE = Object.freeze([
   "content-rights",
   "age-rating",
   "category",
+  "accessibility",
   "review-info",
   "release-options",
   "screenshots",

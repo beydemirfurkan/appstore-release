@@ -28,3 +28,42 @@ export const Exit = Object.freeze({
   API: 6, // App Store Connect refused us, after retries
   CONFIRM: 7, // destructive operation refused for want of confirmation
 });
+
+/**
+ * App Store version states, in the two groupings everything else needs. One list,
+ * here, because three diverging copies of it is how a version removed from sale
+ * came to count as "open for editing".
+ */
+export const VersionStates = Object.freeze({
+  /** States in which the listing can be written. */
+  EDITABLE: Object.freeze([
+    "PREPARE_FOR_SUBMISSION",
+    "DEVELOPER_REJECTED",
+    "REJECTED",
+    "METADATA_REJECTED",
+    "INVALID_BINARY",
+  ]),
+  /** With Apple, or approved and waiting on the developer: not editable, not yet live. */
+  IN_FLIGHT: Object.freeze(["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE"]),
+});
+
+/** The version a report or a new-version call is about: editable, else in flight. */
+export const isCurrentVersionState = (/** @type {string} */ state) =>
+  VersionStates.EDITABLE.includes(state) || VersionStates.IN_FLIGHT.includes(state);
+
+/** App Info states that belong to the live listing; the editable one is preferred over them. */
+const LIVE_APP_INFO_STATES = ["READY_FOR_DISTRIBUTION", "READY_FOR_SALE", "REPLACED_WITH_NEW_INFO"];
+
+/**
+ * During an update an app has two App Infos, the live one and the one being
+ * prepared; writing to the live one is a 409 at best. Apple renamed the state
+ * attribute (`appStoreState` → `state`), so both are read.
+ *
+ * @template {{ attributes?: any }} T
+ * @param {T[]} infos
+ * @returns {T|null}
+ */
+export function pickEditableAppInfo(infos) {
+  const stateOf = (/** @type {T} */ i) => i.attributes?.state ?? i.attributes?.appStoreState;
+  return infos.find((i) => !LIVE_APP_INFO_STATES.includes(stateOf(i))) ?? infos[0] ?? null;
+}

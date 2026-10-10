@@ -33,6 +33,14 @@ export function resolveRelease(config) {
   };
 }
 
+/**
+ * Apple echoes the date back in its own ISO spelling ("…T07:00:00Z" for a config's
+ * "…T07:00:00.000Z" or "+00:00"), so strings never match and every run re-PATCHes.
+ * @param {string|null|undefined} a
+ * @param {string|null|undefined} b
+ */
+const sameInstant = (a, b) => (a && b ? Date.parse(a) === Date.parse(b) : a === b);
+
 /** @param {import("../core/context.mjs").Context} ctx */
 export async function run({ client, discovery, config }) {
   const wanted = resolveRelease(config);
@@ -71,7 +79,7 @@ export async function run({ client, discovery, config }) {
 
     const attributes = {};
     if (current.attributes.releaseType !== wanted.type) attributes.releaseType = wanted.type;
-    if (wanted.type === "SCHEDULED" && current.attributes.earliestReleaseDate !== wanted.earliestDate) {
+    if (wanted.type === "SCHEDULED" && !sameInstant(current.attributes.earliestReleaseDate, wanted.earliestDate)) {
       attributes.earliestReleaseDate = wanted.earliestDate;
     }
 

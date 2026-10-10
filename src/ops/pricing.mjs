@@ -35,10 +35,20 @@ export async function run({ client, discovery, config }) {
   const price = resolvePrice(config?.price);
   if (price) {
     const existing = await client.get(
-      `/v1/appPriceSchedules/${discovery.appId}/manualPrices?include=appPricePoint&limit=10`,
+      `/v1/appPriceSchedules/${discovery.appId}/manualPrices?filter[territory]=${price.baseTerritory}` +
+        `&include=appPricePoint&fields[appPrices]=startDate,endDate,appPricePoint&limit=50`,
       { throwOnError: false },
     );
-    const hasSchedule = !existing.error && (existing.data || []).length > 0;
+    const manual = existing.error ? [] : (existing.data ?? []);
+    const hasSchedule = manual.length > 0;
+    // The price in effect now — not whichever entry came back first, which could
+    // be a scheduled change or one that already ended.
+    const now = Date.now();
+    const inEffect = manual.find(
+      (p) =>
+        (!p.attributes?.startDate || Date.parse(p.attributes.startDate) <= now) &&
+        (!p.attributes?.endDate || Date.parse(p.attributes.endDate) > now),
+    );
 
     const points = await client.all(
       `/v1/apps/${discovery.appId}/appPricePoints?filter[territory]=${price.baseTerritory}`,
@@ -52,17 +62,14 @@ export async function run({ client, discovery, config }) {
         message: `no price points available for ${price.baseTerritory}`,
       };
     }
-    if (!price.free && Math.abs(target.customerPrice - price.amount) > 0.01) {
-      // Say so rather than silently charging a different amount than asked.
-      changes.push(`price ${target.customerPrice} (nearest to ${price.amount})`);
-    }
+    // Say so rather than silently charging a different amount than asked.
+    const nearestNote =
+      !price.free && Math.abs(target.customerPrice - price.amount) > 0.01 ? ` (nearest to ${price.amount})` : "";
 
     // Already on the right price point? Then there is nothing to do — replacing
     // an identical schedule would make every run report a change.
-    const currentPointId = (existing.included ?? []).find((i) => i.type === "appPricePoints")?.id;
-    if (hasSchedule && currentPointId === target.id) {
-      // nothing to do
-    } else {
+    const currentPointId = inEffect?.relationships?.appPricePoint?.data?.id;
+    if (!(hasSchedule && currentPointId === target.id)) {
       await client.post(`/v1/appPriceSchedules`, {
         data: {
           type: "appPriceSchedules",
@@ -81,9 +88,7 @@ export async function run({ client, discovery, config }) {
           },
         ],
       });
-      if (!changes.some((c) => c.startsWith("price "))) {
-        changes.push(price.free ? "free price" : `price ${target.customerPrice} ${price.baseTerritory}`);
-      }
+      changes.push(price.free ? "free price" : `price ${target.customerPrice} ${price.baseTerritory}${nearestNote}`);
     }
   }
 

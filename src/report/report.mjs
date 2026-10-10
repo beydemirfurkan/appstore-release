@@ -39,15 +39,15 @@ export const CHECKS = [version, store, metadata, screenshots, subscription, revi
 /**
  * Judge a snapshot. Pure — no network, so it is testable against a fixture.
  *
- * @param {{ snapshot: any, config?: any, resolvePath?: (p: string, purpose?: string) => string }} input
+ * @param {{ snapshot: any, config?: any, resolvePath?: (p: string, purpose?: string) => string, now?: number }} input
  * @returns {ReadinessReport}
  */
-export function buildReport({ snapshot, config = null, resolvePath }) {
+export function buildReport({ snapshot, config = null, resolvePath, now }) {
   const findings = [];
   const sections = [];
 
   for (const check of CHECKS) {
-    const produced = check.check({ snapshot, config, resolvePath });
+    const produced = check.check({ snapshot, config, resolvePath, now });
     findings.push(...produced);
     const ids = produced.map((f) => f.id);
     sections.push({

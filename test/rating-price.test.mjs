@@ -8,6 +8,7 @@ import {
   buildDeclaration,
   isFourPlus,
   describeDeclaration,
+  declarationMatches,
   CONTENT_DIMENSIONS,
   BEHAVIOURAL_FLAGS,
 } from "../src/core/age-rating.mjs";
@@ -32,12 +33,29 @@ test("an empty declaration is a complete 4+ one", () => {
 });
 
 test("config values override the defaults and everything else stays complete", () => {
-  const d = buildDeclaration({ violenceRealistic: "INFREQUENT_OR_MILD", gambling: true });
-  assert.equal(d.violenceRealistic, "INFREQUENT_OR_MILD");
+  const d = buildDeclaration({ violenceRealistic: "INFREQUENT", gambling: true, socialMedia: true });
+  assert.equal(d.violenceRealistic, "INFREQUENT");
   assert.equal(d.gambling, true);
+  assert.equal(d.socialMedia, true);
+  assert.equal(d.socialMediaAgeRestricted, false, "API 4.4.1's flags are part of the complete set");
   assert.equal(d.horrorOrFearThemes, "NONE");
   assert.equal(isFourPlus(d), false);
-  assert.match(describeDeclaration(d), /violenceRealistic=INFREQUENT_OR_MILD/);
+  assert.match(describeDeclaration(d), /violenceRealistic=INFREQUENT/);
+  assert.equal("ageRatingOverrideV2" in d, false, "the override is only sent when asked for");
+  assert.equal("ageRatingOverride" in d, false, "the deprecated override is never sent");
+});
+
+test("pre-2025 frequencies are accepted and sent in the new spelling; override maps to V2", () => {
+  const d = buildDeclaration({
+    violenceRealistic: "FREQUENT_OR_INTENSE",
+    contests: "INFREQUENT_OR_MILD",
+    override: "THIRTEEN_PLUS",
+  });
+  assert.equal(d.violenceRealistic, "FREQUENT");
+  assert.equal(d.contests, "INFREQUENT");
+  assert.equal(d.ageRatingOverrideV2, "THIRTEEN_PLUS");
+  // An old declaration in App Store Connect says the same thing in the old words.
+  assert.equal(declarationMatches(d, { ...d, violenceRealistic: "FREQUENT_OR_INTENSE" }), true);
 });
 
 test("age-rating writes the config's declaration, and is a no-op when it matches", async () => {
@@ -75,7 +93,7 @@ test("age-rating writes the config's declaration, and is a no-op when it matches
   const diff = createMockAsc({ routes, strict: false });
   const ctxDiff = await createContext({
     credentials: testCredentials(),
-    config: { locale: "en-US", ageRating: { violenceRealistic: "FREQUENT_OR_INTENSE" } },
+    config: { locale: "en-US", ageRating: { violenceRealistic: "FREQUENT" } },
     fetchImpl: diff.fetchImpl,
     runtime: { env: {}, cwd: process.cwd() },
   });
@@ -83,7 +101,7 @@ test("age-rating writes the config's declaration, and is a no-op when it matches
   assert.equal(resDiff.status, Status.CHANGED);
   const patch = diff.mutations().find((m) => m.method === "PATCH");
   assert.ok(patch);
-  assert.equal(patch.body.data.attributes.violenceRealistic, "FREQUENT_OR_INTENSE");
+  assert.equal(patch.body.data.attributes.violenceRealistic, "FREQUENT");
   assert.equal(patch.body.data.attributes.gambling, false, "unset keys are still sent, defaulted");
 });
 
@@ -177,7 +195,15 @@ test("pricing sets a paid tier, and skips when the schedule already matches", as
     routes: {
       ...routes,
       [`GET /v1/appPriceSchedules/${APP_ID}/manualPrices`]: {
-        data: [{ type: "appPrices", id: "ap-1" }],
+        // The shape Apple returns: the price names its point through a relationship.
+        data: [
+          {
+            type: "appPrices",
+            id: "ap-1",
+            attributes: { startDate: null, endDate: null },
+            relationships: { appPricePoint: { data: { type: "appPricePoints", id: "pp-499" } } },
+          },
+        ],
         included: [{ type: "appPricePoints", id: "pp-499", attributes: { customerPrice: "4.99" } }],
       },
     },

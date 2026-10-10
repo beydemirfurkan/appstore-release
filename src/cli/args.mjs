@@ -38,14 +38,27 @@ export const GLOBAL_FLAGS = Object.freeze({
 });
 
 /**
+ * Operations declare their flags in camelCase (`allowNewCert`) because that is
+ * what reaches `run()`; users type kebab-case (`--allow-new-cert`). Both spellings
+ * are accepted and the flag is stored under its declared name.
+ *
+ * `lenient` ignores flags it does not know, without consuming a value. The CLI
+ * uses it for the first pass, whose only job is to find the command — before the
+ * command is known, an operation's own flags cannot be told from typos.
+ *
  * @param {string[]} argv
  * @param {Record<string, FlagSpec>} [opFlags]
+ * @param {{ lenient?: boolean }} [options]
  * @returns {{ command: string|null, flags: Record<string, any>, positionals: string[] }}
  */
-export function parseArgs(argv, opFlags = {}) {
+export function parseArgs(argv, opFlags = {}, { lenient = false } = {}) {
   const spec = { ...GLOBAL_FLAGS, ...opFlags };
   const byAlias = new Map();
-  for (const [name, def] of Object.entries(spec)) if (def.alias) byAlias.set(def.alias, name);
+  for (const [name, def] of Object.entries(spec)) {
+    if (def.alias) byAlias.set(def.alias, name);
+    const kebabName = kebab(name);
+    if (kebabName !== name && !spec[kebabName]) byAlias.set(kebabName, name);
+  }
 
   /** @type {Record<string, any>} */
   const flags = {};
@@ -72,10 +85,14 @@ export function parseArgs(argv, opFlags = {}) {
       raw = raw.slice(0, eq);
     }
 
-    const negated = isLong && raw.startsWith("no-") && spec[raw.slice(3)]?.type === "boolean";
-    const name = negated ? raw.slice(3) : (byAlias.get(raw) ?? raw);
+    const resolve = (/** @type {string} */ n) => (spec[n] ? n : (byAlias.get(n) ?? n));
+    const negated = isLong && raw.startsWith("no-") && spec[resolve(raw.slice(3))]?.type === "boolean";
+    const name = negated ? resolve(raw.slice(3)) : resolve(raw);
     const def = spec[name];
-    if (!def) throw new UsageError(`Unknown flag: ${token}`);
+    if (!def) {
+      if (lenient) continue;
+      throw new UsageError(`Unknown flag: ${token}`);
+    }
 
     if (def.type === "boolean") {
       if (inlineValue !== undefined) throw new UsageError(`${token} does not take a value`);
@@ -104,3 +121,6 @@ export function splitFlags(flags, opFlags = {}) {
 
 /** `--project-root` reaches the code as `projectRoot`. */
 const camel = (s) => s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+
+/** `allowNewCert` is typed as `--allow-new-cert`. */
+export const kebab = (s) => s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);

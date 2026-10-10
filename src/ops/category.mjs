@@ -21,8 +21,12 @@ export async function run({ client, discovery, config }) {
   const label = `${primary}${secondary ? "/" + secondary : ""}`;
   if (curPrimary === primary && curSecondary === secondary) return { status: Status.OK, message: label };
 
-  const relationships = { primaryCategory: { data: { type: "appCategories", id: primary } } };
-  if (secondary) relationships.secondaryCategory = { data: { type: "appCategories", id: secondary } };
+  // A secondary removed from the config is cleared, not left behind — otherwise
+  // the two never match again and every run PATCHes and reports a change.
+  const relationships = {
+    primaryCategory: { data: { type: "appCategories", id: primary } },
+    secondaryCategory: { data: secondary ? { type: "appCategories", id: secondary } : null },
+  };
   await client.patch(`/v1/appInfos/${info.id}`, { data: { type: "appInfos", id: info.id, relationships } });
   return { status: Status.CHANGED, message: label };
 }

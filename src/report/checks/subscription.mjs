@@ -1,4 +1,4 @@
-// Subscriptions, and the second thing Apple keeps UI-only.
+// Subscriptions: whether the configured one exists, is complete, and goes to review.
 
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 
@@ -43,31 +43,21 @@ export function check({ snapshot, config }) {
     );
   }
 
-  // The API has no `subscription` relationship on reviewSubmissionItems, so a
-  // first subscription genuinely cannot be attached to a version except by hand.
+  // Since API 4.4.1 a subscription has versions that review submissions accept,
+  // so READY_TO_SUBMIT is no longer a hand-off: `submit` adds the subscription
+  // (and its group, for a new one) to the same submission as the app version.
   if (sub.state === "READY_TO_SUBMIT") {
     out.push(
       finding({
-        id: "subscription.first.ui-only",
-        severity: Severity.BLOCKER,
+        id: "subscription.ready-to-submit",
+        severity: Severity.INFO,
         category: Category.ASC_STATE,
-        title: `${productId} must be attached to the version by hand`,
+        title: `${productId} is ready and will be submitted with the version`,
         detail:
-          "reviewSubmissionItems has no subscription relationship (409: 'subscription' is not a relationship), " +
-          "so a first subscription cannot be submitted through the API. Later ones can.",
-        fixOwner: FixOwner.UI,
-        uiOnly: true,
-        fix: "Attach it to the version and submit, in App Store Connect.",
-        fixClicks: [
-          "the version page",
-          "In-App Purchases and Subscriptions",
-          "Select",
-          productId,
-          "Save",
-          "Add for Review",
-          "Submit",
-        ],
-        docs: "references/gotchas.md#subscriptions--iaps",
+          "submit adds its subscription version — and its group's, if the group was never approved — to the same " +
+          "review submission, as Apple requires for a first subscription.",
+        fix: "Nothing; submit includes it.",
+        fixCommand: "appstore-release submit --submit",
       }),
     );
   }

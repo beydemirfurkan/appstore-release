@@ -29,11 +29,15 @@ export class AssetUploader {
   }
 
   /**
+   * `commit: "uploaded"` is the App Asset Library's commit, which takes no
+   * checksum; the default is the older resources' `uploaded` + md5.
+   *
    * @param {{ reservePath: string, type: string, relationships: object,
-   *           filePath: string, fileName?: string }} params
+   *           filePath: string, fileName?: string, attributes?: object,
+   *           commit?: "checksum" | "uploaded" }} params
    * @returns {Promise<string>} the created asset id
    */
-  async upload({ reservePath, type, relationships, filePath, fileName }) {
+  async upload({ reservePath, type, relationships, filePath, fileName, attributes = {}, commit = "checksum" }) {
     // Read before anything else, so a missing or unreadable file fails locally
     // rather than after we have reserved a slot in App Store Connect. Under dry
     // run this is the whole point: the file still gets read and validated.
@@ -43,7 +47,7 @@ export class AssetUploader {
     // 1. Reserve — ASC returns pre-signed upload operations.
     const reserved = (
       await this.client.post(reservePath, {
-        data: { type, attributes: { fileName: name, fileSize: size }, relationships },
+        data: { type, attributes: { fileName: name, fileSize: size, ...attributes }, relationships },
       })
     ).data;
 
@@ -60,9 +64,11 @@ export class AssetUploader {
       });
     }
 
-    // 3. Commit with the md5 checksum. BASE_URL has no /v1, so this path needs it.
+    // 3. Commit — with the md5 checksum, except for the asset library, whose
+    //    commit is `uploaded` alone. BASE_URL has no /v1, so this path needs it.
+    const committed = commit === "uploaded" ? { uploaded: true } : { uploaded: true, sourceFileChecksum: checksum };
     await this.client.patch(`/v1/${reserved.type}/${reserved.id}`, {
-      data: { type: reserved.type, id: reserved.id, attributes: { uploaded: true, sourceFileChecksum: checksum } },
+      data: { type: reserved.type, id: reserved.id, attributes: committed },
     });
 
     return reserved.id;

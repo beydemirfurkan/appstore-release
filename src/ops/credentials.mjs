@@ -127,6 +127,29 @@ export async function run({ client, discovery, config, resolvePath, dryRun }, ar
       },
     };
   }
+  // Below the cap is not permission. Every new certificate is a slot that only a
+  // revoke gives back, so issuing one is always the user's explicit decision.
+  if (!reusable && !args.allowNewCert) {
+    return {
+      status: Status.ERROR,
+      message:
+        `issuing a distribution certificate uses one of Apple's ${CERT_CAP} slots (${certs.length} in use); ` +
+        "pass --allow-new-cert to confirm, or --reuse-cert <id> for one whose private key you hold",
+      findings: [
+        finding({
+          id: "credentials.cert.needs-confirmation",
+          severity: Severity.BLOCKER,
+          category: Category.ACCOUNT,
+          title: "A new distribution certificate needs explicit confirmation",
+          detail: `Apple allows ${CERT_CAP} per account and ${certs.length} exist. A slot comes back only by revoking a certificate.`,
+          fixOwner: FixOwner.CLI,
+          fix: "Re-run with --allow-new-cert, or reuse an existing certificate with --reuse-cert <id>.",
+          fixCommand: "appstore-release credentials --allow-new-cert",
+        }),
+      ],
+      details: { certificatesInUse: certs.length },
+    };
+  }
 
   // 0o700: the directory is about to hold an unencrypted private key.
   mkdirSync(outDir, { recursive: true, mode: 0o700 });

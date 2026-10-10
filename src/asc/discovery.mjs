@@ -1,13 +1,7 @@
 // Resource discovery / repository. Single responsibility: locate ASC resources for
 // an app by their natural keys so commands never hardcode ids. Depends only on AscClient.
 
-const EDITABLE_STATES = [
-  "PREPARE_FOR_SUBMISSION",
-  "DEVELOPER_REJECTED",
-  "REJECTED",
-  "METADATA_REJECTED",
-  "INVALID_BINARY",
-];
+import { VersionStates, pickEditableAppInfo } from "../core/status.mjs";
 
 export class Discovery {
   /**
@@ -29,13 +23,25 @@ export class Discovery {
     return this._once("app", async () => (await this.client.get(`/v1/apps/${this.appId}`)).data);
   }
 
-  /** The version we can edit/submit (prefers one already in an editable state). */
+  /**
+   * The iOS version we can edit and submit. Throws rather than falling back to
+   * whatever came first: writing a live version's listing is never what anyone
+   * meant, and the operation runner turns the throw into a clear ERROR result.
+   */
   editableVersion() {
     return this._once("editableVersion", async () => {
-      const r = await this.client.get(
-        `/v1/apps/${this.appId}/appStoreVersions?limit=10&fields[appStoreVersions]=versionString,appStoreState,platform`,
+      const versions = await this.client.all(
+        `/v1/apps/${this.appId}/appStoreVersions?filter[platform]=IOS&fields[appStoreVersions]=versionString,appStoreState,platform`,
+        { limit: 50 },
       );
-      return r.data.find((v) => EDITABLE_STATES.includes(v.attributes.appStoreState)) || r.data[0];
+      const editable = versions.find((v) => VersionStates.EDITABLE.includes(v.attributes.appStoreState));
+      if (editable) return editable;
+      const inFlight = versions.find((v) => VersionStates.IN_FLIGHT.includes(v.attributes.appStoreState));
+      throw new Error(
+        inFlight
+          ? `v${inFlight.attributes.versionString} is ${inFlight.attributes.appStoreState} and cannot be edited`
+          : "no editable version — every version is live; run `appstore-release new-version` first",
+      );
     });
   }
 
@@ -61,10 +67,7 @@ export class Discovery {
       const r = await this.client.get(
         `/v1/apps/${this.appId}/appInfos?include=primaryCategory,secondaryCategory,ageRatingDeclaration`,
       );
-      const info =
-        r.data.find((i) => ["PREPARE_FOR_SUBMISSION", "READY_FOR_DISTRIBUTION"].includes(i.attributes.appStoreState)) ||
-        r.data[0];
-      return { info, included: r.included || [] };
+      return { info: pickEditableAppInfo(r.data), included: r.included || [] };
     });
   }
 
@@ -98,10 +101,18 @@ export class Discovery {
     return r.data[0];
   }
 
-  /** Newest VALID build (ready to attach). */
-  async latestValidBuild() {
+  /**
+   * Newest VALID, unexpired iOS build for a marketing version. A build uploaded
+   * for 1.3 is not attachable to 1.2 — Apple matches CFBundleShortVersionString —
+   * so without the version filter "newest" could pick one Apple then refuses.
+   *
+   * @param {string} [versionString]
+   */
+  async latestValidBuild(versionString) {
+    const vf = versionString ? `&filter[preReleaseVersion.version]=${encodeURIComponent(versionString)}` : "";
     const r = await this.client.get(
-      `/v1/builds?filter[app]=${this.appId}&filter[processingState]=VALID&limit=1&sort=-uploadedDate&fields[builds]=version`,
+      `/v1/builds?filter[app]=${this.appId}&filter[processingState]=VALID&filter[expired]=false` +
+        `&filter[preReleaseVersion.platform]=IOS${vf}&limit=1&sort=-uploadedDate&fields[builds]=version,processingState`,
     );
     return r.data[0];
   }

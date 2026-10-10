@@ -4,7 +4,7 @@
 // Raw endpoint coverage is not the scarce thing: an agent that can call
 // PATCH /v1/appStoreVersionLocalizations still does not know that whatsNew 409s
 // on a first version, that emoji in the description is a hard rejection, or that
-// the age-rating declaration needs all 21 attributes. Those tools hand the model
+// the age-rating declaration must be sent complete. Those tools hand the model
 // the landmines; these eleven defuse them.
 //
 // The count is a product decision with a test behind it. Each tool earns its
@@ -24,6 +24,7 @@ import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
 import { PIPELINE } from "../ops/registry.mjs";
 import { Severity } from "../core/findings.mjs";
+import { Status } from "../core/status.mjs";
 
 // Input schemas are plain JSON Schema. That is what goes on the wire anyway —
 // zod existed only to be converted into this — and it means the same validator
@@ -51,6 +52,31 @@ const confirm = {
 
 const appId = str("Numeric App Store Connect app id. Defaults to ASC_APP_ID.");
 const configPath = str("Path to the config file. Defaults to the usual discovery order.");
+
+// `only` is a subset of the listing pipeline and nothing else: an unchecked list
+// would let a model run `credentials` (past its own local-writes gate) or
+// `submit` (past its readiness check) through a tool that promises neither.
+const pipelineSubset = {
+  type: "array",
+  items: { type: "string", enum: [...PIPELINE] },
+  description: `Subset of: ${PIPELINE.join(", ")}`,
+};
+
+/** @param {unknown} only @returns {readonly string[] | string} the ids, or a refusal message */
+function pipelineIds(only) {
+  if (only === undefined || (Array.isArray(only) && only.length === 0)) return PIPELINE;
+  if (!Array.isArray(only)) return "`only` must be an array of pipeline step ids.";
+  const unknown = only.filter((id) => !PIPELINE.includes(id));
+  if (unknown.length) {
+    return `Not pipeline steps: ${unknown.join(", ")}. \`only\` accepts: ${PIPELINE.join(", ")}.`;
+  }
+  return only;
+}
+
+// The CLI prunes orphaned screenshots because a human typed `release`; a model
+// should not discover deletion by omitting an argument. Same rule as
+// asc_upload_screenshots, applied to the pipeline tools.
+const AGENT_PIPELINE_ARGS = Object.freeze({ screenshots: { prune: false } });
 
 /**
  * Assemble a tool's input schema.
@@ -246,13 +272,14 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       inputSchema: input({
         appId,
         configPath,
-        only: { type: "array", items: { type: "string" }, description: `Subset of: ${PIPELINE.join(", ")}` },
+        only: pipelineSubset,
       }),
       async run(args) {
+        const ids = pipelineIds(args.only);
+        if (typeof ids === "string") return structured(ids, { error: ids });
         const { ctx, refusal } = await contextOrRefusal({ ...args, dryRun: true }, env);
         if (refusal) return refusal;
-        const ids = args.only?.length ? args.only : PIPELINE;
-        const { results, changes } = await runPipeline(ids, ctx);
+        const { results, changes } = await runPipeline(ids, ctx, { args: AGENT_PIPELINE_ARGS });
         const text = [
           `# Plan (${changes.length} change${changes.length === 1 ? "" : "s"}, nothing sent)`,
           "",
@@ -302,16 +329,17 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         {
           appId,
           configPath,
-          only: { type: "array", items: { type: "string" }, description: `Subset of: ${PIPELINE.join(", ")}` },
+          only: pipelineSubset,
           confirm,
         },
         ["confirm"],
       ),
       async run(args) {
+        const ids = pipelineIds(args.only);
+        if (typeof ids === "string") return structured(ids, { error: ids });
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
-        const ids = args.only?.length ? args.only : PIPELINE;
-        const { results, changes } = await runPipeline(ids, ctx);
+        const { results, changes } = await runPipeline(ids, ctx, { args: AGENT_PIPELINE_ARGS });
         const report = await getReadinessReport(ctx);
         const text = [`# Applied`, "", summarizeResults(results), "", renderReportMarkdown(report)].join("\n");
         return structured(text, { results, changes, report });
@@ -350,7 +378,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
       title: "Configure a subscription",
       description:
         "Write a subscription's localizations, price and App Review paywall screenshot, so it leaves " +
-        "MISSING_METADATA. Attaching a first subscription to a version still cannot be done through the API.",
+        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends it together with the app version.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
@@ -397,8 +425,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           );
         }
 
-        const res = await runOperation("submit", ctx, { submit: true });
-        return structured(`${res.status.toUpperCase()} — ${res.message}`, { submitted: true, result: res, report });
+        const res = await runOperation("submit", ctx, { submit: true, force: Boolean(args.force) });
+        // Only a CHANGED result means the PATCH went through; an OK can be "already
+        // in review" and an ERROR is a refusal — neither is a submission.
+        const submitted = res.status === Status.CHANGED;
+        return structured(`${res.status.toUpperCase()} — ${res.message}`, { submitted, result: res, report });
       },
     },
 

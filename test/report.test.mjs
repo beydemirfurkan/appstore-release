@@ -69,12 +69,31 @@ const ids = (report) => report.findings.map((f) => f.id).sort();
 
 test("a healthy app still needs a human: App Privacy has no API", () => {
   const report = buildReport({ snapshot: healthySnapshot(), config: { locale: "en-US" } });
-  assert.deepEqual(ids(report), ["privacy.declaration.ui-only"]);
+  const blocking = report.findings.filter((f) => f.severity === "blocker");
+  assert.deepEqual(
+    blocking.map((f) => f.id),
+    ["privacy.declaration.ui-only"],
+  );
   assert.equal(report.verdict, "needs-human");
   assert.equal(report.summary.uiOnly, 1);
   // The distinction the whole exit-code table rests on.
-  assert.equal(report.findings[0].uiOnly, true);
+  assert.equal(blocking[0].uiOnly, true);
   assert.equal(report.nextActions[0].kind, "human");
+  // iPhone Duo is advice until Apple's date, never a blocker: we cannot read the SDK.
+  assert.notEqual(report.findings.find((f) => f.id === "screenshots.duo.missing")?.severity, "blocker");
+});
+
+test("review.privacyPublished lets a healthy app reach ready, without pretending to verify it", () => {
+  const report = buildReport({
+    snapshot: healthySnapshot(),
+    config: { locale: "en-US", review: { privacyPublished: true } },
+  });
+  assert.equal(report.verdict, "ready");
+  const privacy = report.findings.find((f) => f.id === "privacy.declaration.ui-only");
+  assert.ok(privacy, "the reminder stays in the report");
+  assert.equal(privacy.severity, "info");
+  assert.equal(privacy.uiOnly, true, "who can fix it did not change");
+  assert.deepEqual(report.nextActions, []);
 });
 
 test("no editable version stops everything and says why", () => {
@@ -100,6 +119,48 @@ test("a missing build names the build that is ready to attach", () => {
   assert.equal(report.nextActions[0].command, "appstore-release attach-build");
 });
 
+test("screenshots placed through the App Asset Library count, matched by pixel size", () => {
+  const report = buildReport({
+    snapshot: healthySnapshot({
+      screenshotSets: [],
+      placements: [
+        {
+          id: "p1",
+          locale: "en-US",
+          placementGroup: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE",
+          width: 1320,
+          height: 2868,
+          assetState: "PREPARE_FOR_SUBMISSION",
+        },
+        {
+          id: "p2",
+          locale: "en-US",
+          placementGroup: "IPHONE_DUO_OUTER_PROFILE",
+          width: 1398,
+          height: 2034,
+          assetState: "PREPARE_FOR_SUBMISSION",
+        },
+      ],
+    }),
+    config: { locale: "en-US", review: { privacyPublished: true } },
+  });
+  assert.ok(
+    !ids(report).some((id) => id.startsWith("screenshots.count.zero")),
+    "6.9-inch placements satisfy APP_IPHONE_67",
+  );
+  assert.ok(!ids(report).includes("screenshots.duo.missing"), "a Duo placement is recognised");
+  assert.equal(report.verdict, "ready");
+});
+
+test("iPhone Duo turns from advice into a warning on Apple's date", () => {
+  const at = (date) =>
+    buildReport({ snapshot: healthySnapshot(), config: { locale: "en-US" }, now: Date.parse(date) }).findings.find(
+      (f) => f.id === "screenshots.duo.missing",
+    )?.severity;
+  assert.equal(at("2026-10-10"), "info");
+  assert.equal(at("2027-04-02"), "warning");
+});
+
 test("reserved-but-uncommitted screenshots are reported, not counted as present", () => {
   const report = buildReport({
     snapshot: healthySnapshot({
@@ -117,17 +178,24 @@ test("reserved-but-uncommitted screenshots are reported, not counted as present"
   assert.ok(ids(report).includes("screenshots.upload.incomplete"));
 });
 
-test("a first subscription is flagged as UI-only, a broken one as fixable", () => {
-  const config = { locale: "en-US", subscription: { productId: "com.example.pro" } };
+test("a ready subscription travels with the version; a broken one is fixable", () => {
+  const config = {
+    locale: "en-US",
+    subscription: { productId: "com.example.pro" },
+    review: { privacyPublished: true },
+  };
 
   const ready = buildReport({
     snapshot: healthySnapshot({ subscriptions: [{ id: "s", productId: "com.example.pro", state: "READY_TO_SUBMIT" }] }),
     config,
   });
-  const uiOnly = ready.findings.find((f) => f.id === "subscription.first.ui-only");
-  assert.ok(uiOnly);
-  assert.equal(uiOnly.uiOnly, true);
-  assert.equal(ready.verdict, "needs-human");
+  // API 4.4.1 made first subscriptions submittable: no longer a hand-off.
+  assert.equal(
+    ready.findings.find((f) => f.id === "subscription.first.ui-only"),
+    undefined,
+  );
+  assert.equal(ready.findings.find((f) => f.id === "subscription.ready-to-submit")?.severity, "info");
+  assert.equal(ready.verdict, "ready");
 
   const missing = buildReport({
     snapshot: healthySnapshot({

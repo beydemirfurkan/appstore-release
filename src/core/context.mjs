@@ -80,7 +80,7 @@ export async function createContext(options = {}) {
   const client = new AscClient({
     tokenProvider,
     fetchImpl: options.fetchImpl,
-    baseUrl: options.baseUrl ?? DEFAULT_BASE_URL,
+    baseUrl: options.baseUrl ?? loopbackOverride(env.APPSTORE_RELEASE_API_BASE) ?? DEFAULT_BASE_URL,
     dryRun,
     log,
     random,
@@ -102,6 +102,25 @@ export async function createContext(options = {}) {
     findings,
     resolvePath: (rel, purpose) => resolveProjectPath(projectRoot, rel, { purpose }),
   };
+}
+
+/**
+ * APPSTORE_RELEASE_API_BASE points the client at a local fake App Store Connect —
+ * the demo recordings and end-to-end tests use it. It is honoured for loopback
+ * addresses only: a signed token must never be sent anywhere else because an
+ * environment variable said so.
+ *
+ * @param {string|undefined} value
+ */
+function loopbackOverride(value) {
+  if (!value) return undefined;
+  try {
+    const { protocol, hostname } = new URL(value);
+    if (protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(hostname)) return value.replace(/\/$/, "");
+  } catch {
+    // fall through
+  }
+  throw new Error(`APPSTORE_RELEASE_API_BASE must be a loopback http:// URL, got ${value}`);
 }
 
 /** True when the context has everything an App Store Connect call needs. */

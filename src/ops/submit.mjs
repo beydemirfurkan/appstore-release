@@ -1,13 +1,21 @@
-// Creates/uses the review submission and submits the app version.
+// Creates/uses the review submission and submits the app version — together with
+// the configured subscription, when it needs review.
 //
-// IMPORTANT: reviewSubmissionItems has no `subscription` relationship, so a FIRST-TIME
-// subscription cannot be attached via the API. If the config declares a subscription that
-// is not yet in review, this command returns MANUAL and does NOT submit — the user must
-// attach it on the version page and submit in the ASC UI (bundling app + subscription).
+// Since App Store Connect API 4.4.1, subscriptions and subscription groups have
+// versions, and reviewSubmissionItems accepts `subscriptionVersion` and
+// `subscriptionGroupVersion`. That closed the old gap where a FIRST subscription
+// could only be attached in the web UI. Apple's rule still holds: a first
+// subscription goes to review in the same submission as an app version, and a new
+// subscription travels with its group — so all of them are added to one submission.
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
 
-const OPEN_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES", "COMPLETING"];
+/** A draft submission we may add items to and finalize. */
+const DRAFT_STATES = ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"];
+/** Already with Apple — never add to it and never create a second one. */
+const SUBMITTED_STATES = ["WAITING_FOR_REVIEW", "IN_REVIEW", "COMPLETING"];
+/** Subscription/group versions still editable, i.e. the ones that can be submitted. */
+const DRAFT_VERSION_STATES = ["PREPARE_FOR_SUBMISSION", "READY_FOR_REVIEW", "REJECTED", "DEVELOPER_REJECTED"];
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -36,6 +44,21 @@ export async function run(ctx, args = {}) {
   const { client, discovery, config } = ctx;
   const appId = discovery.appId;
 
+  // Already with Apple? Then this is a no-op, checked before anything else —
+  // the version is no longer editable, and "not ready" would be the wrong answer.
+  const open = await client.get(
+    `/v1/reviewSubmissions?filter[app]=${appId}&filter[platform]=IOS` +
+      `&filter[state]=${[...DRAFT_STATES, ...SUBMITTED_STATES].join(",")}&limit=10`,
+  );
+  const inFlight = (open.data ?? []).find((s) => SUBMITTED_STATES.includes(s.attributes.state));
+  if (inFlight) {
+    return {
+      status: Status.OK,
+      message: `already submitted (${inFlight.attributes.state}) — nothing to do but wait`,
+      details: { submissionId: inFlight.id, state: inFlight.attributes.state },
+    };
+  }
+
   // The guardrail a plain API wrapper cannot offer: we know what "ready" means,
   // so we can decline to spend a review cycle on a submission Apple will bounce.
   // Only checked when actually finalizing — preparing is harmless.
@@ -51,26 +74,9 @@ export async function run(ctx, args = {}) {
     }
   }
 
-  // Guard: a first-time subscription must go through the UI.
-  const productId = config?.subscription?.productId;
-  if (productId) {
-    const { sub } = await discovery.subscription(productId);
-    if (sub && sub.attributes.state === "READY_TO_SUBMIT") {
-      return {
-        status: Status.MANUAL,
-        message:
-          "first-time subscription must be attached to the version and submitted in the ASC UI " +
-          "(version page → In-App Purchases and Subscriptions → Select → Save → Add for Review → Submit)",
-      };
-    }
-  }
+  const version = await discovery.editableVersion();
 
-  // Reuse an open submission or create one.
-  const existing = await client.get(
-    `/v1/reviewSubmissions?filter[app]=${appId}&filter[state]=${OPEN_STATES.join(",")}&limit=5`,
-    { throwOnError: false },
-  );
-  let submission = existing.error ? null : (existing.data || []).find((s) => s.attributes.state !== "COMPLETE");
+  let submission = (open.data ?? []).find((s) => DRAFT_STATES.includes(s.attributes.state));
   if (!submission) {
     submission = (
       await client.post(`/v1/reviewSubmissions`, {
@@ -83,31 +89,45 @@ export async function run(ctx, args = {}) {
     ).data;
   }
 
-  // Add the app version item (idempotent — ignore "already added").
-  const version = await discovery.editableVersion();
-  const add = await client.post(
-    `/v1/reviewSubmissionItems`,
-    {
-      data: {
-        type: "reviewSubmissionItems",
-        relationships: {
-          reviewSubmission: { data: { type: "reviewSubmissions", id: submission.id } },
-          appStoreVersion: { data: { type: "appStoreVersions", id: version.id } },
+  const wanted = [{ relationship: "appStoreVersion", type: "appStoreVersions", id: version.id, label: "app version" }];
+  wanted.push(...(await subscriptionItems(ctx, config?.subscription?.productId)));
+
+  const present = await existingItemIds(client, submission.id);
+  const added = [];
+  for (const item of wanted) {
+    if (present.has(item.id)) continue;
+    const res = await client.post(
+      `/v1/reviewSubmissionItems`,
+      {
+        data: {
+          type: "reviewSubmissionItems",
+          relationships: {
+            reviewSubmission: { data: { type: "reviewSubmissions", id: submission.id } },
+            [item.relationship]: { data: { type: item.type, id: item.id } },
+          },
         },
       },
-    },
-    { throwOnError: false },
-  );
-  if (add.error && !/cannot be reviewed/i.test(add.error.message) && add.error.status !== 409) {
-    // "cannot be reviewed" means other required items are still missing — surface it.
-    return { status: Status.ERROR, message: add.error.message };
-  }
-  if (add.error && /cannot be reviewed/i.test(add.error.message)) {
-    return { status: Status.ERROR, message: "version not reviewable yet — run `check` to see what's missing" };
+      { throwOnError: false },
+    );
+    if (res.error) {
+      // No 409 is swallowed: a duplicate was already filtered out above, so a
+      // conflict here means Apple will not review this item, and it says why.
+      return {
+        status: Status.ERROR,
+        message: `could not add the ${item.label} to the submission: ${res.error.message}`,
+        findings: res.error.hints ?? [],
+      };
+    }
+    added.push(item.label);
   }
 
+  const contents = wanted.map((i) => i.label).join(" + ");
   if (!args.submit) {
-    return { status: Status.OK, message: `prepared submission ${submission.id} (pass --submit to finalize)` };
+    return {
+      status: added.length ? Status.CHANGED : Status.OK,
+      message: `prepared submission ${submission.id} with ${contents} (pass --submit to finalize)`,
+      details: { submissionId: submission.id, items: wanted.map((i) => i.label) },
+    };
   }
 
   const done = await client.patch(
@@ -115,6 +135,89 @@ export async function run(ctx, args = {}) {
     { data: { type: "reviewSubmissions", id: submission.id, attributes: { submitted: true } } },
     { throwOnError: false },
   );
-  if (done.error) return { status: Status.ERROR, message: done.error.message };
-  return { status: Status.CHANGED, message: "submitted to App Review" };
+  if (done.error) return { status: Status.ERROR, message: done.error.message, findings: done.error.hints ?? [] };
+  return {
+    status: Status.CHANGED,
+    message: `submitted ${contents} to App Review`,
+    details: { submissionId: submission.id, items: wanted.map((i) => i.label) },
+  };
+}
+
+/**
+ * The subscription (and, for a new one, its group) as versioned review items.
+ * A subscription already approved or already in review contributes nothing.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {string|undefined} productId
+ */
+async function subscriptionItems({ client, discovery }, productId) {
+  if (!productId) return [];
+  const { sub, group } = await discovery.subscription(productId);
+  if (!sub || sub.attributes.state !== "READY_TO_SUBMIT") return [];
+
+  const items = [];
+  const groupVersion = group ? await draftVersion(client, "subscriptionGroups", group.id) : null;
+  if (groupVersion) {
+    items.push({
+      relationship: "subscriptionGroupVersion",
+      type: "subscriptionGroupVersions",
+      id: groupVersion.id,
+      label: "subscription group",
+    });
+  }
+  const subVersion = await draftVersion(client, "subscriptions", sub.id);
+  if (subVersion) {
+    items.push({
+      relationship: "subscriptionVersion",
+      type: "subscriptionVersions",
+      id: subVersion.id,
+      label: `subscription ${productId}`,
+    });
+  }
+  return items;
+}
+
+/**
+ * The editable version of a subscription or group, created when there is none
+ * and nothing has ever been approved (creating one snapshots the current
+ * metadata, which is what App Review then sees). An approved group with no draft
+ * needs no review, so none is created for it.
+ *
+ * @param {import("../asc/client.mjs").AscClient} client
+ * @param {"subscriptions"|"subscriptionGroups"} parentType
+ * @param {string} parentId
+ */
+async function draftVersion(client, parentType, parentId) {
+  const versions = await client.get(`/v1/${parentType}/${parentId}/versions?limit=20`, { throwOnError: false });
+  const list = versions.error ? [] : (versions.data ?? []);
+  const draft = list.find((v) => DRAFT_VERSION_STATES.includes(v.attributes?.state));
+  if (draft) return draft;
+  if (list.some((v) => v.attributes?.state === "APPROVED")) return null;
+
+  const type = parentType === "subscriptions" ? "subscriptionVersions" : "subscriptionGroupVersions";
+  const relationship = parentType === "subscriptions" ? "subscription" : "subscriptionGroup";
+  return (
+    await client.post(`/v1/${type}`, {
+      data: { type, relationships: { [relationship]: { data: { type: parentType, id: parentId } } } },
+    })
+  ).data;
+}
+
+/**
+ * Ids of everything already in the submission, so re-running adds nothing twice.
+ *
+ * @param {import("../asc/client.mjs").AscClient} client
+ * @param {string} submissionId
+ */
+async function existingItemIds(client, submissionId) {
+  const ids = new Set();
+  if (submissionId.startsWith("dry:")) return ids; // planned under --dry-run; nothing to read
+  const items = await client.all(`/v1/reviewSubmissions/${submissionId}/items`, { limit: 50 });
+  for (const item of items) {
+    for (const rel of Object.values(item.relationships ?? {})) {
+      const id = /** @type {any} */ (rel)?.data?.id;
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
 }

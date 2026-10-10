@@ -66,6 +66,12 @@ export function checkRequirements(config, needs = []) {
   }
   const findings = requirementsFor(needs)
     .filter((path) => at(config, path) == null || at(config, path) === "")
+    // `screenshots.sets` gives each set its own `dir`, so the top-level one is
+    // only required when there are no sets.
+    .filter(
+      (path) =>
+        !(path === "screenshots.dir" && Array.isArray(config.screenshots?.sets) && config.screenshots.sets.length),
+    )
     .map((path) =>
       finding({
         id: `config.${path}.missing`,

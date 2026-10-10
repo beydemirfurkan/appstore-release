@@ -10,6 +10,7 @@
 // the app, and takes it back out if App Store Connect refuses it.
 
 import { Status } from "../core/status.mjs";
+import { finding, Category, FixOwner } from "../core/findings.mjs";
 import { AssetLibrary, pruneOtherGroups, syncPlacements } from "../asc/asset-library.mjs";
 import { planMedia } from "../asc/media-check.mjs";
 
@@ -92,7 +93,30 @@ export async function run(ctx) {
   const notes = [];
   for (const e of experiments) {
     const label = `"${e.name}"`;
-    let exp = remote.find((x) => x.attributes?.name === e.name && !FINISHED_STATES.includes(x.attributes?.state));
+    // A test is found by name in any state: a finished one is never re-created
+    // just because the config still names it.
+    const named = remote.filter((x) => x.attributes?.name === e.name);
+    const active = named.filter((x) => !FINISHED_STATES.includes(x.attributes?.state));
+    if (active.length > 1) {
+      findings.push(
+        finding({
+          id: `experiments.ambiguous.${e.name}`,
+          category: Category.ASC_STATE,
+          title: `${active.length} product page tests are named ${label}`,
+          detail: "The config cannot tell which one it describes, so none is touched.",
+          fixOwner: FixOwner.UI,
+          fix: "Rename or stop the extra one in App Store Connect.",
+        }),
+      );
+      continue;
+    }
+    let exp = active[0];
+    if (!exp && named.length) {
+      notes.push(
+        `${label} is ${String(named[0].attributes?.state).toLowerCase()} — give the config a new name to run another test`,
+      );
+      continue;
+    }
     if (!exp) {
       exp = (
         await client.post(`/v2/appStoreVersionExperiments`, {
@@ -143,6 +167,9 @@ export async function run(ctx) {
   }
 
   const tail = notes.length ? ` (${notes.join("; ")})` : "";
+  if (findings.length) {
+    return { status: Status.ERROR, message: findings.map((f) => f.title).join("; ") + tail, findings };
+  }
   return changes.length
     ? { status: Status.CHANGED, message: changes.join(" · ") + tail, findings }
     : { status: Status.OK, message: `${experiments.length} test(s) match the config${tail}`, findings };

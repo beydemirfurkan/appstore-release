@@ -4,6 +4,7 @@
 // instruction to follow.
 
 import { Status } from "../core/status.mjs";
+import { printable } from "../core/text.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -48,7 +49,7 @@ export async function run(ctx, args = {}) {
     });
     if (r.error) return { status: Status.ERROR, message: `no crash log for ${args.log}: ${r.error.message}` };
     const text = String(r.data?.attributes?.logText ?? "");
-    for (const line of text.split("\n")) ctx.log.info(line);
+    for (const line of printable(text, { keepNewlines: true }).split("\n")) ctx.log.info(line);
     return {
       status: Status.OK,
       message: `crash log ${args.log} · ${text.split("\n").length} lines`,
@@ -61,18 +62,23 @@ export async function run(ctx, args = {}) {
     ...(args.crashes ? [] : [["screenshot", "betaFeedbackScreenshotSubmissions"]]),
     ...(args.screenshots ? [] : [["crash", "betaFeedbackCrashSubmissions"]]),
   ];
+  // A build number repeats across versions (Expo restarts it): every build with
+  // it counts, looked up once.
+  /** @type {string[] | null} */
+  let buildIds = null;
+  if (args.build) {
+    const builds = await client.all(
+      `/v1/builds?filter[app]=${discovery.appId}&filter[version]=${encodeURIComponent(args.build)}&sort=-uploadedDate`,
+      { limit: 200 },
+    );
+    buildIds = builds.map((b) => b.id);
+    if (!buildIds.length) return { status: Status.OK, message: `no build ${args.build}`, details: { items: [] } };
+  }
   /** @type {Feedback[]} */
   const items = [];
   for (const [kind, resource] of kinds) {
     const query = [`sort=-createdDate`, `limit=${limit}`, `include=build,tester`];
-    if (args.build) {
-      const builds = await client.get(
-        `/v1/builds?filter[app]=${discovery.appId}&filter[version]=${encodeURIComponent(args.build)}&limit=5`,
-      );
-      const ids = (builds.data ?? []).map((/** @type {any} */ b) => b.id);
-      if (!ids.length) return { status: Status.OK, message: `no build ${args.build}`, details: { items: [] } };
-      query.push(`filter[build]=${ids.join(",")}`);
-    }
+    if (buildIds) query.push(`filter[build]=${buildIds.join(",")}`);
     const r = await client.get(`/v1/apps/${discovery.appId}/${resource}?${query.join("&")}`);
     const included = new Map((r.included ?? []).map((/** @type {any} */ x) => [`${x.type}:${x.id}`, x]));
     for (const d of r.data ?? []) {
@@ -107,14 +113,14 @@ export async function run(ctx, args = {}) {
 
 /** "crash · 2026-10-08 · build 42 · iPhone17,1 iOS 26.1 · a@b.c · Crashed on launch [id]" @param {Feedback} f */
 export function formatFeedback(f) {
-  const text = f.comment.replace(/\s+/g, " ");
+  const text = printable(f.comment);
   const clipped = text.length > 80 ? `${text.slice(0, 79)}…` : text;
   return [
     f.kind,
     f.createdDate.slice(0, 10),
     f.build ? `build ${f.build}` : "",
-    [f.device, f.os ? `iOS ${f.os}` : ""].filter(Boolean).join(" "),
-    f.tester,
+    printable([f.device, f.os ? `iOS ${f.os}` : ""].filter(Boolean).join(" ")),
+    printable(f.tester),
     clipped || (f.kind === "screenshot" ? `${f.screenshots.length} screenshot(s)` : ""),
   ]
     .filter(Boolean)

@@ -3,6 +3,7 @@
 // (reply.mjs), because a reply is public and this one only reads.
 
 import { Status } from "../core/status.mjs";
+import { printable } from "../core/text.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -115,8 +116,8 @@ export async function summarize({ client, discovery }) {
 /** "★★☆☆☆ USA · 2026-10-08 · Crashes on launch — It opens and closes… [id] (answered)" @param {Review} r */
 export function formatReview(r) {
   const stars = "★".repeat(r.rating ?? 0) + "☆".repeat(Math.max(0, 5 - (r.rating ?? 0)));
-  const text = `${r.title}${r.title && r.body ? " — " : ""}${r.body}`.replace(/\s+/g, " ");
+  const text = printable(`${r.title}${r.title && r.body ? " — " : ""}${r.body}`);
   const clipped = text.length > 90 ? `${text.slice(0, 89)}…` : text;
   const state = r.response ? ` (answered${r.response.state === "PENDING_PUBLISH" ? ", publishing" : ""})` : "";
-  return `${stars} ${r.territory} · ${r.createdDate.slice(0, 10)} · ${clipped} [${r.id}]${state}`;
+  return `${stars} ${printable(r.territory)} · ${r.createdDate.slice(0, 10)} · ${clipped} [${r.id}]${state}`;
 }

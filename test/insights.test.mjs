@@ -186,3 +186,144 @@ test("a treatment removed from the config is removed while the test is prepared"
     ["A"],
   );
 });
+
+test("download(): https only, on every hop; retries a server error; never sends the token", async () => {
+  const { AscClient } = await import("../src/asc/client.mjs");
+  /** @type {Array<{ url: string, headers: any }>} */
+  const seen = [];
+  let failures = 1;
+  const client = new AscClient({
+    tokenProvider: () => "secret-token",
+    random: () => 0,
+    retry: { baseMs: 1, capMs: 1 },
+    fetchImpl: /** @type {any} */ (
+      async (/** @type {string} */ url, /** @type {any} */ init) => {
+        seen.push({ url, headers: init.headers });
+        if (url.endsWith("/to-http"))
+          return new Response(null, { status: 302, headers: { location: "http://example.com/x" } });
+        if (url.endsWith("/hop"))
+          return new Response(null, { status: 302, headers: { location: "https://example.com/file" } });
+        if (url.endsWith("/flaky") && failures-- > 0) return new Response(null, { status: 503 });
+        return new Response("bytes", { status: 200 });
+      }
+    ),
+  });
+  await assert.rejects(client.download("http://example.com/plain"), /non-https/);
+  await assert.rejects(client.download("https://example.com/to-http"), /non-https/);
+  assert.equal((await client.download("https://example.com/hop")).toString(), "bytes");
+  assert.equal((await client.download("https://example.com/flaky")).toString(), "bytes");
+  assert.ok(
+    seen.every((s) => !s.headers),
+    "no Authorization, no headers at all",
+  );
+});
+
+test("a finished test is never re-created; two with one name are refused", async () => {
+  const { root, fake, run } = project((c) => ({
+    ...c,
+    experiments: [
+      {
+        name: "Once",
+        trafficProportion: 20,
+        treatments: [{ name: "T", locales: { "en-US": { screenshots: "./ppo/t" } } }],
+      },
+    ],
+  }));
+  mkdirSync(join(root, "ppo/t"), { recursive: true });
+  writeFileSync(join(root, "ppo/t/01.png"), headerOnlyPng(1320, 2868, "t"));
+  await run("experiments");
+  fake.all("appStoreVersionExperiments")[0].attributes.state = "STOPPED";
+  const res = await run("experiments");
+  assert.match(res.json.results[0].message, /stopped — give the config a new name/);
+  assert.equal(fake.all("appStoreVersionExperiments").length, 1);
+
+  // Back in preparation, and a second test of the same name made by hand.
+  fake.all("appStoreVersionExperiments")[0].attributes.state = "PREPARE_FOR_SUBMISSION";
+  await fake.fetchImpl("https://api.appstoreconnect.apple.com/v2/appStoreVersionExperiments", {
+    method: "POST",
+    body: JSON.stringify({
+      data: {
+        type: "appStoreVersionExperiments",
+        attributes: { name: "Once", platform: "IOS", trafficProportion: 10 },
+      },
+    }),
+  });
+  const before = fake.mutations().length;
+  const twins = await run("experiments");
+  assert.equal(twins.json.results[0].status, "error");
+  assert.match(twins.json.results[0].message, /2 product page tests are named "Once"/);
+  assert.equal(fake.mutations().length, before, "neither is touched");
+});
+
+test("a configured folder that does not exist is a finding, and nothing is deleted", async () => {
+  const { root, fake, run, write } = project((c) => ({
+    ...c,
+    experiments: [
+      {
+        name: "Folder",
+        trafficProportion: 20,
+        treatments: [{ name: "T", locales: { "en-US": { screenshots: "./ppo/t" } } }],
+      },
+    ],
+  }));
+  mkdirSync(join(root, "ppo/t"), { recursive: true });
+  writeFileSync(join(root, "ppo/t/01.png"), headerOnlyPng(1320, 2868, "t"));
+  await run("experiments");
+  const before = fake.all("appAssetLibraryPlacements").length;
+  write((c) => ({
+    ...c,
+    experiments: [
+      { ...c.experiments[0], treatments: [{ name: "T", locales: { "en-US": { screenshots: "./ppo/typo" } } }] },
+    ],
+  }));
+  const res = await run("experiments");
+  assert.equal(res.json.results[0].status, "error");
+  assert.ok(res.json.findings.some((f) => /does not exist/.test(f.title)));
+  assert.equal(fake.all("appAssetLibraryPlacements").length, before);
+});
+
+test("analytics: a request Apple stopped is said, and --request starts a new one; dry run asks nothing", async () => {
+  const { fake, run } = project();
+  assert.match((await run("analytics", "--request", "--dry-run")).json.results[0].message, /would request/);
+  assert.equal(fake.all("analyticsReportRequests").length, 0);
+  await run("analytics", "--request");
+  fake.all("analyticsReportRequests")[0].attributes.stoppedDueToInactivity = true;
+  assert.match((await run("analytics")).json.results[0].message, /stopped this app's analytics reports/);
+  await run("analytics", "--request");
+  assert.equal(fake.all("analyticsReportRequests").length, 2);
+  assert.match(
+    (await run("analytics", "--report", "x", "--granularity", "HOURLY")).json.results[0].message,
+    /granularity is DAILY, WEEKLY or MONTHLY/,
+  );
+});
+
+test("sales: a title called constructor is a title; a bad report version is refused", async () => {
+  const table = parseTsv(
+    "Title\tUnits\tDeveloper Proceeds\tCurrency of Proceeds\nconstructor\t2\t1\tEUR\n__proto__\t1\t1\tEUR\n",
+  );
+  const { totals, lines } = summarize(table);
+  assert.equal(totals.units, 3);
+  assert.ok(lines.some((l) => /2\s+constructor/.test(l)) && lines.some((l) => /1\s+__proto__/.test(l)));
+  const { run } = project((c) => ({ ...c, reports: { vendorNumber: "1" } }));
+  assert.match((await run("sales", "--report-version", "1_0&x=1")).json.results[0].message, /looks like 1_0/);
+});
+
+test("text from other people loses its control characters before it reaches a terminal", async () => {
+  const { printable } = await import("../src/core/text.mjs");
+  assert.equal(printable("ok\u001b]52;c;ZXZpbA==\u0007 done\nnext"), "ok]52;c;ZXZpbA== done next");
+  assert.equal(printable("line 1\n\tline 2\u001b[2J", { keepNewlines: true }), "line 1\n\tline 2[2J");
+});
+
+test("refusals name their resources, so a test is only blamed when Apple names it", async () => {
+  const { explainRefusal } = await import("../src/asc/refusals.mjs");
+  const e = explainRefusal({
+    errors: [
+      {
+        detail: "cannot be submitted",
+        meta: { associatedErrors: { "/v1/appStoreVersions/1": [{ detail: "Your app uses an experimental API." }] } },
+      },
+    ],
+  });
+  assert.deepEqual(e.resources, ["/v1/appStoreVersions/1"]);
+  assert.equal(/appStoreVersionExperiment/.test(e.resources.join()), false);
+});

@@ -43,20 +43,26 @@ export const meta = {
  */
 export async function run(ctx, args = {}) {
   const { client, discovery, resolvePath } = ctx;
+  if (!["DAILY", "WEEKLY", "MONTHLY"].includes(String(args.granularity ?? "DAILY").toUpperCase())) {
+    return { status: Status.ERROR, message: `granularity is DAILY, WEEKLY or MONTHLY, not ${args.granularity}` };
+  }
   const requests = await client.all(`/v1/apps/${discovery.appId}/analyticsReportRequests?filter[accessType]=ONGOING`, {
     limit: 50,
   });
-  let request = requests.find((r) => !r.attributes?.stoppedDueToInactivity) ?? requests[0];
+  let request = requests.find((r) => !r.attributes?.stoppedDueToInactivity);
+  const stopped = requests.find((r) => r.attributes?.stoppedDueToInactivity);
 
   if (!request) {
     if (!args.request) {
       return {
         status: Status.OK,
-        message:
-          "no analytics reports yet: run analytics --request to have Apple start producing them (the first take a day or two)",
+        message: stopped
+          ? "Apple stopped this app's analytics reports for inactivity: run analytics --request to start them again"
+          : "no analytics reports yet: run analytics --request to have Apple start producing them (the first take a day or two)",
         details: { reports: [] },
       };
     }
+    if (ctx.dryRun) return { status: Status.OK, message: "would request ongoing analytics reports" };
     request = (
       await client.post(`/v1/analyticsReportRequests`, {
         data: {
@@ -74,10 +80,8 @@ export async function run(ctx, args = {}) {
     };
   }
 
-  const category = args.category ? `&filter[category]=${encodeURIComponent(args.category.toUpperCase())}` : "";
-  const reports = await client.all(`/v1/analyticsReportRequests/${request.id}/reports?${category.slice(1)}`, {
-    limit: 200,
-  });
+  const category = args.category ? `?filter[category]=${encodeURIComponent(args.category.toUpperCase())}` : "";
+  const reports = await client.all(`/v1/analyticsReportRequests/${request.id}/reports${category}`, { limit: 200 });
   const listed = reports.map((r) => ({
     id: r.id,
     name: r.attributes?.name ?? "",

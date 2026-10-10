@@ -8,7 +8,15 @@
 - **`sales`**: Sales and Trends reports — downloaded (Apple sends them gzipped), unpacked with node:zlib, summarised as units per title and proceeds per currency, and saved as Apple's tab-separated file with `--out`. Only the report type, sub-type, frequency and version combinations Apple documents are sent; a day with no sales is reported as such. The vendor number comes from `reports.vendorNumber`, `--vendor` or `ASC_VENDOR_NUMBER`.
 - **`analytics`**: Apple's analytics reports. `--request` starts the ongoing reports once; then the available reports are listed, and `--report <name>` downloads the latest instance's segments. The segment files are fetched from Apple's signed URLs without the API token.
 - **Product page tests** (`experiments`, and an `experiments` step in `release`): A/B tests of the product page through the v2 API — traffic proportion, up to three treatments with an optional alternate icon, and each treatment's screenshots and previews per locale. Edited only while prepared; treatments and locales removed from the config are removed; nothing changes in review; started only when `start: true`. `submit` sends a prepared test with the app, takes it back out if App Store Connect refuses it, and `--skip-experiments` (MCP `skipExperiments`) leaves it out.
-- The client can return a binary body and download from a signed URL; the schema validator accepts `maxItems`.
+- The client can return a binary body and download from a signed URL — https on every hop, a few redirects at most, retried on a server error, never with the token; the schema validator accepts `maxItems`.
+
+### Fixed
+
+- A finished (completed or stopped) product page test is never re-created because the config still names it; two active tests with one name are refused rather than guessed between.
+- A screenshot or preview folder that does not exist is a finding, not an empty folder: it no longer removes the placements it used to fill (custom product pages, product page tests, previews).
+- Refused custom product pages and product page tests are recognised by the resource App Store Connect names (`meta.associatedErrors`), so an app-level refusal that mentions "experimental" or "treatment" no longer pulls a test out.
+- Customer review, tester feedback and crash log text loses its control characters before it is printed: an escape sequence in someone else's text cannot reach the terminal.
+- `analytics` says when Apple stopped the reports for inactivity, and `--request` starts new ones; `sales` refuses a body that is not a report and an invalid `--report-version`, and reads `ASC_VENDOR_NUMBER` from the context's environment.
 
 ### Not yet
 

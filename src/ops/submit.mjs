@@ -33,13 +33,16 @@ const EXTRAS = Object.freeze({
     relationship: PAGE_RELATIONSHIP,
     flag: "--skip-pages",
     what: "custom product page",
-    mention: /custom product page|appCustomProductPage/i,
+    resource: /appCustomProductPage/,
+    mention: /custom product page/i,
   },
   experiment: {
     relationship: EXPERIMENT_RELATIONSHIP,
     flag: "--skip-experiments",
     what: "product page test",
-    mention: /experiment|product page optimi[sz]ation|treatment/i,
+    resource: /appStoreVersionExperiment/,
+    // Words, not substrings: "experimental API" or "medical treatment" is about the app.
+    mention: /\bproduct page (test|optimi[sz]ation)\b|\bA\/B test\b/i,
   },
 });
 
@@ -336,7 +339,8 @@ export async function run(ctx, args = {}) {
     }
     for (const extra of /** @type {const} */ (["page", "experiment"])) {
       if (
-        explained.lines.some((l) => EXTRAS[extra].mention.test(l)) &&
+        (explained.resources.some((r) => EXTRAS[extra].resource.test(r)) ||
+          explained.lines.some((l) => EXTRAS[extra].mention.test(l))) &&
         [...present.values()].some((v) => v.relationship === EXTRAS[extra].relationship)
       ) {
         return refuseExtras(ctx, { submission, present, error: done.error, label: `${EXTRAS[extra].what}s`, extra });

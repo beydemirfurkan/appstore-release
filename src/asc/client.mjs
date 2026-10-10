@@ -11,6 +11,9 @@ export const DEFAULT_BASE_URL = "https://api.appstoreconnect.apple.com";
 const DEFAULT_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 
+/** A report segment can be large: minutes, not the API's seconds. */
+const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
 export class AscApiError extends Error {
   /**
    * @param {number} status
@@ -181,10 +184,46 @@ export class AscClient {
    * @returns {Promise<Buffer>}
    */
   async download(url) {
-    if (!/^https:\/\//i.test(url)) throw new Error(`refusing to download a non-https URL: ${url}`);
-    const res = await this._fetch(url, { method: "GET", signal: AbortSignal.timeout(this._timeoutMs) });
-    if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
-    return Buffer.from(await res.arrayBuffer());
+    let next = url;
+    for (let attempt = 1; ; attempt++) {
+      // Redirects are followed by hand, a few at most, and only to https: the
+      // guarantee is about every hop, not just the first URL.
+      let res;
+      for (let hop = 0; ; hop++) {
+        if (!/^https:\/\//i.test(next))
+          throw new Error(`refusing to download a non-https URL: ${new URL(next).origin}`);
+        try {
+          res = await this._fetch(next, {
+            method: "GET",
+            redirect: "manual",
+            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+          });
+        } catch (error) {
+          res = null;
+          if (attempt >= 3) throw error;
+          break;
+        }
+        this.requestCount += 1;
+        // Only the origin and path: the query of a signed URL is its credential.
+        const where = new URL(next);
+        this._log?.request({
+          method: "GET",
+          path: `${where.origin}${where.pathname}`,
+          status: res.status,
+          durationMs: 0,
+          attempt,
+        });
+        const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+        if (!location) break;
+        if (hop >= 3) throw new Error("download failed: too many redirects");
+        next = new URL(location, next).toString();
+      }
+      if (res?.ok) return Buffer.from(await res.arrayBuffer());
+      if (res && res.status < 500) throw new Error(`download failed: HTTP ${res.status}`);
+      if (attempt >= 3) throw new Error(`download failed: HTTP ${res?.status ?? "no response"}`);
+      await sleep(backoffMs(attempt, this._retry, this._random));
+      next = url;
+    }
   }
   post(path, body, opts) {
     return this.request("POST", path, { ...opts, body });

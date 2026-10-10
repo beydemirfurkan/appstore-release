@@ -90,7 +90,7 @@ export async function run(ctx, args = {}) {
   if (!args.date && frequency !== "DAILY")
     return { status: Status.ERROR, message: `a ${frequency.toLowerCase()} report needs --date` };
 
-  const vendor = args.vendor ?? config?.reports?.vendorNumber ?? process.env.ASC_VENDOR_NUMBER;
+  const vendor = args.vendor || config?.reports?.vendorNumber || ctx.env?.ASC_VENDOR_NUMBER;
   if (!vendor) {
     return {
       status: Status.ERROR,
@@ -99,6 +99,9 @@ export async function run(ctx, args = {}) {
     };
   }
 
+  if (args.reportVersion && !/^\d+_\d+$/.test(args.reportVersion)) {
+    return { status: Status.ERROR, message: `a report version looks like 1_0, not ${args.reportVersion}` };
+  }
   const query = [
     `filter[vendorNumber]=${encodeURIComponent(vendor)}`,
     `filter[reportType]=${type}`,
@@ -119,8 +122,17 @@ export async function run(ctx, args = {}) {
     return { status: Status.ERROR, message: res.error?.message ?? "the report could not be downloaded" };
   }
 
-  const tsv = unpack(/** @type {Buffer} */ (res.bytes));
+  // A maintenance page or a cut-off download is not a report with no rows.
+  let tsv;
+  try {
+    tsv = unpack(/** @type {Buffer} */ (res.bytes));
+  } catch (e) {
+    return { status: Status.ERROR, message: `the report could not be unpacked: ${e instanceof Error ? e.message : e}` };
+  }
   const table = parseTsv(tsv);
+  if (table.columns.length < 2) {
+    return { status: Status.ERROR, message: "App Store Connect sent something that is not a tab-separated report" };
+  }
   const summary = summarize(table);
   for (const line of summary.lines) ctx.log.info(line);
 
@@ -166,7 +178,8 @@ export function parseTsv(text) {
  */
 export function summarize({ columns, rows }) {
   /** @type {{ units: number, proceeds: Record<string, number>, byTitle: Record<string, number> }} */
-  const totals = { units: 0, proceeds: {}, byTitle: {} };
+  // Prototype-free maps: a product titled "constructor" is just a title.
+  const totals = { units: 0, proceeds: Object.create(null), byTitle: Object.create(null) };
   if (!columns.includes("Units")) return { headline: "", lines: [], totals };
   for (const r of rows) {
     const units = Number(r.Units) || 0;

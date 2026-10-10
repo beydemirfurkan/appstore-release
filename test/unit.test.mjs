@@ -368,7 +368,7 @@ test("Apple's refusals: nested reasons read, known ones mapped, product ones kep
     verbatim.map((f) => f.detail),
     ["The subscription review screenshot is missing.", "Something new Apple says."],
   );
-  assert.deepEqual(explainRefusal(null), { lines: [], findings: [], productRelated: false });
+  assert.deepEqual(explainRefusal(null), { lines: [], resources: [], findings: [], productRelated: false });
 });
 
 test("draft App Review notes: what the app does, and nothing guessed", async () => {

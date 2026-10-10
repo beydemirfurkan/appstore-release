@@ -3,7 +3,6 @@
 
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
-import { renderReportText } from "../report/render.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -12,12 +11,22 @@ export const meta = {
   phase: "listing",
   needs: [],
   mutates: false,
+  args: {
+    compact: {
+      type: "boolean",
+      default: false,
+      description: "show the verdict, what is wrong and what to do next — not the sections that are fine",
+    },
+  },
 };
 
-/** @param {import("../core/context.mjs").Context} ctx */
-export async function run(ctx) {
+/**
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {{ compact?: boolean }} [args]
+ */
+export async function run(ctx, args = {}) {
   const report = await getReadinessReport(ctx);
-  for (const line of renderReportText(report).split("\n")) ctx.log.info(line);
+  ctx.log.report(report, { compact: Boolean(args.compact) });
 
   // The UI-only step is an ordinary finding, not a result injected straight
   // into the logger — so every surface sees it the same way. Never ERROR:

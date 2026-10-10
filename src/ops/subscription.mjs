@@ -130,8 +130,15 @@ export async function run({ client, discovery, uploader, config, resolvePath }) 
     }
   }
 
-  if (!changes.length) return { status: Status.OK, message: `${cfg.productId} already complete` };
-  return { status: Status.CHANGED, message: `${cfg.productId}: ${changes.join(", ")}` };
+  if (!changes.length) return { status: Status.OK, message: "already complete", details: { productId: cfg.productId } };
+  const localized = changes.filter((c) => /^(group )?(added|updated) /.test(c)).length;
+  const rest = changes.filter((c) => !/^(group )?(added|updated) /.test(c));
+  const summary = [...(localized ? [`${localized} localization${localized === 1 ? "" : "s"}`] : []), ...rest];
+  return {
+    status: Status.CHANGED,
+    message: summary.join(" · "),
+    details: { productId: cfg.productId, changes },
+  };
 }
 
 /**

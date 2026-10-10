@@ -79,12 +79,18 @@ export async function run({ discovery, client, config }) {
 
   return {
     status: Status.CHANGED,
-    message: touched.map((l) => `${l}: ${changedByLocale[l].join(", ")}`).join(" · "),
+    message:
+      touched.length === 1
+        ? `${touched[0]} · ${plural(changedByLocale[touched[0]].length, "field")} updated`
+        : `${plural(touched.length, "locale")} updated`,
     details: { locales: localeCodesOf(locales), changed: changedByLocale },
   };
 }
 
 const localeCodesOf = (locales) => locales.map((l) => l.locale);
+
+/** "6 fields" @param {number} n @param {string} word */
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** Read only the fields we are about to consider writing. */
 async function readAttributes(client, path, fields) {

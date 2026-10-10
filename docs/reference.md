@@ -30,12 +30,13 @@ npx skills add beydemirfurkan/appstore-release
 
 **Any other MCP host** (Cursor, Zed and the rest): see [MCP server](#mcp-server) below.
 
-**CLI**
+**CLI**, straight from GitHub (no npm package, nothing installed globally):
 
 ```bash
-git clone https://github.com/beydemirfurkan/appstore-release.git
-node appstore-release/src/cli.mjs --help
+npx github:beydemirfurkan/appstore-release check
 ```
+
+or from a clone: `node src/cli.mjs --help`.
 
 ## Why not just an API wrapper
 
@@ -116,14 +117,14 @@ appstore-release submit --submit     # refuses unless the verdict is ready
 
 ## MCP server
 
-Point any MCP host at the file. There is nothing to install:
+Nothing to install: `npx` fetches it from GitHub on first use (no npm package involved) and caches it.
 
 ```jsonc
 {
   "mcpServers": {
     "appstore-release": {
-      "command": "node",
-      "args": ["/abs/path/to/appstore-release/src/mcp/server.mjs"],
+      "command": "npx",
+      "args": ["-y", "-p", "github:beydemirfurkan/appstore-release", "appstore-release-mcp"],
       "env": {
         "ASC_KEY_ID": "ABCDE12345",
         "ASC_ISSUER_ID": "69a6de00-…",
@@ -134,6 +135,8 @@ Point any MCP host at the file. There is nothing to install:
   },
 }
 ```
+
+Pin a release with `github:beydemirfurkan/appstore-release#v3.0.0`. From a clone, use `"command": "node", "args": ["/abs/path/to/appstore-release/src/mcp/server.mjs"]` instead.
 
 | Tool                         | Read-only | Purpose                                                  |
 | ---------------------------- | --------- | -------------------------------------------------------- |

@@ -54,7 +54,7 @@ export function check({ snapshot, config, resolvePath, now = Date.now() }) {
           finding({
             id: `screenshots.count.zero${suffix(set.key, locale)}`,
             category: Category.ASC_STATE,
-            title: multi ? `No ${set.key} screenshots uploaded for ${locale}` : `No ${set.key} screenshots uploaded`,
+            title: multi ? `No ${set.key} screenshots · ${locale}` : `No ${set.key} screenshots`,
             detail: "App Store Connect requires at least one screenshot for each declared display size.",
             fix: "Put exact-size PNGs in the configured directory and upload them.",
             fixCommand: "appstore-release screenshots",

@@ -161,16 +161,17 @@ export async function run(ctx, args = {}) {
   const deleted = summary.reduce((n, s) => n + s.deleted.length, 0);
   const unchanged = summary.reduce((n, s) => n + s.unchanged, 0);
   const details = { backend: backend.name, sets: summary, uploaded, reused, deleted, unchanged };
-  const where = `across ${summary.length} ${backend.name === "asset-library" ? "placement group" : "set"}(s)`;
+  const groups = new Set(summary.map((x) => x.group)).size;
+  const where = `· ${groups} device size${groups === 1 ? "" : "s"}`;
 
   if (!summary.some((s) => s.changed)) {
     return { status: Status.OK, message: `${unchanged} screenshots already correct ${where}`, details, findings };
   }
   const parts = [`${uploaded} uploaded`];
   if (reused) parts.push(`${reused} reused from the library`);
-  parts.push(`${unchanged} unchanged`);
+  if (unchanged) parts.push(`${unchanged} unchanged`);
   if (deleted) parts.push(`${deleted} removed`);
-  return { status: Status.CHANGED, message: `${parts.join(", ")} ${where}`, details, findings };
+  return { status: Status.CHANGED, message: `${parts.join(" · ")} ${where}`, details, findings };
 }
 
 /**

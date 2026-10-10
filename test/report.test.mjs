@@ -293,3 +293,24 @@ test("status returns the snapshot as data, not just printed text", async () => {
   assert.equal(res.details.app.attributes.name, "Test App");
   assert.equal(mock.mutations().length, 0);
 });
+
+test("the terminal plan collapses to one `release` when the pipeline fixes everything", async () => {
+  const { renderReportText } = await import("../src/report/render.mjs");
+  const report = buildReport({
+    snapshot: healthySnapshot({ build: null, reviewDetail: null }),
+    config: { locale: "en-US" },
+  });
+  const text = renderReportText(report);
+  assert.match(text, /\$ appstore-release release\s+fixes all \d+/);
+  assert.doesNotMatch(text, /\$ appstore-release attach-build/, "not one command per finding");
+  assert.match(text, /you: /, "the App Privacy step is still listed for a person");
+});
+
+test("colour is on for a terminal, off for pipes, and NO_COLOR / FORCE_COLOR win", async () => {
+  const { createStyle } = await import("../src/cli/style.mjs");
+  assert.equal(createStyle({ isTTY: true }, {}).enabled, true);
+  assert.equal(createStyle({ isTTY: false }, {}).enabled, false);
+  assert.equal(createStyle({ isTTY: true }, { NO_COLOR: "" }).enabled, false);
+  assert.equal(createStyle({ isTTY: false }, { FORCE_COLOR: "1" }).enabled, true);
+  assert.equal(createStyle({ isTTY: true }, { FORCE_COLOR: "0" }).enabled, true);
+});

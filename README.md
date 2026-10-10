@@ -59,8 +59,8 @@ Apple keeps one step out of its API: the App Privacy label. For that step, `chec
 
 - **Claude Code:** `/plugin marketplace add beydemirfurkan/appstore-release`
 - **Claude Desktop:** open [`appstore-release.mcpb`](https://github.com/beydemirfurkan/appstore-release/releases/latest/download/appstore-release.mcpb)
-- **Any MCP host:** `node src/mcp/server.mjs` ([config](docs/reference.md#mcp-server))
-- **CLI:** `node src/cli.mjs --help`
+- **Any MCP host:** `npx -y -p github:beydemirfurkan/appstore-release appstore-release-mcp` ([config](docs/reference.md#mcp-server))
+- **CLI:** `npx github:beydemirfurkan/appstore-release check`
 
 Connecting a real app takes an App Store Connect API key and a config file; the [reference](docs/reference.md#quick-start-with-a-real-app) walks through both.
 

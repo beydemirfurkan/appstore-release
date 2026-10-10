@@ -1,14 +1,15 @@
 # Shared look for every recording. Rendered by `npm run media`.
 Set Shell "bash"
 Set FontFamily "JetBrainsMono Nerd Font"
-Set FontSize 15
-Set LineHeight 1.25
-Set Width 1180
-Set Height 900
+Set FontSize 20
+Set LineHeight 1.3
+Set LetterSpacing 0.2
+Set Width 1200
+Set Height 800
 Set Padding 28
+Set Margin 34
+Set MarginFill "docs/media/tapes/backdrop.png"
 Set WindowBar Colorful
-Set BorderRadius 10
-Set Margin 18
-Set MarginFill "#0b1220"
-Set Theme { "name": "asr", "black": "#0f172a", "red": "#f87171", "green": "#4ade80", "yellow": "#fbbf24", "blue": "#60a5fa", "magenta": "#c084fc", "cyan": "#22d3ee", "white": "#e2e8f0", "brightBlack": "#64748b", "brightRed": "#fca5a5", "brightGreen": "#86efac", "brightYellow": "#fde68a", "brightBlue": "#93c5fd", "brightMagenta": "#d8b4fe", "brightCyan": "#67e8f9", "brightWhite": "#f8fafc", "background": "#0f172a", "foreground": "#e2e8f0", "selection": "#334155", "cursor": "#60a5fa" }
-Set TypingSpeed 45ms
+Set BorderRadius 12
+Set Theme { "name": "asr", "black": "#0b1020", "red": "#ff6b7a", "green": "#5ee08a", "yellow": "#ffd166", "blue": "#7aa2ff", "magenta": "#c4a7ff", "cyan": "#6ad6ff", "white": "#e6edf7", "brightBlack": "#6b7895", "brightRed": "#ff8e99", "brightGreen": "#8af0aa", "brightYellow": "#ffe08a", "brightBlue": "#a5c0ff", "brightMagenta": "#d9c6ff", "brightCyan": "#9ae4ff", "brightWhite": "#ffffff", "background": "#0b1020", "foreground": "#e6edf7", "selection": "#25304d", "cursor": "#6ad6ff" }
+Set TypingSpeed 40ms

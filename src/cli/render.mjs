@@ -5,6 +5,8 @@
 import { EventType } from "../core/events.mjs";
 import { Status } from "../core/status.mjs";
 import { Severity, FixOwner } from "../core/findings.mjs";
+import { PLAIN } from "./style.mjs";
+import { renderReportText } from "../report/render.mjs";
 
 const ICON = {
   [Status.OK]: "✓",
@@ -20,31 +22,48 @@ const RULE = "─".repeat(58);
 /**
  * An event sink that writes human output to a stream.
  *
- * @param {{ write: (s: string) => any }} stream
- * @param {{ verbose?: boolean, quiet?: boolean }} [opts]
+ * Results are one aligned line each — what ran, then what happened, dimmed and
+ * clipped to the terminal — so a ten-step release reads as a column of ticks.
+ *
+ * @param {{ write: (s: string) => any, columns?: number }} stream
+ * @param {{ verbose?: boolean, quiet?: boolean, style?: import("./style.mjs").Style }} [opts]
  */
-export function createTextSink(stream, { verbose = false, quiet = false } = {}) {
-  const write = (s) => stream.write(s + "\n");
+export function createTextSink(stream, { verbose = false, quiet = false, style = PLAIN } = {}) {
+  const s = style;
+  const write = (/** @type {string} */ line) => stream.write(line + "\n");
+  const width = stream.columns && stream.columns > 40 ? stream.columns : 100;
+  const paint = {
+    [Status.OK]: s.green,
+    [Status.CHANGED]: s.green,
+    [Status.PLANNED]: s.cyan,
+    [Status.SKIPPED]: s.dim,
+    [Status.MANUAL]: s.yellow,
+    [Status.ERROR]: s.red,
+  };
   return (event) => {
     switch (event.type) {
       case EventType.SECTION:
-        if (!quiet) {
-          write(`\n${event.title}`);
-          write(RULE);
-        }
+        if (!quiet) write(`\n${s.bold(event.title)}`);
         break;
       case EventType.INFO:
         if (!quiet) write(`  ${event.message}`);
         break;
       case EventType.WARN:
-        write(`  ⚠ ${event.message}`);
+        write(`  ${s.yellow("⚠")} ${event.message}`);
+        break;
+      case EventType.REPORT:
+        if (!quiet) write(renderReportText(event.report, { style: s, compact: event.compact }));
         break;
       case EventType.RESULT: {
         const { id, status, title, message } = event.result;
         // The readiness report has just printed itself, verdict first; a status
         // line after it ("✓ … blocked") would only contradict it.
         if (id === "check" && !quiet) break;
-        write(`${ICON[status] ?? "•"} ${title}${message ? " — " + message : ""}`);
+        const icon = (paint[status] ?? s.dim)(ICON[status] ?? "•");
+        const name = title.padEnd(TITLE_WIDTH);
+        const room = Math.max(20, width - TITLE_WIDTH - 6);
+        const text = message.length > room ? `${message.slice(0, room - 1)}…` : message;
+        write(`${icon} ${name}  ${status === Status.ERROR ? s.red(text) : s.dim(text)}`.trimEnd());
         break;
       }
       case EventType.CHANGE:
@@ -54,12 +73,15 @@ export function createTextSink(stream, { verbose = false, quiet = false } = {}) 
       case EventType.REQUEST:
         if (verbose) {
           const retry = event.attempt > 1 ? ` (attempt ${event.attempt})` : "";
-          write(`    → ${event.method} ${event.path} ${event.status} ${event.durationMs}ms${retry}`);
+          write(s.dim(`    → ${event.method} ${event.path} ${event.status} ${event.durationMs}ms${retry}`));
         }
         break;
     }
   };
 }
+
+/** Wide enough for the longest operation title ("Pricing + copyright"). */
+const TITLE_WIDTH = 20;
 
 /**
  * Print the findings that still need someone's attention, cheapest-to-act first:

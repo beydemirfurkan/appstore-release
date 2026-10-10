@@ -31,10 +31,10 @@ export function check({ snapshot, config }) {
       finding({
         id: "subscription.missing-metadata",
         category: Category.ASC_STATE,
-        title: `${productId} is MISSING_METADATA`,
+        title: "Subscription is missing metadata",
         detail:
-          "A subscription needs a group localization, its own localization, a price, and a review screenshot " +
-          "before it reaches READY_TO_SUBMIT.",
+          `${productId} is MISSING_METADATA. A subscription needs a group localization, its own localization, ` +
+          "a price, and a review screenshot before it reaches READY_TO_SUBMIT.",
         fix: "Fill it in from your config.",
         fixCommand: "appstore-release subscription",
         docs: "references/gotchas.md#subscriptions--iaps",

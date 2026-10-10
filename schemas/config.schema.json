@@ -388,34 +388,64 @@
         "$comment": {
           "type": "string"
         },
-        "productId": {
+        "familySharable": {
+          "type": "boolean"
+        },
+        "group": {
           "type": "string",
-          "description": "The subscription's product id, as created in App Store Connect."
+          "description": "Reference name of its subscription group; created if missing. Defaults to the app's first group."
         },
         "groupDisplayName": {
           "type": "string",
           "description": "Customer-visible name of the subscription group."
         },
-        "localeName": {
-          "type": "string",
-          "description": "Display name of this subscription."
+        "groupLevel": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Rank within the group; 1 is the highest tier."
+        },
+        "introOffer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "duration"],
+          "description": "Introductory offer. A FREE_TRIAL has no price; paid offers are priced in priceTerritory.",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"]
+            },
+            "duration": {
+              "type": "string",
+              "enum": [
+                "THREE_DAYS",
+                "ONE_WEEK",
+                "TWO_WEEKS",
+                "ONE_MONTH",
+                "TWO_MONTHS",
+                "THREE_MONTHS",
+                "SIX_MONTHS",
+                "ONE_YEAR"
+              ]
+            },
+            "periods": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many periods a PAY_AS_YOU_GO offer lasts."
+            },
+            "priceAmount": {
+              "type": "number",
+              "minimum": 0,
+              "description": "Offer price for paid offers."
+            }
+          }
         },
         "localeDescription": {
           "type": "string",
           "description": "What the subscription unlocks."
         },
-        "priceTerritory": {
+        "localeName": {
           "type": "string",
-          "description": "Base territory for the price, e.g. USA."
-        },
-        "priceAmount": {
-          "type": "number",
-          "minimum": 0,
-          "description": "Target price; the nearest Apple price point is used."
-        },
-        "reviewScreenshot": {
-          "type": "string",
-          "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
+          "description": "Display name of this subscription."
         },
         "localizations": {
           "type": "object",
@@ -441,12 +471,240 @@
               }
             }
           }
+        },
+        "name": {
+          "type": "string",
+          "description": "Reference name. Needed only to create the subscription when it does not exist yet."
+        },
+        "period": {
+          "type": "string",
+          "enum": ["ONE_WEEK", "ONE_MONTH", "TWO_MONTHS", "THREE_MONTHS", "SIX_MONTHS", "ONE_YEAR"],
+          "description": "Billing period. Needed only to create the subscription."
+        },
+        "priceAmount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Target price; the nearest Apple price point is used."
+        },
+        "priceTerritory": {
+          "type": "string",
+          "description": "Base territory for the price, e.g. USA. Defaults to USA."
+        },
+        "productId": {
+          "type": "string",
+          "description": "The subscription's product id, as created in App Store Connect."
+        },
+        "reviewNote": {
+          "type": "string",
+          "description": "Note for App Review about this product."
+        },
+        "reviewScreenshot": {
+          "type": "string",
+          "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
         }
       }
     },
     "easMetadata": {
       "type": "string",
       "description": "Path to an Expo EAS Metadata store.config.json, relative to this file. Its listing, age rating, categories, release and review details are used; anything set in this file wins."
+    },
+    "subscriptions": {
+      "type": "array",
+      "description": "Several subscriptions — plans, tiers, groups. Each entry has the same shape as `subscription`. Use instead of `subscription`.",
+      "items": {
+        "type": "object",
+        "description": "Omit this whole block if the app has no subscription.",
+        "additionalProperties": false,
+        "properties": {
+          "$comment": {
+            "type": "string"
+          },
+          "familySharable": {
+            "type": "boolean"
+          },
+          "group": {
+            "type": "string",
+            "description": "Reference name of its subscription group; created if missing. Defaults to the app's first group."
+          },
+          "groupDisplayName": {
+            "type": "string",
+            "description": "Customer-visible name of the subscription group."
+          },
+          "groupLevel": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Rank within the group; 1 is the highest tier."
+          },
+          "introOffer": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "duration"],
+            "description": "Introductory offer. A FREE_TRIAL has no price; paid offers are priced in priceTerritory.",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["FREE_TRIAL", "PAY_AS_YOU_GO", "PAY_UP_FRONT"]
+              },
+              "duration": {
+                "type": "string",
+                "enum": [
+                  "THREE_DAYS",
+                  "ONE_WEEK",
+                  "TWO_WEEKS",
+                  "ONE_MONTH",
+                  "TWO_MONTHS",
+                  "THREE_MONTHS",
+                  "SIX_MONTHS",
+                  "ONE_YEAR"
+                ]
+              },
+              "periods": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "How many periods a PAY_AS_YOU_GO offer lasts."
+              },
+              "priceAmount": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Offer price for paid offers."
+              }
+            }
+          },
+          "localeDescription": {
+            "type": "string",
+            "description": "What the subscription unlocks."
+          },
+          "localeName": {
+            "type": "string",
+            "description": "Display name of this subscription."
+          },
+          "localizations": {
+            "type": "object",
+            "description": "Subscription texts for locales other than `locale`, keyed by locale code. Each entry overrides localeName / localeDescription / groupDisplayName for that locale and inherits what it omits.",
+            "propertyNames": {
+              "pattern": "^[a-z]{2}(-[A-Za-z0-9]+)*$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Display name of the subscription in this locale."
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Its description in this locale."
+                },
+                "groupName": {
+                  "type": "string",
+                  "description": "The subscription group's display name in this locale."
+                }
+              }
+            }
+          },
+          "name": {
+            "type": "string",
+            "description": "Reference name. Needed only to create the subscription when it does not exist yet."
+          },
+          "period": {
+            "type": "string",
+            "enum": ["ONE_WEEK", "ONE_MONTH", "TWO_MONTHS", "THREE_MONTHS", "SIX_MONTHS", "ONE_YEAR"],
+            "description": "Billing period. Needed only to create the subscription."
+          },
+          "priceAmount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Target price; the nearest Apple price point is used."
+          },
+          "priceTerritory": {
+            "type": "string",
+            "description": "Base territory for the price, e.g. USA. Defaults to USA."
+          },
+          "productId": {
+            "type": "string",
+            "description": "The subscription's product id, as created in App Store Connect."
+          },
+          "reviewNote": {
+            "type": "string",
+            "description": "Note for App Review about this product."
+          },
+          "reviewScreenshot": {
+            "type": "string",
+            "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
+          }
+        }
+      }
+    },
+    "inAppPurchases": {
+      "type": "array",
+      "description": "One-time in-app purchases, e.g. a lifetime unlock.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["productId"],
+        "description": "A one-time in-app purchase, created when missing.",
+        "properties": {
+          "$comment": {
+            "type": "string"
+          },
+          "productId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Reference name. Needed only to create it."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["NON_CONSUMABLE", "CONSUMABLE", "NON_RENEWING_SUBSCRIPTION"],
+            "description": "Defaults to NON_CONSUMABLE (a lifetime unlock)."
+          },
+          "familySharable": {
+            "type": "boolean"
+          },
+          "reviewNote": {
+            "type": "string"
+          },
+          "localeName": {
+            "type": "string",
+            "description": "Display name in the config's locale."
+          },
+          "localeDescription": {
+            "type": "string"
+          },
+          "localizations": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z]{2}(-[A-Za-z0-9]+)*$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "priceTerritory": {
+            "type": "string",
+            "description": "Base territory for the price. Defaults to USA."
+          },
+          "priceAmount": {
+            "type": "number",
+            "minimum": 0
+          },
+          "reviewScreenshot": {
+            "type": "string",
+            "description": "Screenshot for App Review, relative to this config."
+          }
+        }
+      }
     }
   },
   "$defs": {

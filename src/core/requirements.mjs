@@ -20,12 +20,9 @@ export const REQUIREMENTS = Object.freeze({
   category: ["category.primary"],
   review: ["review.contactFirstName", "review.contactLastName", "review.contactPhone", "review.contactEmail"],
   screenshots: ["screenshots.dir"],
-  subscription: [
-    "subscription.productId",
-    "subscription.priceTerritory",
-    "subscription.priceAmount",
-    "subscription.reviewScreenshot",
-  ],
+  // Products are checked per product by their operations (core/products.mjs):
+  // an app that sells nothing must not fail the pipeline for want of a price.
+  subscription: [],
   credentials: ["bundleId"],
 });
 

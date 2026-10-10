@@ -80,7 +80,7 @@ function spec(shortName, width, height) {
 }
 
 /**
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
@@ -88,6 +88,7 @@ export function createFakeAsc({
   baseUrl = "https://api.appstoreconnect.apple.com",
   assetLibrary = true,
   firstSubscription = false,
+  approvedPurchase = false,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -174,6 +175,16 @@ export function createFakeAsc({
   // Unless asked otherwise, the app already sells an approved yearly plan, so the
   // monthly one is not its first subscription and may be submitted by API —
   // Apple sends a first subscription through the website with the binary.
+  // An approved one-time purchase already on sale, when asked for: later ones may
+  // then be submitted by API.
+  if (approvedPurchase) {
+    put(
+      "inAppPurchases",
+      "iap-0",
+      { productId: "com.example.wellness.tip", name: "Tip", state: "APPROVED", inAppPurchaseType: "CONSUMABLE" },
+      { app: ref("apps", appId) },
+    );
+  }
   if (!firstSubscription) {
     put(
       "subscriptions",
@@ -207,15 +218,35 @@ export function createFakeAsc({
   const calls = [];
 
   // ── Derived state: what Apple computes, not what anyone writes ────────────
+  /** Apple's derived states: a product is READY_TO_SUBMIT once it has everything review needs. */
   function refreshSubscriptionState() {
-    const sub = /** @type {Resource} */ (get("subscriptions", "sub-1"));
-    if (["WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"].includes(sub.attributes.state)) return;
-    const hasLoc = all("subscriptionLocalizations").some((l) => rel(l, "subscription")?.id === "sub-1");
-    const hasGroupLoc = all("subscriptionGroupLocalizations").some((l) => rel(l, "subscriptionGroup")?.id === "grp-1");
-    const hasPrice = all("subscriptionPrices").some((p) => rel(p, "subscription")?.id === "sub-1");
-    const shot = all("subscriptionAppStoreReviewScreenshots").find((s) => rel(s, "subscription")?.id === "sub-1");
-    const complete = hasLoc && hasGroupLoc && hasPrice && shot?.attributes.assetDeliveryState?.state === "COMPLETE";
-    sub.attributes.state = complete ? "READY_TO_SUBMIT" : "MISSING_METADATA";
+    for (const sub of all("subscriptions")) {
+      if (["WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"].includes(sub.attributes.state)) continue;
+      const group = all("subscriptionGroups").find((g) =>
+        (g.relationships?.subscriptions?.data ?? []).some((/** @type {any} */ d) => d.id === sub.id),
+      );
+      const hasLoc = all("subscriptionLocalizations").some((l) => rel(l, "subscription")?.id === sub.id);
+      const hasGroupLoc = all("subscriptionGroupLocalizations").some(
+        (l) => rel(l, "subscriptionGroup")?.id === group?.id,
+      );
+      const hasPrice = all("subscriptionPrices").some((p) => rel(p, "subscription")?.id === sub.id);
+      const shot = all("subscriptionAppStoreReviewScreenshots").find((s) => rel(s, "subscription")?.id === sub.id);
+      const complete = hasLoc && hasGroupLoc && hasPrice && shot?.attributes.assetDeliveryState?.state === "COMPLETE";
+      sub.attributes.state = complete ? "READY_TO_SUBMIT" : "MISSING_METADATA";
+    }
+    for (const iap of all("inAppPurchases")) {
+      if (["WAITING_FOR_REVIEW", "IN_REVIEW", "APPROVED"].includes(iap.attributes.state)) continue;
+      const versions = all("inAppPurchaseVersions").filter((v) => rel(v, "inAppPurchase")?.id === iap.id);
+      const hasLoc = all("inAppPurchaseLocalizations").some((l) =>
+        versions.some((v) => v.id === rel(l, "version")?.id),
+      );
+      const hasAvailability = all("inAppPurchaseAvailabilities").some((a) => rel(a, "inAppPurchase")?.id === iap.id);
+      const hasPrice = all("inAppPurchasePrices").some((p) => rel(p, "inAppPurchaseV2")?.id === iap.id);
+      const shot = all("inAppPurchaseAppStoreReviewScreenshots").find((s) => rel(s, "inAppPurchaseV2")?.id === iap.id);
+      const complete =
+        hasLoc && hasAvailability && hasPrice && shot?.attributes.assetDeliveryState?.state === "COMPLETE";
+      iap.attributes.state = complete ? "READY_TO_SUBMIT" : "MISSING_METADATA";
+    }
   }
 
   // ── Routing ───────────────────────────────────────────────────────────────
@@ -422,8 +453,8 @@ export function createFakeAsc({
   on("POST", `/v1/subscriptionLocalizations`, create("subscriptionLocalizations", "sloc"));
   on("PATCH", `/v1/subscriptionLocalizations/:id`, patch("subscriptionLocalizations"));
   on("GET", `/v1/subscriptions/:id/pricePoints`, () => ok(all("subscriptionPricePoints")));
-  on("GET", `/v1/subscriptions/:id/prices`, () => {
-    const prices = all("subscriptionPrices");
+  on("GET", `/v1/subscriptions/:id/prices`, (m) => {
+    const prices = all("subscriptionPrices").filter((p) => rel(p, "subscription")?.id === m[1]);
     return ok(
       prices,
       prices.map((p) => get("subscriptionPricePoints", rel(p, "subscriptionPricePoint")?.id)).filter(Boolean),
@@ -458,6 +489,105 @@ export function createFakeAsc({
       }),
     );
   }
+
+  // Creating subscriptions and groups, and introductory offers
+  on("POST", `/v1/subscriptionGroups`, (_m, { body }) => {
+    const g = put("subscriptionGroups", nextId("grp"), body.data.attributes, {
+      ...body.data.relationships,
+      subscriptions: { data: [] },
+    });
+    return created(g);
+  });
+  on("POST", `/v1/subscriptions`, (_m, { body }) => {
+    const sub = put(
+      "subscriptions",
+      nextId("sub"),
+      { ...body.data.attributes, state: "MISSING_METADATA" },
+      body.data.relationships,
+    );
+    const g = get("subscriptionGroups", body.data.relationships.group.data.id);
+    if (g)
+      g.relationships = {
+        ...g.relationships,
+        subscriptions: {
+          data: [...(g.relationships?.subscriptions?.data ?? []), { type: "subscriptions", id: sub.id }],
+        },
+      };
+    return created(sub);
+  });
+  on("GET", `/v1/subscriptions/:id/introductoryOffers`, (m) =>
+    ok(all("subscriptionIntroductoryOffers").filter((o) => rel(o, "subscription")?.id === m[1])),
+  );
+  on("POST", `/v1/subscriptionIntroductoryOffers`, create("subscriptionIntroductoryOffers", "offer"));
+
+  // One-time in-app purchases (API 4.4.1 shapes)
+  on("GET", `/v1/apps/${appId}/inAppPurchasesV2`, (_m, { url }) => {
+    const productId = url.searchParams.get("filter[productId]");
+    return ok(all("inAppPurchases").filter((p) => !productId || p.attributes.productId === productId));
+  });
+  on("POST", `/v2/inAppPurchases`, create("inAppPurchases", "iap", { state: "MISSING_METADATA" }));
+  on("GET", `/v2/inAppPurchases/:id/versions`, (m) =>
+    ok(all("inAppPurchaseVersions").filter((v) => rel(v, "inAppPurchase")?.id === m[1])),
+  );
+  on("POST", `/v1/inAppPurchaseVersions`, (_m, { body }) => {
+    const iapId = body.data.relationships.inAppPurchase.data.id;
+    const n = all("inAppPurchaseVersions").filter((v) => rel(v, "inAppPurchase")?.id === iapId).length + 1;
+    return created(
+      put(
+        "inAppPurchaseVersions",
+        nextId("iapver"),
+        { state: "PREPARE_FOR_SUBMISSION", version: n },
+        body.data.relationships,
+      ),
+    );
+  });
+  on("GET", `/v1/inAppPurchaseVersions/:id/localizations`, (m) =>
+    ok(all("inAppPurchaseLocalizations").filter((l) => rel(l, "version")?.id === m[1])),
+  );
+  on("POST", `/v2/inAppPurchaseLocalizations`, create("inAppPurchaseLocalizations", "iaploc"));
+  on("PATCH", `/v2/inAppPurchaseLocalizations/:id`, patch("inAppPurchaseLocalizations"));
+  on("GET", `/v2/inAppPurchases/:id/inAppPurchaseAvailability`, (m) => {
+    const a = all("inAppPurchaseAvailabilities").find((x) => rel(x, "inAppPurchase")?.id === m[1]);
+    return a ? ok(a) : notFound();
+  });
+  on("POST", `/v1/inAppPurchaseAvailabilities`, create("inAppPurchaseAvailabilities", "iapavail"));
+  on("GET", `/v1/territories`, () =>
+    ok(["USA", "GBR", "DEU", "TUR", "JPN"].map((id) => ({ type: "territories", id, attributes: { currency: "" } }))),
+  );
+  on("GET", `/v2/inAppPurchases/:id/pricePoints`, () =>
+    ok(
+      [
+        ["ipp-999", "9.99"],
+        ["ipp-2999", "29.99"],
+        ["ipp-4999", "49.99"],
+      ].map(([id, price]) => ({ type: "inAppPurchasePricePoints", id, attributes: { customerPrice: price } })),
+    ),
+  );
+  on("GET", `/v1/inAppPurchasePriceSchedules/:id/manualPrices`, (m) =>
+    ok(all("inAppPurchasePrices").filter((p) => rel(p, "inAppPurchaseV2")?.id === m[1])),
+  );
+  on("POST", `/v1/inAppPurchasePriceSchedules`, (_m, { body }) => {
+    const iapId = body.data.relationships.inAppPurchase.data.id;
+    for (const p of all("inAppPurchasePrices"))
+      if (rel(p, "inAppPurchaseV2")?.id === iapId) table("inAppPurchasePrices").delete(p.id);
+    for (const inc of body.included ?? [])
+      put("inAppPurchasePrices", nextId("iapprice"), inc.attributes ?? {}, inc.relationships ?? {});
+    refreshSubscriptionState();
+    return created({ type: "inAppPurchasePriceSchedules", id: iapId, attributes: {} });
+  });
+  on("GET", `/v2/inAppPurchases/:id/appStoreReviewScreenshot`, (m) => {
+    const s = all("inAppPurchaseAppStoreReviewScreenshots").find((x) => rel(x, "inAppPurchaseV2")?.id === m[1]);
+    return s ? ok(s) : notFound();
+  });
+  on("POST", `/v1/inAppPurchaseAppStoreReviewScreenshots`, reserve("inAppPurchaseAppStoreReviewScreenshots", "iaprs"));
+  on("PATCH", `/v1/inAppPurchaseAppStoreReviewScreenshots/:id`, (m, { body }) => {
+    const s = get("inAppPurchaseAppStoreReviewScreenshots", m[1]);
+    if (!s) return notFound();
+    Object.assign(s.attributes, body.data.attributes, { assetDeliveryState: { state: "COMPLETE" } });
+    refreshSubscriptionState();
+    return ok(s);
+  });
+  on("DELETE", `/v1/inAppPurchaseAppStoreReviewScreenshots/:id`, remove("inAppPurchaseAppStoreReviewScreenshots"));
 
   // Review submissions
   on("GET", `/v1/reviewSubmissions`, (_m, { url }) => {
@@ -498,8 +628,12 @@ export function createFakeAsc({
       for (const item of all("reviewSubmissionItems").filter((i) => rel(i, "reviewSubmission")?.id === s.id)) {
         const v = rel(item, "appStoreVersion");
         if (v) /** @type {Resource} */ (get("appStoreVersions", v.id)).attributes.appStoreState = "WAITING_FOR_REVIEW";
-        if (rel(item, "subscriptionVersion"))
-          /** @type {Resource} */ (get("subscriptions", "sub-1")).attributes.state = "WAITING_FOR_REVIEW";
+        const subVersion = get("subscriptionVersions", rel(item, "subscriptionVersion")?.id);
+        const sub = subVersion && get("subscriptions", rel(subVersion, "subscription")?.id);
+        if (sub) sub.attributes.state = "WAITING_FOR_REVIEW";
+        const iapVersion = get("inAppPurchaseVersions", rel(item, "inAppPurchaseVersion")?.id);
+        const iap = iapVersion && get("inAppPurchases", rel(iapVersion, "inAppPurchase")?.id);
+        if (iap) iap.attributes.state = "WAITING_FOR_REVIEW";
       }
     }
     return ok(s);

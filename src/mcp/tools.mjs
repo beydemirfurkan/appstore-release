@@ -395,18 +395,21 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
 
     {
       name: "asc_configure_subscription",
-      title: "Configure a subscription",
+      title: "Configure subscriptions and in-app purchases",
       description:
-        "Write a subscription's localizations, price and App Review paywall screenshot, so it leaves " +
-        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends it with the app version — unless it is the " +
-        "app's first subscription, which Apple requires to be submitted from the website.",
+        "Create any missing subscription plans and one-time purchases from the config, then write their " +
+        "localizations, prices, introductory offers and App Review screenshots, so they leave " +
+        "MISSING_METADATA. Once READY_TO_SUBMIT, asc_submit_for_review sends them with the app version — except the " +
+        "app's first subscription and first in-app purchase, which Apple requires to be submitted from the website.",
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
       inputSchema: input({ appId, configPath, confirm }, ["confirm"]),
       async run(args) {
         const { ctx, refusal } = await contextOrRefusal(args, env);
         if (refusal) return refusal;
-        const res = await runOperation("subscription", ctx);
-        return structured(`${res.status.toUpperCase()} — ${res.message}`, res);
+        const subs = await runOperation("subscription", ctx);
+        const iaps = await runOperation("in-app-purchases", ctx);
+        const text = [subs, iaps].map((r) => `${r.title}: ${r.status.toUpperCase()} — ${r.message}`).join("\n");
+        return structured(text, { subscriptions: subs, inAppPurchases: iaps });
       },
     },
 

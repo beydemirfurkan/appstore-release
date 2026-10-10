@@ -9,7 +9,7 @@
 // Apple says so in as many words — so it is never added by this operation.
 import { Status } from "../core/status.mjs";
 import { getReadinessReport } from "../report/report.mjs";
-import { isFirstSubscription } from "../core/subscriptions.mjs";
+import { isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
 
 /** A draft submission we may add items to and finalize. */
 const DRAFT_STATES = ["READY_FOR_REVIEW", "UNRESOLVED_ISSUES"];
@@ -98,7 +98,18 @@ export async function run(ctx, args = {}) {
       label: `v${version.attributes.versionString}`,
     },
   ];
-  wanted.push(...(await subscriptionItems(ctx, config?.subscription?.productId)));
+  wanted.push(
+    ...(await subscriptionItems(
+      ctx,
+      subscriptionConfigs(config).map((p) => p.productId),
+    )),
+  );
+  wanted.push(
+    ...(await purchaseItems(
+      ctx,
+      purchaseConfigs(config).map((p) => p.productId),
+    )),
+  );
 
   const present = await existingItemIds(client, submission.id);
   const added = [];
@@ -152,38 +163,74 @@ export async function run(ctx, args = {}) {
 }
 
 /**
- * The subscription (and, for a new one, its group) as versioned review items.
- * A subscription already approved or already in review contributes nothing.
+ * Configured subscriptions that are ready, as versioned review items — with
+ * their group's version when the group was never approved. Nothing when the app
+ * has never had a subscription approved: Apple takes the first one from the
+ * website, with the binary.
  *
  * @param {import("../core/context.mjs").Context} ctx
- * @param {string|undefined} productId
+ * @param {string[]} productIds
  */
-async function subscriptionItems({ client, discovery }, productId) {
-  if (!productId) return [];
-  const { sub, group, all } = await discovery.subscription(productId);
-  if (!sub || sub.attributes.state !== "READY_TO_SUBMIT") return [];
-  // A first subscription is attached to the version in the web UI, not here;
-  // the readiness report says so, with the clicks.
-  if (isFirstSubscription(all)) return [];
+async function subscriptionItems({ client, discovery }, productIds) {
+  if (!productIds.length) return [];
+  const r = await client.get(`/v1/apps/${discovery.appId}/subscriptionGroups?include=subscriptions&limit=50`);
+  const all = (r.included ?? []).filter((x) => x.type === "subscriptions");
+  if (isFirstProduct(all)) return [];
 
   const items = [];
-  const groupVersion = group ? await draftVersion(client, "subscriptionGroups", group.id) : null;
-  if (groupVersion) {
-    items.push({
-      relationship: "subscriptionGroupVersion",
-      type: "subscriptionGroupVersions",
-      id: groupVersion.id,
-      label: "subscription group",
-    });
+  for (const productId of productIds) {
+    const sub = all.find((s) => s.attributes.productId === productId);
+    if (!sub || sub.attributes.state !== "READY_TO_SUBMIT") continue;
+    const group = (r.data ?? []).find((g) => (g.relationships?.subscriptions?.data ?? []).some((d) => d.id === sub.id));
+    const groupVersion = group ? await draftVersion(client, "subscriptionGroups", group.id) : null;
+    if (groupVersion && !items.some((i) => i.id === groupVersion.id)) {
+      items.push({
+        relationship: "subscriptionGroupVersion",
+        type: "subscriptionGroupVersions",
+        id: groupVersion.id,
+        label: "subscription group",
+      });
+    }
+    const subVersion = await draftVersion(client, "subscriptions", sub.id);
+    if (subVersion) {
+      items.push({
+        relationship: "subscriptionVersion",
+        type: "subscriptionVersions",
+        id: subVersion.id,
+        label: productId,
+      });
+    }
   }
-  const subVersion = await draftVersion(client, "subscriptions", sub.id);
-  if (subVersion) {
-    items.push({
-      relationship: "subscriptionVersion",
-      type: "subscriptionVersions",
-      id: subVersion.id,
-      label: "subscription",
-    });
+  return items;
+}
+
+/**
+ * Configured one-time purchases that are ready, as versioned review items.
+ * Nothing for an app's first in-app purchase, which Apple takes from the website.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {string[]} productIds
+ */
+async function purchaseItems({ client, discovery }, productIds) {
+  if (!productIds.length) return [];
+  const all = await client.all(`/v1/apps/${discovery.appId}/inAppPurchasesV2?fields[inAppPurchases]=productId,state`, {
+    limit: 200,
+  });
+  if (isFirstProduct(all)) return [];
+  const items = [];
+  for (const productId of productIds) {
+    const iap = all.find((p) => p.attributes?.productId === productId);
+    if (!iap || iap.attributes.state !== "READY_TO_SUBMIT") continue;
+    const versions = await client.all(`/v2/inAppPurchases/${iap.id}/versions`, { limit: 20 });
+    const draft = versions.find((v) => DRAFT_VERSION_STATES.includes(v.attributes?.state));
+    if (draft) {
+      items.push({
+        relationship: "inAppPurchaseVersion",
+        type: "inAppPurchaseVersions",
+        id: draft.id,
+        label: productId,
+      });
+    }
   }
   return items;
 }

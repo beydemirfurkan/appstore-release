@@ -304,3 +304,107 @@ test("an Expo project's store.config.json, eas.json and app.json are used as the
   );
   assert.equal(fake.get("ageRatingDeclarations", "age-1")?.attributes.healthOrWellnessTopics, true);
 });
+
+/** The Wellness project with extra products, against a fake with the given options. */
+async function productsProject(fakeOptions, extra) {
+  const { readFileSync, writeFileSync } = await import("node:fs");
+  const root = mkdtempSync(join(tmpdir(), "asr-e2e-products-"));
+  writeWellnessProject(root);
+  const path = join(root, "appstore.config.json");
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  writeFileSync(path, JSON.stringify(extra(config)));
+  const fake = createFakeAsc(fakeOptions);
+  const env = {
+    ASC_KEY_ID: "ABCDE12345",
+    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+    ASC_P8: testPrivateKey(),
+    ASC_APP_ID: "1234567890",
+  };
+  const run = async (/** @type {string[]} */ ...argv) => {
+    const out = [];
+    const io = {
+      stdout: { write: (s) => out.push(s) },
+      stderr: { write: () => {} },
+      env,
+      cwd: root,
+      fetchImpl: fake.fetchImpl,
+    };
+    return { code: await main([...argv, "--json"], io), json: JSON.parse(out.join("")) };
+  };
+  return { fake, run };
+}
+
+test("several plans, a free trial and a lifetime purchase: created, completed, submitted together", async () => {
+  const { fake, run } = await productsProject({ approvedPurchase: true }, (config) => {
+    const monthly = { ...config.subscription, introOffer: { type: "FREE_TRIAL", duration: "ONE_WEEK" } };
+    const yearly = {
+      productId: "com.example.wellness.pro.yearly",
+      name: "Pro Yearly",
+      period: "ONE_YEAR",
+      localeName: "Pro Yearly",
+      priceAmount: 9.99,
+      reviewScreenshot: "./assets/paywall-1320x2868.png",
+    };
+    const lifetime = {
+      productId: "com.example.wellness.lifetime",
+      name: "Lifetime",
+      localeName: "Lifetime access",
+      localeDescription: "Every feature, forever.",
+      priceAmount: 49.99,
+      reviewScreenshot: "./assets/paywall-1320x2868.png",
+    };
+    const { subscription, ...rest } = config;
+    return { ...rest, subscriptions: [monthly, yearly], inAppPurchases: [lifetime] };
+  });
+
+  const release = await run("release");
+  assert.equal(
+    verdictOf(release.json),
+    "ready",
+    JSON.stringify(
+      release.json.findings.filter((f) => f.severity === "blocker"),
+      null,
+      2,
+    ),
+  );
+  const yearly = fake.all("subscriptions").find((s) => s.attributes.productId === "com.example.wellness.pro.yearly");
+  assert.equal(yearly?.attributes.subscriptionPeriod, "ONE_YEAR", "the missing plan was created");
+  assert.deepEqual(
+    fake
+      .all("subscriptionIntroductoryOffers")
+      .map((o) => [o.attributes.offerMode, o.attributes.duration, o.relationships?.territory]),
+    [["FREE_TRIAL", "ONE_WEEK", undefined]],
+    "a free trial carries no price and no territory",
+  );
+  const lifetime = fake.all("inAppPurchases").find((p) => p.attributes.productId === "com.example.wellness.lifetime");
+  assert.equal(lifetime?.attributes.inAppPurchaseType, "NON_CONSUMABLE");
+  assert.equal(lifetime?.attributes.state, "READY_TO_SUBMIT");
+
+  const writes = fake.mutations().length;
+  await run("release");
+  assert.equal(fake.mutations().length, writes, "a second release sends nothing, products included");
+
+  const submit = await run("submit", "--submit");
+  assert.equal(submit.code, Exit.OK, JSON.stringify(submit.json.results, null, 2));
+  const items = fake.all("reviewSubmissionItems");
+  assert.equal(items.filter((i) => i.relationships?.subscriptionVersion).length, 2, "both plans");
+  assert.equal(items.filter((i) => i.relationships?.inAppPurchaseVersion).length, 1, "and the lifetime purchase");
+});
+
+test("an app's first in-app purchase stops at needs-human, like its first subscription", async () => {
+  const { run } = await productsProject({}, (config) => ({
+    ...config,
+    inAppPurchases: [
+      {
+        productId: "com.example.wellness.lifetime",
+        name: "Lifetime",
+        localeName: "Lifetime access",
+        priceAmount: 49.99,
+        reviewScreenshot: "./assets/paywall-1320x2868.png",
+      },
+    ],
+  }));
+  const release = await run("release");
+  assert.equal(verdictOf(release.json), "needs-human");
+  assert.ok(release.json.findings.some((f) => f.id === "iap.first.ui-only" && f.uiOnly));
+});

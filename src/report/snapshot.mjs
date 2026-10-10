@@ -19,6 +19,7 @@
  * @property {any[]} placements           App Asset Library screenshot placements
  * @property {any} pricing
  * @property {any[]} subscriptions
+ * @property {any[]} inAppPurchases
  * @property {any} reviewDetail
  * @property {any} submission
  * @property {string|null} locale       the primary locale the report is about
@@ -230,6 +231,24 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     [],
   );
 
+  const inAppPurchases = await section(
+    "inAppPurchases",
+    async () => {
+      const r = await client.get(
+        `/v1/apps/${appId}/inAppPurchasesV2?fields[inAppPurchases]=productId,name,state,inAppPurchaseType&limit=200`,
+        { throwOnError: false },
+      );
+      return (r.error ? [] : (r.data ?? [])).map((p) => ({
+        id: p.id,
+        productId: p.attributes?.productId,
+        name: p.attributes?.name,
+        state: p.attributes?.state,
+        type: p.attributes?.inAppPurchaseType,
+      }));
+    },
+    [],
+  );
+
   const reviewDetail = version
     ? await section(
         "reviewDetail",
@@ -280,6 +299,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     placements,
     pricing,
     subscriptions,
+    inAppPurchases,
     reviewDetail,
     submission,
     locale: primary,

@@ -218,3 +218,28 @@ test("$schema and $comment are allowed everywhere; nothing else undeclared is", 
   const ok = validateConfig({ $schema: "https://x", $comment: "note", locale: "en-US", metadata: { $comment: "n" } });
   assert.deepEqual(ok.findings, []);
 });
+
+test("placeholder text and wasted keyword characters are flagged, as warnings", async () => {
+  const { checkSemantics } = await import("../src/core/requirements.mjs");
+  const ids = (metadata) => checkSemantics({ locale: "en-US", metadata }).map((f) => `${f.severity} ${f.id}`);
+
+  assert.deepEqual(
+    ids({ name: "Todo Pro", description: "A todo list that stays out of your way." }),
+    [],
+    "'todo' is a word, not a placeholder",
+  );
+  assert.deepEqual(ids({ description: "Lorem ipsum dolor sit amet." }), [
+    "warning config.metadata.description.placeholder",
+  ]);
+  assert.deepEqual(ids({ promotionalText: "TBD" }), ["warning config.metadata.promotionalText.placeholder"]);
+
+  const wasted = checkSemantics({
+    locale: "en-US",
+    metadata: { name: "Wellness", subtitle: "Small habits", keywords: "habits, sleep,sleep,mood" },
+  }).find((f) => f.id === "config.metadata.keywords.wasted");
+  assert.equal(wasted?.severity, "warning");
+  assert.match(wasted?.detail ?? "", /repeated: sleep/);
+  assert.match(wasted?.detail ?? "", /already in the name or subtitle: habits/);
+  assert.match(wasted?.detail ?? "", /1 space after commas/);
+  assert.deepEqual(ids({ name: "Wellness", keywords: "sleep,mood,journal" }), [], "clean keywords pass");
+});

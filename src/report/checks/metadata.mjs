@@ -1,6 +1,7 @@
 // The textual listing for the locale being prepared.
 
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
+import { checkSemantics } from "../../core/requirements.mjs";
 
 export const section = { id: "metadata", title: "Store metadata" };
 
@@ -12,7 +13,9 @@ const REQUIRED = [
 
 /** @param {{ snapshot: any, config: any }} input */
 export function check({ snapshot, config }) {
-  const out = [];
+  // What the config is about to write is part of readiness too: an emoji the
+  // API will refuse, or a placeholder App Review will.
+  const out = checkSemantics(config);
   if (!snapshot.version) return out;
 
   const wanted = snapshot.locales?.length ? snapshot.locales : snapshot.locale ? [snapshot.locale] : [];

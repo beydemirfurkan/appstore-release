@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com. Needs an App Store Connect API key with the App Manager role. git is used once to fetch the CLI when the skill runs outside a checkout.
 metadata:
   author: Furkan Beydemir
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # App Store Release
@@ -47,6 +47,8 @@ Never put the key id, issuer id or `.p8` into a tool argument or a file you comm
 
 No config yet? `asc init` writes `appstore.config.json` with a `$schema`; fill it from what the user tells you ([references/config-template.json](references/config-template.json) shows every block). `asc validate` checks it offline, without credentials.
 
+**Expo project?** Its `store.config.json` (EAS Metadata) is used as is: on its own it is the config, or name it with `"easMetadata": "./store.config.json"` and add only what EAS Metadata cannot say — screenshots, price, subscriptions, content rights. The app id comes from eas.json's `ascAppId` and the bundle id from app.json, so `ASC_APP_ID` can be left unset.
+
 ## Runbook
 
 ### 1. Orient
@@ -56,22 +58,23 @@ asc doctor      # credentials, openssl, config — touches no app data
 asc check       # the verdict and the ordered plan
 ```
 
-`verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `rejected`, `live`. Exit codes: `0` ready · `4` blocked but fixable by this tool · `5` only a human in App Store Connect can finish.
+`verdict` is one of `ready`, `blocked`, `needs-human`, `in-review`, `approved`, `rejected`, `live`. Exit codes: `0` ready · `4` blocked but fixable by this tool · `5` only a human in App Store Connect can finish · `8` still in review after `check --wait`.
 
 ### 2. Route by finding
 
 Work through `nextActions` in order. When a finding belongs to a focused area, load that skill — it carries the detail this one leaves out:
 
-| Finding ids / situation                                        | Skill or reference                                                       |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `screenshots.*`, "make screenshots", iPhone Duo, iPad sizes    | **asc-screenshots**                                                      |
-| `rating.*`, "what age rating", social media / loot box answers | **asc-age-rating**                                                       |
-| `subscription.*`, paywall, in-app subscription pricing         | **asc-subscriptions**                                                    |
-| verdict `rejected`, `submission.rejected`, "Apple rejected it" | **asc-rejection**                                                        |
-| `version.build.*` with an EAS signing error, expired profile   | **asc-credentials**                                                      |
-| `metadata.*`, `config.*.emoji`, `config.*.too-long`, locales   | [references/metadata.md](references/metadata.md)                         |
-| `account.credentials.*`, `config.missing`                      | [references/setup.md](references/setup.md)                               |
-| any 409 you do not recognise                                   | [references/gotchas.md](references/gotchas.md) — read it before guessing |
+| Finding ids / situation                                                | Skill or reference                                                       |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `screenshots.*`, "make screenshots", iPhone Duo, iPad sizes            | **asc-screenshots**                                                      |
+| `rating.*`, "what age rating", social media / loot box answers         | **asc-age-rating**                                                       |
+| `subscription.*`, `iap.*`, plans, free trials, lifetime unlock         | **asc-subscriptions**                                                    |
+| "send it to TestFlight", testers, beta groups, What to Test            | **asc-testflight**                                                       |
+| verdict `rejected`, `submission.rejected`, "Apple rejected it"         | **asc-rejection**                                                        |
+| `version.build.*` with an EAS signing error, expired profile           | **asc-credentials**                                                      |
+| `metadata.*`, `config.*.emoji`, `.too-long`, `.placeholder`, `.wasted` | [references/metadata.md](references/metadata.md)                         |
+| `account.credentials.*`, `config.missing`                              | [references/setup.md](references/setup.md)                               |
+| any 409 you do not recognise                                           | [references/gotchas.md](references/gotchas.md) — read it before guessing |
 
 If a focused skill is not installed, the reference files here and `asc <command> --help` are enough to proceed.
 
@@ -103,7 +106,9 @@ asc release --dry-run    # show the user exactly what would change
 asc release              # apply it, then a fresh check
 ```
 
-`release` runs attach-build, metadata, pricing, content-rights, age-rating, category, review-info, release-options, screenshots and subscription — each one idempotent. Run any of them alone by name.
+`release` runs attach-build, metadata, pricing, content-rights, age-rating, category, review-info, release-options, screenshots, subscription and in-app-purchases — each one idempotent, each skipped when the config says nothing about it. Run any of them alone by name.
+
+Screenshots from a generator? Point `"screenshots": { "from": "./exports" }` at its output folder: every PNG is grouped into device sets by pixel size.
 
 ### 6. Hand off what Apple keeps in the UI
 
@@ -126,7 +131,9 @@ asc submit --submit
 
 **Ask the user before running it.** `submit` computes the readiness report first and refuses unless the verdict is `ready`. A configured subscription is submitted together with the version when the app already has an approved one; a first subscription is submitted from the website (step 6). If the user insists on submitting with blockers, `--force` exists; tell them Apple will reject it. Afterwards `asc status` should show the version as `WAITING_FOR_REVIEW`.
 
-On rejection, switch to **asc-rejection**.
+To follow the review: `asc check --wait 30` re-checks while the version is in review (exit `0` approved, `5` rejected, `8` still waiting). Review usually takes hours — prefer checking again later over waiting long.
+
+On rejection, switch to **asc-rejection**: the fix, then `asc submit --submit --resolved`.
 
 ## MCP
 

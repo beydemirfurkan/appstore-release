@@ -72,13 +72,48 @@
   "credentials": {
     "outputDir": "./secrets"
   },
-  "subscription": {
-    "productId": "app_monthly",
-    "groupDisplayName": "Premium",
-    "localeName": "Monthly Premium",
-    "localeDescription": "Unlock all premium features.",
-    "priceTerritory": "USA",
-    "priceAmount": 4.99,
-    "reviewScreenshot": "./assets/paywall.png"
+  "subscriptions": [
+    {
+      "productId": "app_monthly",
+      "groupDisplayName": "Premium",
+      "localeName": "Monthly Premium",
+      "localeDescription": "Unlock all premium features.",
+      "priceTerritory": "USA",
+      "priceAmount": 4.99,
+      "reviewScreenshot": "./assets/paywall.png",
+      "introOffer": {
+        "type": "FREE_TRIAL",
+        "duration": "ONE_WEEK"
+      }
+    }
+  ],
+  "inAppPurchases": [
+    {
+      "productId": "app_lifetime",
+      "name": "Lifetime",
+      "localeName": "Lifetime access",
+      "localeDescription": "Every premium feature, forever.",
+      "priceAmount": 49.99,
+      "reviewScreenshot": "./assets/paywall.png"
+    }
+  ],
+  "testflight": {
+    "whatToTest": "The new onboarding and reminders.",
+    "groups": [
+      {
+        "name": "Team",
+        "internal": true
+      },
+      "Beta"
+    ],
+    "testers": [
+      {
+        "email": "friend@example.com",
+        "group": "Beta"
+      }
+    ],
+    "description": "A short description testers see in TestFlight.",
+    "feedbackEmail": "beta@example.com",
+    "usesNonExemptEncryption": false
   }
 }

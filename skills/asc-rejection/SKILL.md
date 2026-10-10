@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). Reading the rejection text needs the user, because Apple has no API for it.
 metadata:
   author: Furkan Beydemir
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # Rejection → fix → resubmit
@@ -58,9 +58,15 @@ If the user believes the rejection is wrong, say so politely with specifics, or 
 ## 5. Resubmit
 
 ```bash
-asc check            # must be ready again
-asc submit --submit  # ask the user first
+asc release                    # if the fix was metadata, screenshots, rating or products
+asc submit --submit --resolved # ask the user first
 ```
+
+`--resolved` is the user's word that what App Review asked for is addressed — the API cannot read Resolution Center to check. It resubmits the same review submission, marking its rejected items resolved. Without it, `submit` stops and says to read Resolution Center; with other blockers still open, it says to run `release` first.
+
+A binary fix means a new build first (`eas build`, `eas submit`, then `asc attach-build`).
+
+Then follow it: `asc check --wait 30` — exit `0` approved, `5` rejected again, `8` still in review.
 
 ## Avoiding the next one
 

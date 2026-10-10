@@ -59,6 +59,8 @@ export function createTextSink(stream, { verbose = false, quiet = false, style =
         // The readiness report has just printed itself, verdict first; a status
         // line after it ("✓ … blocked") would only contradict it.
         if (id === "check" && !quiet) break;
+        // A step with nothing configured has nothing to say, unless asked.
+        if (status === Status.SKIPPED && !verbose) break;
         const icon = (paint[status] ?? s.dim)(ICON[status] ?? "•");
         const name = title.padEnd(TITLE_WIDTH);
         const room = Math.max(20, width - TITLE_WIDTH - 6);

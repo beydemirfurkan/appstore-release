@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). The subscription product itself must already exist in App Store Connect.
 metadata:
   author: Furkan Beydemir
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # Subscriptions
@@ -22,7 +22,7 @@ node <skill-dir>/scripts/asc.mjs <command> [flags]
 
 ## 1. Prerequisites the user does once
 
-- The subscription **group** and **product** exist in App Store Connect (Monetization → Subscriptions), with a product id the app's code uses. Ask for the product id; do not invent one.
+- A **product id** the app's code uses. Ask for it; do not invent one. The plan and its group are created from the config when they do not exist yet (give `name` and `period`), or can be made by hand in App Store Connect (Monetization → Subscriptions).
 - The **Paid Apps Agreement** is active (Business → Agreements). Without it, nothing can be priced or sold.
 - The app's code uses StoreKit 2 (or RevenueCat, etc.) with that product id, and the paywall shows price, period, what it unlocks, auto-renewal terms, and links to the terms of use and privacy policy (guideline 3.1.2).
 
@@ -44,6 +44,26 @@ node <skill-dir>/scripts/asc.mjs <command> [flags]
 - `reviewScreenshot` is a capture of the paywall (any iPhone screenshot size, no alpha). See the **asc-screenshots** skill for producing it.
 - Localizations are written for the config's `locale` from `localeName` / `localeDescription` / `groupDisplayName`, and for every locale in `subscription.localizations` (`{ "tr": { "name": "…", "description": "…", "groupName": "…" } }`), which inherits what it leaves out. A changed name is updated, not only created.
 
+### Several plans, a free trial, a lifetime unlock
+
+```json
+"subscriptions": [
+  { "productId": "pro_monthly", "name": "Pro Monthly", "period": "ONE_MONTH", "group": "Pro", "groupLevel": 2,
+    "localeName": "Pro Monthly", "priceAmount": 4.99, "reviewScreenshot": "./assets/paywall.png",
+    "introOffer": { "type": "FREE_TRIAL", "duration": "ONE_WEEK" } },
+  { "productId": "pro_yearly", "name": "Pro Yearly", "period": "ONE_YEAR", "group": "Pro", "groupLevel": 1,
+    "localeName": "Pro Yearly", "priceAmount": 39.99, "reviewScreenshot": "./assets/paywall.png" }
+],
+"inAppPurchases": [
+  { "productId": "lifetime", "name": "Lifetime", "localeName": "Lifetime access",
+    "localeDescription": "Every feature, forever.", "priceAmount": 79.99, "reviewScreenshot": "./assets/paywall.png" }
+]
+```
+
+- `subscriptions` (a list) replaces `subscription` (one object); each entry has the same fields. A plan or group that does not exist is created from `name`, `period` and `group`. Same group = the user can switch between plans; `groupLevel` 1 is the top tier.
+- `introOffer`: `FREE_TRIAL` (no price), `PAY_AS_YOU_GO` (`periods` × discounted price) or `PAY_UP_FRONT`, with a `duration` from `THREE_DAYS` to `ONE_YEAR`. Paid offers are priced in `priceTerritory` only. An existing offer of the same shape is left alone.
+- `inAppPurchases`: one-time purchases, `NON_CONSUMABLE` (a lifetime unlock) by default. Created when missing, then localized, made available everywhere, priced, and given its review screenshot. `asc in-app-purchases` runs them alone.
+
 ## 3. Apply
 
 ```bash
@@ -60,7 +80,7 @@ asc submit --submit      # ask the user first — this is irreversible
 
 **First subscription of the app?** `check` reports `subscription.first.ui-only`. Apple requires it to be submitted from the website with the binary: version page → In-App Purchases and Subscriptions → Select → the product → Add for Review → Submit to App Review. Do not try to work around it.
 
-**Any later subscription:** `submit` adds its `subscriptionVersion` (the versioned model from ASC API 4.4.1) to the same review submission as the `appStoreVersion`, then submits.
+**Any later subscription or in-app purchase:** `submit` adds its version (`subscriptionVersion`, `inAppPurchaseVersion` — the versioned model from ASC API 4.4.1) to the same review submission as the `appStoreVersion`, then submits. The app's **first in-app purchase** follows the same rule as its first subscription: website, with the binary (`iap.first.ui-only`).
 
 Afterwards `asc status` should show the version and the subscription as `WAITING_FOR_REVIEW`.
 

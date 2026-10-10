@@ -7,7 +7,7 @@ Everything the [README](../README.md) leaves out: every install path, setup for 
 - [Updated for iOS 27](#updated-for-ios-27)
 - [What Apple keeps in the UI](#what-apple-keeps-in-the-ui)
 - [Quick start with a real app](#quick-start-with-a-real-app)
-- [Commands](#commands) · [MCP server](#mcp-server) · [Safety](#safety) · [Architecture](#architecture) · [Requirements](#requirements) · [Contributing](#contributing)
+- [The config, by feature](#the-config-by-feature) · [Commands](#commands) · [MCP server](#mcp-server) · [Safety](#safety) · [Architecture](#architecture) · [Requirements](#requirements) · [Contributing](#contributing)
 
 ## Every way to install
 
@@ -88,33 +88,51 @@ appstore-release submit --submit     # refuses unless the verdict is ready
 
 (`appstore-release` is `node /path/to/src/cli.mjs`: symlink it, alias it, or spell it out.)
 
+## The config, by feature
+
+| You want                          | Config                                                             | Notes                                                               |
+| --------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| Listing in several languages      | `metadata` + `locales: { "tr": {…} }`                              | each locale inherits what it leaves out                             |
+| An Expo project's EAS Metadata    | `"easMetadata": "./store.config.json"`, or just the file           | ours wins on overlap; app id from eas.json, bundle id from app.json |
+| Screenshots from any generator    | `"screenshots": { "from": "./exports" }`                           | grouped by pixel size into iPhone, iPad, Duo sets                   |
+| Explicit device sets / iPhone Duo | `screenshots.sets: [{ dir, displayType? , placementGroup? }]`      | `screenshots --list-groups` prints Apple's groups                   |
+| Several subscription plans        | `subscriptions: [{ productId, name, period, group, … }]`           | created when missing; `subscription` (one) still works              |
+| A free trial or intro price       | `introOffer: { type, duration, periods?, priceAmount? }` on a plan | `FREE_TRIAL`, `PAY_AS_YOU_GO`, `PAY_UP_FRONT`                       |
+| A lifetime unlock                 | `inAppPurchases: [{ productId, name, … }]`                         | `NON_CONSUMABLE` by default                                         |
+| TestFlight                        | `testflight: { whatToTest, groups, testers, … }`                   | run with `appstore-release testflight`                              |
+| Release timing                    | `release: { type, earliestDate?, phased? }`                        | `MANUAL`, `AFTER_APPROVAL`, `SCHEDULED`                             |
+
+Every key is in the [JSON Schema](../schemas/config.schema.json), and the [template](../skills/appstore-release/references/config-template.json) shows them together.
+
 ## Commands
 
-| Command                    | What it does                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| `init` `schema` `validate` | scaffold a config, print its JSON Schema, check it offline (no credentials needed)  |
-| `doctor`                   | verify credentials, `openssl`, Node and config without touching app data            |
-| `status`                   | full read-only inventory                                                            |
-| `check`                    | readiness report: verdict, findings, ordered next actions                           |
-| `release`                  | the whole listing pipeline, then a check                                            |
-| `new-version [x.y.z]`      | open the next version when every version is live                                    |
-| `attach-build`             | attach the newest VALID build for this version (or `--build <n>`)                   |
-| `metadata`                 | name, subtitle, description, keywords, promo text, URLs, in every configured locale |
-| `pricing`                  | price schedule (free or paid, nearest price point) and copyright                    |
-| `content-rights`           | third-party content declaration                                                     |
-| `age-rating`               | the full age-rating declaration                                                     |
-| `category`                 | primary and secondary category                                                      |
-| `review-info`              | App Review contact and demo account                                                 |
-| `release-options`          | manual, after approval, scheduled, phased release                                   |
-| `screenshots`              | diff, then upload; `--list-groups`, `--no-prune`                                    |
-| `subscription`             | localizations, price, paywall review screenshot                                     |
-| `submit --submit`          | submit the version and any subscription that needs review                           |
-| `credentials`              | distribution certificate and provisioning profile (fixes stale EAS credentials)     |
-| `mcp`                      | run the MCP server on stdio                                                         |
+| Command                    | What it does                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `init` `schema` `validate` | scaffold a config, print its JSON Schema, check it offline (no credentials needed)               |
+| `doctor`                   | verify credentials, `openssl`, Node and config without touching app data                         |
+| `status`                   | full read-only inventory                                                                         |
+| `check`                    | readiness report: verdict, findings, ordered next actions; `--wait <min>` follows a review       |
+| `release`                  | the whole listing pipeline, then a check                                                         |
+| `new-version [x.y.z]`      | open the next version when every version is live                                                 |
+| `attach-build`             | attach the newest VALID build for this version (or `--build <n>`)                                |
+| `metadata`                 | name, subtitle, description, keywords, promo text, URLs, in every configured locale              |
+| `pricing`                  | price schedule (free or paid, nearest price point) and copyright                                 |
+| `content-rights`           | third-party content declaration                                                                  |
+| `age-rating`               | the full age-rating declaration                                                                  |
+| `category`                 | primary and secondary category                                                                   |
+| `review-info`              | App Review contact and demo account                                                              |
+| `release-options`          | manual, after approval, scheduled, phased release                                                |
+| `screenshots`              | diff, then upload; `--list-groups`, `--no-prune`                                                 |
+| `subscription`             | plans (created when missing), localizations, price, intro offer, review screenshot               |
+| `in-app-purchases`         | one-time purchases (created when missing): localizations, availability, price, review screenshot |
+| `submit --submit`          | submit the version with any plans and purchases that need review; `--resolved` after a rejection |
+| `testflight`               | export compliance, What to Test, beta groups, testers, beta app review                           |
+| `credentials`              | distribution certificate and provisioning profile (fixes stale EAS credentials)                  |
+| `mcp`                      | run the MCP server on stdio                                                                      |
 
 `appstore-release <command> --help` lists a command's own flags. Global flags: `--json` (one JSON document on stdout), `--dry-run`, `--config`, `--project-root`, `--app-id`, `--verbose`, `--quiet`, `--exit-zero`.
 
-**Exit codes are designed for scripts:** `0` ok · `2` usage · `3` config/credentials · `4` blocked but fixable · `5` only a human in App Store Connect can finish. That makes `appstore-release check && appstore-release submit --submit` safe in CI.
+**Exit codes are designed for scripts:** `0` ok · `2` usage · `3` config/credentials · `4` blocked but fixable · `5` only a human in App Store Connect can finish · `8` still in review when `check --wait` ran out of time. That makes `appstore-release check && appstore-release submit --submit` safe in CI.
 
 ## MCP server
 
@@ -139,19 +157,19 @@ Nothing to install: `npx` fetches it from GitHub on first use (no npm package in
 
 Pin a release with `github:beydemirfurkan/appstore-release#v3.0.0`. From a clone, use `"command": "node", "args": ["/abs/path/to/appstore-release/src/mcp/server.mjs"]` instead.
 
-| Tool                         | Read-only | Purpose                                                  |
-| ---------------------------- | --------- | -------------------------------------------------------- |
-| `asc_readiness_report`       | ✓         | verdict, findings, ordered next actions (**start here**) |
-| `asc_app_overview`           | ✓         | inventory of the app's current state                     |
-| `asc_list_apps`              | ✓         | find the numeric app id from a name or bundle id         |
-| `asc_validate_config`        | ✓         | check a config, with no network and no credentials       |
-| `asc_plan_release`           | ✓         | dry-run the pipeline and return the diff                 |
-| `asc_open_next_version`      |           | create the next version when every version is live       |
-| `asc_apply_release`          |           | write the listing (never prunes screenshots)             |
-| `asc_upload_screenshots`     |           | diff, then upload                                        |
-| `asc_configure_subscription` |           | localizations, price, review screenshot                  |
-| `asc_submit_for_review`      |           | irreversible; refuses unless the verdict is ready        |
-| `asc_generate_credentials`   |           | off unless the operator opts in                          |
+| Tool                         | Read-only | Purpose                                                                                  |
+| ---------------------------- | --------- | ---------------------------------------------------------------------------------------- |
+| `asc_readiness_report`       | ✓         | verdict, findings, ordered next actions (**start here**); `waitMinutes` follows a review |
+| `asc_app_overview`           | ✓         | inventory of the app's current state                                                     |
+| `asc_list_apps`              | ✓         | find the numeric app id from a name or bundle id                                         |
+| `asc_validate_config`        | ✓         | check a config, with no network and no credentials                                       |
+| `asc_plan_release`           | ✓         | dry-run the pipeline and return the diff                                                 |
+| `asc_open_next_version`      |           | create the next version when every version is live                                       |
+| `asc_apply_release`          |           | write the listing (never prunes screenshots)                                             |
+| `asc_upload_screenshots`     |           | diff, then upload                                                                        |
+| `asc_configure_subscription` |           | subscriptions and in-app purchases from the config                                       |
+| `asc_submit_for_review`      |           | irreversible; refuses unless ready; `resolved` after a rejection                         |
+| `asc_generate_credentials`   |           | off unless the operator opts in                                                          |
 
 Every mutating tool requires `confirm: true`, which forces a two-turn handshake that the host shows the user. Every skill and reference is also served as a resource: `appstore-release://skills/<name>`, plus `://gotchas`, `://runbook`, `://config-schema` and `://config-template`.
 
@@ -202,4 +220,4 @@ if (report.verdict === "ready") await runPipeline(undefined, ctx);
 
 `npm ci && npm run verify` runs typecheck, format, schema, manifests, the distribution and skill gates, and the tests. There is no build step: the files that ship are the files you edit. `npm run media` re-records the GIFs from the real CLI.
 
-Issues and PRs are welcome, especially new gotchas, new checks, and the roadmap: accessibility nutrition labels, App Store version webhooks to follow review status, and app previews through the asset library. Keep operations idempotent and config-driven per [the contract](../src/ops/_contract.md), and add a test.
+Issues and PRs are welcome, especially new gotchas, new checks, and the roadmap: accessibility nutrition labels, app previews through the asset library, promotional offers and offer codes, and replying to customer reviews. Keep operations idempotent and config-driven per [the contract](../src/ops/_contract.md), and add a test.

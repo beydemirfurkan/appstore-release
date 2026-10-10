@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.1.0
+
+Competitor research, then the gaps that mattered most to indie and Expo developers working with agents — and one correction to 3.0.0.
+
+### Fixed
+
+- **An app's first subscription is submitted from the website.** 3.0.0 said versioned review items (API 4.4.1) made a first subscription submittable by API. Apple's own article says: _"Submit your first subscription together with an app binary submission through appstoreconnect.apple.com. For subsequent subscriptions, submit using the API endpoints."_ `check` reports it (`subscription.first.ui-only`, and `iap.first.ui-only` for a first in-app purchase) with the clicks; later ones are submitted by API.
+- **Version state is read from `appVersionState`**, which replaced the deprecated `appStoreState`; the old names are translated.
+- An app with no subscription configured failed the `subscription` pipeline step for want of a price.
+- A re-run of `submit` could add the version to the submission a second time (409): its items were read without `include`, so their ids never came back.
+
+### Added
+
+- **Several subscription plans** (`subscriptions: [...]`), created with their group when missing; **introductory offers** — a free trial or a discounted first period (`introOffer`).
+- **One-time in-app purchases** (`inAppPurchases: [...]`, a lifetime unlock by default): created, localized, made available, priced and given their review screenshot, using the non-deprecated API 4.4.1 shapes. New `in-app-purchases` pipeline step.
+- **TestFlight** (`appstore-release testflight`): export compliance, What to Test, internal and external groups, testers by email, the beta description and review contact, and beta app review. New `asc-testflight` skill.
+- **Follow a review:** `check --wait <minutes>` (exit `0` approved, `5` rejected, `8` still waiting), a new `approved` verdict, and `waitMinutes` on the MCP readiness tool.
+- **The rejection loop:** `submit --submit --resolved` resubmits a rejected version, marking its items resolved.
+- **Expo projects as they are:** `store.config.json` (EAS Metadata) is translated and used — on its own or under `easMetadata` — with the app id from eas.json and the bundle id from app.json.
+- **`screenshots.from`:** point it at any screenshot generator's output; PNGs are grouped into device sets by pixel size.
+- **Listing lints:** placeholder text (Guideline 2.1) and wasted keyword characters.
+- **A terminal report you can read at a glance:** colour, one line per section, and a plan that collapses to a single `release` when that fixes everything. Run the CLI and the MCP server with `npx github:beydemirfurkan/appstore-release`, without cloning or an npm package.
+
+### Still unverified against a live account
+
+App Asset Library uploads, versioned subscription and in-app purchase submission, introductory offers without a territory, and TestFlight are built from Apple's documentation and tested against a fake App Store Connect that follows it. Run `--dry-run` first on a real app.
+
 ## 3.0.0
 
 Updated for iOS 27 and App Store Connect API 4.4.1–4.5.1, split into agent skills, and — most importantly — able to finish a submission end to end, which 2.1.0 could not.

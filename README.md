@@ -39,11 +39,13 @@ The demo runs against a local stand-in for App Store Connect, so nothing leaves 
 
 **`check`** reads the whole app and returns a verdict with an ordered plan. Each finding says whether the tool can fix it or only you can.
 
-**`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscription. It is idempotent; a second run sends nothing.
+**`release`** writes the listing: build, metadata in every locale, price, age rating, screenshots, subscriptions and in-app purchases. It is idempotent; a second run sends nothing.
 
-**`submit`** sends the version, with any new subscription. It refuses unless `check` says ready.
+**`submit`** sends the version with any new plans and purchases, and refuses unless `check` says ready. `check --wait` then follows the review to its outcome.
 
-Apple keeps two things in its web UI: the App Privacy label and an app's first subscription. For those, `check` tells you exactly where to click.
+Apple keeps two things in its web UI: the App Privacy label and an app's first subscription or in-app purchase. For those, `check` tells you exactly where to click.
+
+Using Expo? Your `store.config.json`, `eas.json` and `app.json` are read as they are.
 
 ## Skills
 
@@ -51,9 +53,10 @@ Apple keeps two things in its web UI: the App Privacy label and an app's first s
 
 - **asc-screenshots**: exact sizes, iPhone Duo, iPad
 - **asc-age-rating**: the 2026 questionnaire
-- **asc-subscriptions**: pricing, paywall screenshot, first submission
+- **asc-subscriptions**: plans, free trials, lifetime purchases
 - **asc-rejection**: read the reviewer's message, fix, resubmit
 - **asc-credentials**: EAS certificates and provisioning profiles
+- **asc-testflight**: groups, testers, What to Test, beta review
 
 ## Also runs as
 

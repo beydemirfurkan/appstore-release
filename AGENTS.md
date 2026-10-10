@@ -15,14 +15,15 @@ Load the skill that matches the task. Each is self-contained under `skills/<name
 | [`appstore-release`](skills/appstore-release/SKILL.md)   | The whole submission: readiness check → fix → listing → submit. Start here.    |
 | [`asc-screenshots`](skills/asc-screenshots/SKILL.md)     | Sizes (6.9", iPhone Duo, 13" iPad), producing images, App Asset Library upload |
 | [`asc-age-rating`](skills/asc-age-rating/SKILL.md)       | The age-rating questionnaire, 13+/16+/18+ tiers, social media questions        |
-| [`asc-subscriptions`](skills/asc-subscriptions/SKILL.md) | Subscription metadata, price, paywall screenshot, versioned submission         |
+| [`asc-subscriptions`](skills/asc-subscriptions/SKILL.md) | Plans, free trials, lifetime purchases: metadata, price, review submission     |
+| [`asc-testflight`](skills/asc-testflight/SKILL.md)       | TestFlight: groups, testers, What to Test, beta review                         |
 | [`asc-rejection`](skills/asc-rejection/SKILL.md)         | Rejection → guideline → fix → reply → resubmit                                 |
 | [`asc-credentials`](skills/asc-credentials/SKILL.md)     | EAS signing: distribution certificate and App Store profile                    |
 
 Install them into your agent:
 
 ```bash
-npx skills add beydemirfurkan/appstore-release            # all six
+npx skills add beydemirfurkan/appstore-release            # all seven
 npx skills add beydemirfurkan/appstore-release -s asc-screenshots -a codex
 ```
 

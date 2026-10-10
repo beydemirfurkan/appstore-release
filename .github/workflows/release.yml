@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # GitHub OIDC login to the MCP Registry, scoped to io.github.beydemirfurkan/*
 
 jobs:
   release:
@@ -23,8 +24,26 @@ jobs:
           tag="${GITHUB_REF_NAME#v}"
           pkg="$(node -p 'require("./package.json").version')"
           [ "$tag" = "$pkg" ] || { echo "tag $tag != package.json $pkg"; exit 1; }
-      # Distribution is the repository itself: this package is not published to
-      # any registry, and it needs no install step to run.
-      - run: gh release create "$GITHUB_REF_NAME" --generate-notes
+
+      # Distribution is the repository itself — no npm package, no install step.
+      # The one artifact is the MCP server as an MCPB bundle, which is also how
+      # it reaches the MCP Registry without a package registry.
+      - name: Build the MCPB bundle and server.json
+        run: node scripts/build-mcpb.mjs
+
+      - name: Release notes from the CHANGELOG section for this version
+        run: |
+          awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{on=1;next} /^## /{if(on)exit} on' CHANGELOG.md > dist/notes.md
+          test -s dist/notes.md
+
+      - name: Create the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file dist/notes.md dist/appstore-release.mcpb dist/server.json
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Publish to the MCP Registry
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          cd dist
+          ../mcp-publisher login github-oidc
+          ../mcp-publisher publish

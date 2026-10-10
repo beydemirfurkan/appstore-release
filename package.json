@@ -1,7 +1,7 @@
 {
   "name": "appstore-release",
-  "version": "2.1.0",
-  "description": "Ship an iOS app to App Store review end-to-end via the App Store Connect API \u2014 an opinionated, idempotent submission pipeline with a readiness report, for humans and AI agents.",
+  "version": "3.0.0",
+  "description": "Ship an iOS app to App Store review end to end over the App Store Connect API — agent skills, an MCP server and a CLI around a readiness report and an idempotent pipeline. Updated for iOS 27.",
   "keywords": [
     "app-store",
     "app-store-connect",
@@ -58,7 +58,10 @@
     "schema:validate": "node scripts/validate-schema.mjs",
     "verify": "npm run typecheck && npm run format:check && npm run schema:validate && npm run manifests:check && npm run check:dist && npm run check:skills && npm test",
     "check:dist": "node scripts/check-distribution.mjs",
-    "check:skills": "node scripts/check-skills.mjs"
+    "check:skills": "node scripts/check-skills.mjs",
+    "media": "node scripts/media.mjs",
+    "demo:server": "node scripts/demo/server.mjs",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",

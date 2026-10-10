@@ -1,0 +1,10 @@
+{
+  "name": "appstore-release-promo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.8.145 preview",
+    "check": "npx --yes hyperframes@0.8.145 check",
+    "render": "node render.mjs"
+  }
+}

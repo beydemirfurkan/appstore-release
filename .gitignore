@@ -22,3 +22,9 @@ node_modules/
 # Build / tooling
 types/
 *.tgz
+
+# Rendered media (promo video, square cut) — published as release assets, not committed
+dist/
+docs/media/video/.hyperframes/
+docs/media/video/renders/
+docs/media/promo-teaser.gif

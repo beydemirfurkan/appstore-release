@@ -161,12 +161,18 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   const results = ctx.log.results();
   const findings = [...ctx.findings, ...results.flatMap((r) => r.findings ?? [])];
 
-  const manual = results.filter((r) => r.status === Status.MANUAL);
+  // The readiness report already printed its findings and its plan; printing
+  // them again underneath is noise. Everything else an operation found still shows.
+  const reported = new Set(results.filter((r) => r.id === "check").flatMap((r) => (r.findings ?? []).map((f) => f.id)));
+  const manual = results.filter((r) => r.status === Status.MANUAL && r.id !== "check");
   if (manual.length) {
     ctx.log.section("Manual steps required (Apple has no API for these)");
     manual.forEach((m, i) => ctx.log.info(`${i + 1}. ${m.title} — ${m.message}`));
   }
-  renderFindings(humanStream, findings);
+  renderFindings(
+    humanStream,
+    findings.filter((f) => !reported.has(f.id)),
+  );
 
   const code = exitCodeFor(results, findings);
   if (globals.json) {

@@ -3,6 +3,7 @@
 
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 import { isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../../core/products.mjs";
+import { resolveLocales } from "../../core/locales.mjs";
 
 export const section = { id: "subscription", title: "Purchases" };
 
@@ -17,9 +18,63 @@ const FIRST_PRODUCT_CLICKS = (/** @type {string} */ productId) => [
   "Submit to App Review",
 ];
 
+/** Apple's standard EULA, which any listing may link to instead of its own terms. */
+const STANDARD_EULA = "apple.com/legal/internet-services/itunes/dev/stdeula";
+/** "Terms of Use" and its usual names, in the languages listings are most often written in. */
+const TERMS_RE =
+  /terms of (use|service)|\bEULA\b|nutzungsbedingungen|conditions (générales )?d['’]utilisation|términos (de uso|y condiciones)|termini (d['’]uso|di servizio)|termos de uso|kullanım koşulları|gebruiksvoorwaarden|利用規約|使用条款|服務條款|이용약관/i;
+
+/** @param {unknown} text */
+const hasTermsLink = (text) =>
+  typeof text === "string" && (text.includes(STANDARD_EULA) || (TERMS_RE.test(text) && /https?:\/\//.test(text)));
+
+/**
+ * Guideline 3.1.2: an auto-renewing subscription's "metadata must include links
+ * to your Terms of Use and Privacy Policy". The privacy policy URL is a required
+ * field already; the terms link is either a custom EULA in App Store Connect or a
+ * link in the description.
+ *
+ * @param {any} snapshot @param {any} config
+ */
+function termsLinkFinding(snapshot, config) {
+  if (!subscriptionConfigs(config).length && !snapshot.subscriptions?.length) return [];
+  // Unknown is not missing: say nothing rather than guess.
+  if (!snapshot.eula || snapshot.eula.custom) return [];
+  const fromConfig = resolveLocales(config ?? {}).map(({ locale, metadata }) => ({
+    locale,
+    text: metadata.description,
+  }));
+  const listings = fromConfig.length
+    ? fromConfig
+    : (snapshot.localizations ?? [])
+        .filter((/** @type {any} */ l) => l.detailed)
+        .map((/** @type {any} */ l) => ({ locale: l.attributes?.locale, text: l.attributes?.description }));
+  const without = listings.filter((l) => !hasTermsLink(l.text)).map((l) => l.locale);
+  if (!without.length) return [];
+  return [
+    finding({
+      id: "subscription.terms-link.missing",
+      severity: Severity.WARNING,
+      category: Category.CONFIG,
+      title: "No Terms of Use link for the subscription",
+      detail:
+        `Guideline 3.1.2: a subscription's metadata must link to the Terms of Use (EULA) and the privacy policy. ` +
+        `There is no custom EULA in App Store Connect, and the description has no terms link` +
+        `${listings.length > 1 ? ` in: ${without.join(", ")}` : ""}.`,
+      fixOwner: FixOwner.CLI,
+      fix:
+        `Add a line to the description, e.g. "Terms of Use: https://www.${STANDARD_EULA}/", then run metadata — ` +
+        "or set a custom EULA in App Store Connect (App Information → License Agreement).",
+      fixCommand: "appstore-release metadata",
+      guideline: "3.1.2",
+      docs: "references/gotchas.md#subscriptions--iaps",
+    }),
+  ];
+}
+
 /** @param {{ snapshot: any, config: any }} input */
 export function check({ snapshot, config }) {
-  const out = [];
+  const out = [...termsLinkFinding(snapshot, config)];
   const kinds = [
     {
       kind: "subscription",

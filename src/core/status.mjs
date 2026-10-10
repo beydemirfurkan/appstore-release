@@ -106,3 +106,20 @@ export function pickEditableAppInfo(infos) {
   const stateOf = (/** @type {T} */ i) => i.attributes?.state ?? i.attributes?.appStoreState;
   return infos.find((i) => !LIVE_APP_INFO_STATES.includes(stateOf(i))) ?? infos[0] ?? null;
 }
+
+/**
+ * True when the app has never had another version on this platform. That, and
+ * not "1.0" or PREPARE_FOR_SUBMISSION (every unsubmitted update is in that state
+ * too), is what Apple means by a first version: the one where whatsNew cannot be
+ * set, and the only one where it may be left out.
+ *
+ * @param {any[]} versions   every appStoreVersion of the app
+ * @param {any} version      the one being prepared
+ */
+export function isFirstVersion(versions, version) {
+  if (!version) return false;
+  const platform = version.attributes?.platform;
+  return !versions.some(
+    (v) => v.id !== version.id && (!platform || !v.attributes?.platform || v.attributes.platform === platform),
+  );
+}

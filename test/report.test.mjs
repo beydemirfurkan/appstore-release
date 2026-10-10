@@ -6,6 +6,7 @@ import { getAppSnapshot } from "../src/report/snapshot.mjs";
 import { createContext } from "../src/core/context.mjs";
 import { runOperation } from "../src/index.mjs";
 import { Severity } from "../src/core/findings.mjs";
+import { isFirstVersion } from "../src/core/status.mjs";
 import { createMockAsc, readyToPrepareRoutes, testCredentials } from "./helpers/mock-asc.mjs";
 
 /** A snapshot with everything in order; each test spoils one thing. */
@@ -42,7 +43,13 @@ function healthySnapshot(overrides = {}) {
       {
         id: "l1",
         detailed: true,
-        attributes: { locale: "en-US", description: "d", keywords: "k", supportUrl: "https://e.com" },
+        attributes: {
+          locale: "en-US",
+          description: "d",
+          keywords: "k",
+          supportUrl: "https://e.com",
+          whatsNew: "Fixes",
+        },
       },
     ],
     screenshotSets: [
@@ -328,4 +335,61 @@ test("colour is on for a terminal, off for pipes, and NO_COLOR / FORCE_COLOR win
   assert.equal(createStyle({ isTTY: true }, { NO_COLOR: "" }).enabled, false);
   assert.equal(createStyle({ isTTY: false }, { FORCE_COLOR: "1" }).enabled, true);
   assert.equal(createStyle({ isTTY: true }, { FORCE_COLOR: "0" }).enabled, true);
+});
+
+test("an update must say what changed in every locale; a first version must not", () => {
+  const noWhatsNew = [
+    {
+      id: "l1",
+      detailed: true,
+      attributes: { locale: "en-US", description: "d", keywords: "k", supportUrl: "https://e.com" },
+    },
+  ];
+  const update = buildReport({ snapshot: healthySnapshot({ localizations: noWhatsNew }), config: { locale: "en-US" } });
+  const f = update.findings.find((x) => x.id === "metadata.whatsNew.missing");
+  assert.equal(f?.severity, Severity.BLOCKER);
+  assert.equal(f?.fixCommand, "appstore-release metadata");
+
+  const first = buildReport({
+    snapshot: healthySnapshot({
+      localizations: noWhatsNew,
+      versions: [{ id: "v1", attributes: { versionString: "1.1", appStoreState: "PREPARE_FOR_SUBMISSION" } }],
+    }),
+    config: { locale: "en-US" },
+  });
+  assert.equal(
+    first.findings.some((x) => x.id === "metadata.whatsNew.missing"),
+    false,
+  );
+});
+
+test("isFirstVersion: no other version on the same platform, whatever the number says", () => {
+  const v = (id, platform) => ({ id, attributes: { versionString: "1.0", platform } });
+  assert.equal(isFirstVersion([v("a", "IOS")], v("a", "IOS")), true);
+  assert.equal(isFirstVersion([v("a", "IOS"), v("b", "IOS")], v("a", "IOS")), false);
+  // A Mac version of the same app does not make the iOS one an update.
+  assert.equal(isFirstVersion([v("a", "IOS"), v("m", "MAC_OS")], v("a", "IOS")), true);
+  assert.equal(isFirstVersion([], null), false);
+});
+
+test("a subscription needs a Terms of Use link, unless a custom EULA is set or nothing is known", () => {
+  const config = (description) => ({
+    locale: "en-US",
+    metadata: { description },
+    subscription: { productId: "pro", name: "Pro", period: "ONE_MONTH" },
+  });
+  const terms = (snapshot, cfg) =>
+    buildReport({ snapshot: healthySnapshot(snapshot), config: cfg }).findings.find(
+      (x) => x.id === "subscription.terms-link.missing",
+    );
+
+  const missing = terms({ eula: { custom: false } }, config("Plan your meals."));
+  assert.equal(missing?.severity, Severity.WARNING);
+  assert.equal(missing?.guideline, "3.1.2");
+
+  const standard = "Terms of Use: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/";
+  assert.equal(terms({ eula: { custom: false } }, config(`Plan your meals.\n${standard}`)), undefined);
+  assert.equal(terms({ eula: { custom: false } }, config("Terms of Use: https://example.com/terms")), undefined);
+  assert.equal(terms({ eula: { custom: true } }, config("Plan your meals.")), undefined);
+  assert.equal(terms({ eula: null }, config("Plan your meals.")), undefined, "unknown is not missing");
 });

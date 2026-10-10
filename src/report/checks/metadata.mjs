@@ -2,6 +2,7 @@
 
 import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 import { checkSemantics } from "../../core/requirements.mjs";
+import { isFirstVersion } from "../../core/status.mjs";
 
 export const section = { id: "metadata", title: "Store metadata" };
 
@@ -23,6 +24,7 @@ export function check({ snapshot, config }) {
   const multi = wanted.length > 1;
   /** Name the finding after the locale only when there is more than one. */
   const suffix = (locale) => (multi ? `.${locale}` : "");
+  const first = isFirstVersion(snapshot.versions ?? [], snapshot.version);
 
   for (const locale of wanted) {
     const loc = detailed.find((l) => l.attributes?.locale === locale);
@@ -56,6 +58,25 @@ export function check({ snapshot, config }) {
         }),
       );
     }
+
+    // Every version after the first must say what changed, in every locale.
+    if (!first && !loc.attributes?.whatsNew) {
+      out.push(
+        finding({
+          id: `metadata.whatsNew.missing${suffix(locale)}`,
+          category: Category.ASC_STATE,
+          title: multi ? `What's New is empty for ${locale}` : "What's New is empty",
+          detail:
+            `This is an update, and App Store Connect requires "What's New in This Version" for each locale ` +
+            `before it can be submitted. Only an app's first version goes without one.`,
+          fix: multi
+            ? `Set locales.${locale}.whatsNew (or metadata.whatsNew to share it) and run metadata.`
+            : "Set metadata.whatsNew in your config and run metadata.",
+          fixCommand: "appstore-release metadata",
+          evidence: { resource: "appStoreVersionLocalizations", id: loc.id, actual: locale },
+        }),
+      );
+    }
   }
 
   const loc = detailed[0];
@@ -63,8 +84,7 @@ export function check({ snapshot, config }) {
 
   // whatsNew is rejected outright on a first version; carrying it in the config
   // is the difference between a clean run and a 409 nobody expects.
-  const isFirst = snapshot.version.attributes.versionString === "1.0" || (snapshot.versions?.length ?? 0) <= 1;
-  if (isFirst && config?.metadata?.whatsNew) {
+  if (first && config?.metadata?.whatsNew) {
     out.push(
       finding({
         id: "metadata.whatsNew.first-version",

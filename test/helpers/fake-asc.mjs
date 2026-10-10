@@ -730,6 +730,8 @@ export function createFakeAsc({
   });
   on("DELETE", `/v1/customerReviewResponses/:id`, remove("customerReviewResponses"));
   on("GET", `/v1/apps/${appId}/customerReviewSummarizations`, () => ok(all("customerReviewSummarizations")));
+  // No custom EULA: Apple's standard one applies.
+  on("GET", `/v1/apps/${appId}/endUserLicenseAgreement`, () => ok(all("endUserLicenseAgreements")[0] ?? null));
 
   // Review submissions
   on("GET", `/v1/reviewSubmissions`, (_m, { url }) => {

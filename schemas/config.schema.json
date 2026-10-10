@@ -873,7 +873,7 @@
         "keywords": {
           "type": "string",
           "maxLength": 100,
-          "description": "Comma-separated, 100 characters total including the commas."
+          "description": "Comma-separated, up to 100 bytes in UTF-8 including the commas (ç, ş, ü count two; Japanese and Chinese three)."
         },
         "promotionalText": {
           "type": "string",

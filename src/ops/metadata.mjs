@@ -6,7 +6,7 @@
 // appStoreVersionLocalizations. Getting it wrong returns a 409 naming a field
 // that does look like it should be there.
 
-import { Status } from "../core/status.mjs";
+import { Status, isFirstVersion } from "../core/status.mjs";
 import { resolveLocales } from "../core/locales.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
@@ -111,10 +111,11 @@ function diff(current, wanted) {
   return out;
 }
 
-/** True when this app has never had any other version. */
+/** True when this app has never had any other version (see isFirstVersion). */
 async function isFirstEverVersion(client, discovery, version) {
-  const all = await client.all(`/v1/apps/${discovery.appId}/appStoreVersions?fields[appStoreVersions]=versionString`, {
-    limit: 50,
-  });
-  return all.filter((v) => v.id !== version.id).length === 0;
+  const all = await client.all(
+    `/v1/apps/${discovery.appId}/appStoreVersions?fields[appStoreVersions]=versionString,platform`,
+    { limit: 50 },
+  );
+  return isFirstVersion(all, version);
 }

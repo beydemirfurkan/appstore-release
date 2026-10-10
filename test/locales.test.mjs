@@ -62,7 +62,7 @@ test("each locale must be complete, and the finding names the key you would edit
     {
       locale: "en-US",
       metadata: { name: "A", supportUrl: "https://e.com", privacyPolicyUrl: "https://e.com/p" },
-      locales: { "en-US": { description: "d", keywords: "k" }, tr: { description: "açıklama" } },
+      locales: { "en-US": { description: "d", keywords: "kitchen" }, tr: { description: "açıklama" } },
     },
     { needs: ["metadata"] },
   );

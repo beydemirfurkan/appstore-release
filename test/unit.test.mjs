@@ -284,3 +284,41 @@ test("an EAS Metadata file translates into our config, and ours wins where both 
     metadata: { name: "B", subtitle: "S" },
   });
 });
+
+test("keywords are measured in UTF-8 bytes, as Apple counts them", async () => {
+  const { checkSemantics } = await import("../src/core/requirements.mjs");
+  const tooLong = (keywords) =>
+    checkSemantics({ locale: "tr", metadata: { keywords } }).find((f) => f.id === "config.metadata.keywords.too-long");
+
+  // Under the old character count, over Apple's byte limit.
+  const turkish = "çiçek,şeker,güneş,öğün,ılık,üzüm,çorba,şiş,ığdır,düğün,göçmen,ışık,süt,çay,böğürtlen";
+  assert.ok([...turkish].length <= 100 && Buffer.byteLength(turkish) > 100);
+  const f = tooLong(turkish);
+  assert.equal(f?.severity, Severity.BLOCKER);
+  assert.match(f?.detail ?? "", /bytes in UTF-8/);
+
+  const japanese = "天気,予報,雨雲,レーダー,台風,気温,週間,花粉,警報,地震,防災,傘,紫外線,湿度,風速,日の出";
+  assert.ok([...japanese].length <= 100 && Buffer.byteLength(japanese) > 100);
+  assert.ok(tooLong(japanese));
+
+  assert.equal(tooLong("weather,forecast,radar,rain,storm,temperature,pollen,alerts,uv,humidity,wind"), undefined);
+});
+
+test("listing lints: short keywords, a subtitle that repeats the name, other platforms", async () => {
+  const { checkSemantics } = await import("../src/core/requirements.mjs");
+  const lint = (metadata) =>
+    new Map(checkSemantics({ locale: "en-US", metadata }).map((f) => [f.id.replace("config.metadata.", ""), f]));
+
+  const short = lint({ keywords: "ai,tv,meal planner,天気" }).get("keywords.short");
+  assert.equal(short?.severity, Severity.WARNING);
+  assert.match(short?.title ?? "", /\(ai, tv\)/, "two CJK characters are a whole word, not flagged");
+
+  const repeats = lint({ name: "Pantry Planner", subtitle: "The pantry for your week" }).get("subtitle.repeats-name");
+  assert.match(repeats?.title ?? "", /\(pantry\)/);
+  assert.equal(lint({ name: "Pantry", subtitle: "Groceries for the week" }).has("subtitle.repeats-name"), false);
+
+  const android = lint({ description: "Also on Android and Google Play." }).get("description.other-platform");
+  assert.equal(android?.severity, Severity.WARNING);
+  assert.equal(android?.guideline, "2.3.10");
+  assert.equal(lint({ description: "Works on iPhone and iPad." }).has("description.other-platform"), false);
+});

@@ -497,7 +497,12 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           report.verdict === "rejected" &&
           args.resolved &&
           !report.findings.some((f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id));
-        if (report.verdict !== "ready" && !args.force && !resubmit) {
+        // Sending the app alone: what is wrong with the products is not in its way.
+        const appAlone =
+          Boolean(args.skipProducts) &&
+          report.verdict !== "rejected" &&
+          !report.findings.some((f) => f.severity === "blocker" && !/^(subscription|iap|product)\./.test(f.id));
+        if (report.verdict !== "ready" && !args.force && !resubmit && !appAlone) {
           return structured(
             [
               `Refusing to submit: the readiness verdict is **${report.verdict}**.`,

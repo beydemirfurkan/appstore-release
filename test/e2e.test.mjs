@@ -26,6 +26,8 @@ function setup() {
     ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
     ASC_P8: testPrivateKey(),
     ASC_APP_ID: "1234567890",
+    // Each project remembers refusals in its own place, never the real ~/.cache.
+    APPSTORE_RELEASE_STATE_DIR: mkdtempSync(join(tmpdir(), "asr-state-")),
   };
   /** Run one command; returns its exit code and the parsed --json document. */
   const cli = async (/** @type {string[]} */ ...argv) => {
@@ -254,6 +256,26 @@ for (const policy of /** @type {const} */ (["refuse", "refuse-on-submit"])) {
   });
 }
 
+test("a refused first product is remembered: check stops saying ready, the app alone still goes", async () => {
+  const { fake, run } = await firstSubscriptionProject({ firstProductPolicy: "refuse" });
+  await run("release");
+  assert.equal((await run("submit", "--submit")).code, Exit.NEEDS_HUMAN);
+
+  const after = await run("check");
+  assert.equal(verdictOf(after.json), "needs-human", "App Store Connect keeps no record; we do");
+  const refused = after.json.findings.find((f) => f.id === "subscription.first.refused");
+  assert.equal(refused?.uiOnly, true);
+  assert.match(refused?.detail ?? "", /must be submitted with an app version/);
+
+  const again = await run("submit", "--submit");
+  assert.match(again.json.results[0].message, /not ready to submit/, "no retry loop");
+  assert.equal(fake.all("reviewSubmissions")[0].attributes.state, "READY_FOR_REVIEW");
+
+  const alone = await run("submit", "--submit", "--skip-products");
+  assert.equal(alone.code, Exit.OK, JSON.stringify(alone.json.results, null, 2));
+  assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
+});
+
 test("a refusal about the app itself keeps the draft and says what to do", async () => {
   const { fake, run } = await firstSubscriptionProject({ appPrivacyPublished: false });
   await run("release");
@@ -435,6 +457,8 @@ async function productsProject(fakeOptions, extra) {
     ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
     ASC_P8: testPrivateKey(),
     ASC_APP_ID: "1234567890",
+    // Each project remembers refusals in its own place, never the real ~/.cache.
+    APPSTORE_RELEASE_STATE_DIR: mkdtempSync(join(tmpdir(), "asr-state-")),
   };
   const run = async (/** @type {string[]} */ ...argv) => {
     const out = [];
@@ -604,6 +628,8 @@ test("reviews: newest first, filtered to what needs an answer, with Apple's summ
     ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
     ASC_P8: testPrivateKey(),
     ASC_APP_ID: "1234567890",
+    // Each project remembers refusals in its own place, never the real ~/.cache.
+    APPSTORE_RELEASE_STATE_DIR: mkdtempSync(join(tmpdir(), "asr-state-")),
   };
   const run = async (/** @type {string[]} */ ...argv) => {
     const out = [];

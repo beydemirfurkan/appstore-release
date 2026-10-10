@@ -15,6 +15,7 @@ import { getReadinessReport } from "../report/report.mjs";
 import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
 import { FIRST_PRODUCT_CLICKS, isFirstProduct, purchaseConfigs, subscriptionConfigs } from "../core/products.mjs";
 import { explainRefusal, isProductLine, refusedKinds } from "../asc/refusals.mjs";
+import { recordRefusals } from "../core/state.mjs";
 
 /** Review submission item relationships that carry a product rather than the app. */
 const PRODUCT_RELATIONSHIPS = ["subscriptionGroupVersion", "subscriptionVersion", "inAppPurchaseVersion"];
@@ -100,11 +101,16 @@ export async function run(ctx, args = {}) {
     // A rejected version is resubmittable once the user says the reviewer's
     // points are addressed — the API cannot read Resolution Center to check —
     // and nothing else is still in the way.
-    const othersBlocking = report.findings.filter(
-      (f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id),
+    // Sending the app alone: what is wrong with the products is not in its way.
+    const productFinding = (/** @type {string} */ id) => /^(subscription|iap|product)\./.test(id);
+    const blocking = report.findings.filter(
+      (f) => f.severity === "blocker" && !(args.skipProducts && productFinding(f.id)),
     );
+    const othersBlocking = blocking.filter((f) => !REJECTION_FINDINGS.includes(f.id));
+    const ready =
+      report.verdict === "ready" || (args.skipProducts && report.verdict !== "rejected" && !blocking.length);
     const resubmit = report.verdict === "rejected" && args.resolved && !othersBlocking.length;
-    if (report.verdict !== "ready" && !resubmit) {
+    if (!ready && !resubmit) {
       return {
         status: Status.ERROR,
         message:
@@ -180,7 +186,7 @@ export async function run(ctx, args = {}) {
     if (res.error) {
       // No 409 is swallowed: a duplicate was already filtered out above, so a
       // conflict here means Apple will not review this item, and it says why.
-      if (item.product) return refuseProducts(ctx, { submission, products, present, error: res.error, item });
+      if (item.product) return refuseProducts(ctx, { submission, products, present, error: res.error, item, version });
       const { findings } = explainRefusal(res.error);
       return {
         status: Status.ERROR,
@@ -252,7 +258,7 @@ export async function run(ctx, args = {}) {
     const explained = explainRefusal(done.error);
     // About a product: take the products out so the app is not held hostage to them.
     if (explained.productRelated && [...present.values()].some((v) => PRODUCT_RELATIONSHIPS.includes(v.relationship))) {
-      return refuseProducts(ctx, { submission, products, present, error: done.error });
+      return refuseProducts(ctx, { submission, products, present, error: done.error, version });
     }
     // About the app (App Privacy, price, screenshots…): the draft stays as it is —
     // the next submit reuses it — and each reason says what to do.
@@ -283,9 +289,12 @@ export async function run(ctx, args = {}) {
  * when nothing else stands in the way.
  *
  * @param {import("../core/context.mjs").Context} ctx
- * @param {{ submission: any, products: Item[], present: Map<string, { itemId: string, relationship: string }>, error: any, item?: Item }} input
+ * @param {{ submission: any, products: Item[], present: Map<string, { itemId: string, relationship: string }>, error: any, item?: Item, version: any }} input
  */
-async function refuseProducts({ client }, { submission, products, present, error, item }) {
+async function refuseProducts(
+  { client, discovery, stateDir },
+  { submission, products, present, error, item, version },
+) {
   const { removed, stuck } = await removeProductItems(client, present);
   const { lines, findings } = explainRefusal(error);
   const appFindings = findings.filter((f) => !isProductLine(f.detail));
@@ -321,6 +330,17 @@ async function refuseProducts({ client }, { submission, products, present, error
       details: { submissionId: submission.id, refused: lines, removed, stuck },
       findings,
     };
+  }
+
+  // App Store Connect keeps no record of this; remember it, so the next check
+  // says "only you can do this" instead of "ready".
+  if (stateDir) {
+    const at = new Date().toISOString();
+    recordRefusals(
+      stateDir,
+      discovery.appId,
+      firsts.map((productId) => ({ productId, versionId: version.id, at, reasons: lines })),
+    );
   }
 
   return {

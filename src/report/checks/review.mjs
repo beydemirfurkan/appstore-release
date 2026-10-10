@@ -6,9 +6,45 @@ import { finding, Severity, Category, FixOwner } from "../../core/findings.mjs";
 export const section = { id: "review", title: "Review and submission" };
 
 const CONTACT_FIELDS = ["contactFirstName", "contactLastName", "contactPhone", "contactEmail"];
+const SUBMITTED_STATES = ["WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE", "READY_FOR_SALE"];
+
+/**
+ * App Privacy: every appDataUsages* path 404s. This is not a gap in this tool —
+ * it is a gap in Apple's API, and saying so plainly is the point.
+ *
+ * Because nothing can read the label back, the only way past this finding is the
+ * user saying it is done: `review.privacyPublished: true`. That turns the blocker
+ * into a reminder rather than pretending we verified it — `uiOnly` stays true
+ * either way, because who can fix it has not changed.
+ *
+ * @param {any} config
+ */
+function privacyFinding(config) {
+  const attested = config?.review?.privacyPublished === true;
+  return finding({
+    id: "privacy.declaration.ui-only",
+    severity: attested ? Severity.INFO : Severity.BLOCKER,
+    category: Category.ASC_STATE,
+    title: attested
+      ? "App Privacy marked as published in the config (the API cannot confirm it)"
+      : "App Privacy data collection must be published by hand",
+    detail: attested
+      ? "review.privacyPublished is true. Apple keeps the privacy label UI-only, so this is taken on trust; " +
+        "if it is not actually published, App Store Connect will refuse the submission."
+      : "Apple keeps the privacy nutrition label UI-only; every appDataUsages endpoint returns 404. " +
+        "The version cannot be reviewed until it is published. Once it is, set review.privacyPublished to true.",
+    fixOwner: FixOwner.UI,
+    uiOnly: true,
+    fix: attested
+      ? "Nothing, if the label is published."
+      : 'Declare the data types matching the app\'s privacy manifest, press Publish, then set "review": { "privacyPublished": true }.',
+    fixClicks: ["App Store Connect", "your app", "App Privacy", "Get Started / Edit", "Publish"],
+    docs: "references/gotchas.md#app-privacy-ui-only",
+  });
+}
 
 /** @param {{ snapshot: any, config: any }} input */
-export function check({ snapshot }) {
+export function check({ snapshot, config }) {
   const out = [];
   if (!snapshot.version) return out;
 
@@ -40,26 +76,9 @@ export function check({ snapshot }) {
     );
   }
 
-  // App Privacy: every appDataUsages* path 404s. This is not a gap in this tool —
-  // it is a gap in Apple's API, and saying so plainly is the point.
-  out.push(
-    finding({
-      id: "privacy.declaration.ui-only",
-      severity: Severity.BLOCKER,
-      category: Category.ASC_STATE,
-      title: "App Privacy data collection must be published by hand",
-      detail:
-        "Apple keeps the privacy nutrition label UI-only; every appDataUsages endpoint returns 404. " +
-        "The version cannot be reviewed until it is published.",
-      fixOwner: FixOwner.UI,
-      uiOnly: true,
-      fix: "Declare the data types matching the app's privacy manifest, then press Publish.",
-      fixClicks: ["App Store Connect", "your app", "App Privacy", "Get Started / Edit", "Publish"],
-      docs: "references/gotchas.md#app-privacy-ui-only",
-    }),
-  );
-
   const state = snapshot.version.attributes.appStoreState;
+  if (!SUBMITTED_STATES.includes(state)) out.push(privacyFinding(config));
+
   if (["REJECTED", "METADATA_REJECTED"].includes(state)) {
     // Everything the API will tell us about the rejection, which is the shape of
     // it and not the substance. Saying that plainly is more useful than implying
@@ -105,7 +124,7 @@ export function check({ snapshot }) {
     );
   }
 
-  if (["WAITING_FOR_REVIEW", "IN_REVIEW", "PENDING_DEVELOPER_RELEASE"].includes(state)) {
+  if (SUBMITTED_STATES.slice(0, 3).includes(state)) {
     out.push(
       finding({
         id: "submission.in-review",

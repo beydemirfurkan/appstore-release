@@ -9,6 +9,11 @@
 //   sets: [{ displayType, dir }]         several display types
 //   dir + per-locale subdirectories      ./shots/tr/*.png overrides ./shots/*.png
 //
+// A set may name an App Asset Library `placementGroup` instead of (or as well as)
+// a legacy `displayType` — the only way to target groups the old enumeration
+// never had, such as iPhone Duo. With neither, the asset-library path infers the
+// group from the files' pixel size.
+//
 // The subdirectory convention is what keeps a multi-locale, multi-device config
 // from turning into a matrix the user has to write out by hand.
 
@@ -19,7 +24,9 @@ export const DEFAULT_DISPLAY_TYPE = "APP_IPHONE_67";
 
 /**
  * @typedef {Object} ScreenshotSet
- * @property {string} displayType
+ * @property {string} displayType    legacy display type ("" when only a placement group is given)
+ * @property {string|null} placementGroup  App Asset Library placement group, when configured
+ * @property {string} key            what findings and summaries call this set
  * @property {string} locale
  * @property {string} dir            absolute
  * @property {string[]} files        PNG filenames, in display order
@@ -32,17 +39,18 @@ export const DEFAULT_DISPLAY_TYPE = "APP_IPHONE_67";
  * @param {(p: string, purpose?: string) => string} resolvePath
  * @param {string[]} locales
  * @param {{ displayType?: string }} [overrides]
- * @returns {{ sets: ScreenshotSet[], missing: Array<{displayType: string, locale: string, dir: string}> }}
+ * @returns {{ sets: ScreenshotSet[], missing: Array<{displayType: string, key: string, locale: string, dir: string}> }}
  */
 export function resolveScreenshotSets(config, resolvePath, locales, overrides = {}) {
   const cfg = config.screenshots ?? {};
-  const declared = cfg.sets?.length
-    ? cfg.sets.map((s) => ({ displayType: s.displayType ?? DEFAULT_DISPLAY_TYPE, dir: s.dir ?? cfg.dir }))
-    : [{ displayType: overrides.displayType ?? cfg.displayType ?? DEFAULT_DISPLAY_TYPE, dir: cfg.dir }];
+  const declared = declaredSets(config, overrides).map((d, i) => ({
+    ...d,
+    dir: cfg.sets?.length ? (cfg.sets[i].dir ?? cfg.dir) : cfg.dir,
+  }));
 
   /** @type {ScreenshotSet[]} */
   const sets = [];
-  /** @type {Array<{displayType: string, locale: string, dir: string}>} */
+  /** @type {Array<{displayType: string, key: string, locale: string, dir: string}>} */
   const missing = [];
 
   for (const entry of declared) {
@@ -54,17 +62,24 @@ export function resolveScreenshotSets(config, resolvePath, locales, overrides = 
       const localeDir = join(base, locale);
       const dir = isDirectory(localeDir) ? localeDir : base;
       if (!isDirectory(dir)) {
-        missing.push({ displayType: entry.displayType, locale, dir });
+        missing.push({ displayType: entry.displayType, key: entry.key, locale, dir });
         continue;
       }
       const files = readdirSync(dir)
         .filter((f) => f.toLowerCase().endsWith(".png"))
         .sort(); // filename order is display order
       if (!files.length) {
-        missing.push({ displayType: entry.displayType, locale, dir });
+        missing.push({ displayType: entry.displayType, key: entry.key, locale, dir });
         continue;
       }
-      sets.push({ displayType: entry.displayType, locale, dir, files });
+      sets.push({
+        displayType: entry.displayType,
+        placementGroup: entry.placementGroup,
+        key: entry.key,
+        locale,
+        dir,
+        files,
+      });
     }
   }
 
@@ -79,9 +94,32 @@ function isDirectory(path) {
   }
 }
 
+/**
+ * The sets this config declares, without touching the filesystem.
+ *
+ * @param {object} config
+ * @param {{ displayType?: string }} [overrides]
+ * @returns {Array<{ displayType: string, placementGroup: string|null, key: string }>}
+ */
+export function declaredSets(config, overrides = {}) {
+  const cfg = /** @type {any} */ (config)?.screenshots ?? {};
+  const entries = cfg.sets?.length
+    ? cfg.sets.map((/** @type {any} */ s) => ({ displayType: s.displayType, placementGroup: s.placementGroup }))
+    : [{ displayType: overrides.displayType ?? cfg.displayType, placementGroup: cfg.placementGroup }];
+  return entries.map((/** @type {any} */ e) => {
+    const placementGroup = e.placementGroup ?? null;
+    const displayType = e.displayType ?? (placementGroup ? "" : DEFAULT_DISPLAY_TYPE);
+    return { displayType, placementGroup, key: placementGroup ?? displayType };
+  });
+}
+
 /** The display types this config asks for, deduplicated. @param {object} config */
 export function declaredDisplayTypes(config) {
-  const cfg = config?.screenshots ?? {};
-  if (cfg.sets?.length) return [...new Set(cfg.sets.map((s) => s.displayType ?? DEFAULT_DISPLAY_TYPE))];
-  return [cfg.displayType ?? DEFAULT_DISPLAY_TYPE];
+  return [
+    ...new Set(
+      declaredSets(config)
+        .map((s) => s.displayType)
+        .filter(Boolean),
+    ),
+  ];
 }

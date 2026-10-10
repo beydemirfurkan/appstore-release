@@ -4,8 +4,8 @@
 // correctly refuses to target a live version, and then nothing could create one.
 // Every update needs this before any listing work can start.
 
-import { Status } from "../core/status.mjs";
-import { EDITABLE_STATES } from "../report/snapshot.mjs";
+import { Status, VersionStates, isCurrentVersionState } from "../core/status.mjs";
+import { resolveRelease } from "./release-options.mjs";
 import { finding, Severity, Category, FixOwner } from "../core/findings.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
@@ -15,6 +15,7 @@ export const meta = {
   phase: "listing",
   needs: [],
   mutates: true,
+  positional: "version",
   args: {
     version: {
       type: "string",
@@ -38,11 +39,12 @@ export async function run({ client, discovery, config }, args = {}) {
     { limit: 50 },
   );
 
-  const editable = versions.find((v) => EDITABLE_STATES.has(v.attributes.appStoreState));
+  const editable = versions.find((v) => isCurrentVersionState(v.attributes.appStoreState));
   if (editable) {
+    const open = VersionStates.EDITABLE.includes(editable.attributes.appStoreState);
     return {
       status: Status.OK,
-      message: `v${editable.attributes.versionString} is already open for editing (${editable.attributes.appStoreState})`,
+      message: `v${editable.attributes.versionString} is already ${open ? "open for editing" : "in progress"} (${editable.attributes.appStoreState})`,
       details: { versionId: editable.id, versionString: editable.attributes.versionString, created: false },
     };
   }
@@ -73,6 +75,7 @@ export async function run({ client, discovery, config }, args = {}) {
     };
   }
 
+  const releaseType = resolveRelease(config)?.type;
   const created = (
     await client.post(`/v1/appStoreVersions`, {
       data: {
@@ -80,7 +83,7 @@ export async function run({ client, discovery, config }, args = {}) {
         attributes: {
           versionString,
           platform: args.platform ?? "IOS",
-          ...(config?.review?.releaseType ? { releaseType: config.review.releaseType } : {}),
+          ...(releaseType ? { releaseType } : {}),
         },
         relationships: { app: { data: { type: "apps", id: discovery.appId } } },
       },

@@ -67,71 +67,6 @@
         "$comment": {
           "type": "string"
         },
-        "alcoholTobaccoOrDrugUseOrReferences": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "contests": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "gamblingSimulated": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "gunsOrOtherWeapons": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "horrorOrFearThemes": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "matureOrSuggestiveThemes": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "medicalOrTreatmentInformation": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "profanityOrCrudeHumor": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "sexualContentGraphicAndNudity": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "sexualContentOrNudity": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "violenceCartoonOrFantasy": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "violenceRealistic": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
-        "violenceRealisticProlongedGraphicOrSadistic": {
-          "type": "string",
-          "enum": ["NONE", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
-          "description": "How much of this the app contains. Defaults to NONE."
-        },
         "advertising": {
           "type": "boolean",
           "description": "Defaults to false."
@@ -140,25 +75,93 @@
           "type": "boolean",
           "description": "Defaults to false. Required by Apple — sent as false when unset."
         },
+        "alcoholTobaccoOrDrugUseOrReferences": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "contests": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
         "gambling": {
           "type": "boolean",
           "description": "Defaults to false."
+        },
+        "gamblingSimulated": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "gunsOrOtherWeapons": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
         },
         "healthOrWellnessTopics": {
           "type": "boolean",
           "description": "Defaults to false."
         },
+        "horrorOrFearThemes": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "kidsAgeBand": {
+          "type": ["string", "null"],
+          "enum": ["FIVE_AND_UNDER", "SIX_TO_EIGHT", "NINE_TO_ELEVEN", null],
+          "description": "Only for apps in the Kids category."
+        },
         "lootBox": {
           "type": "boolean",
           "description": "Defaults to false."
+        },
+        "matureOrSuggestiveThemes": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "medicalOrTreatmentInformation": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
         },
         "messagingAndChat": {
           "type": "boolean",
           "description": "Defaults to false."
         },
+        "override": {
+          "type": "string",
+          "enum": ["NONE", "NINE_PLUS", "THIRTEEN_PLUS", "SIXTEEN_PLUS", "EIGHTEEN_PLUS", "UNRATED"],
+          "description": "Raise the computed rating (sent as ageRatingOverrideV2). Omit to let Apple compute it."
+        },
         "parentalControls": {
           "type": "boolean",
           "description": "Defaults to false."
+        },
+        "profanityOrCrudeHumor": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "sexualContentGraphicAndNudity": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "sexualContentOrNudity": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "socialMedia": {
+          "type": "boolean",
+          "description": "The app includes social media features. Required by Apple for new apps and updates since September 2026. Defaults to false."
+        },
+        "socialMediaAgeRestricted": {
+          "type": "boolean",
+          "description": "Those social media features are restricted by age. Defaults to false."
         },
         "unrestrictedWebAccess": {
           "type": "boolean",
@@ -168,10 +171,20 @@
           "type": "boolean",
           "description": "Defaults to false."
         },
-        "kidsAgeBand": {
-          "type": ["string", "null"],
-          "enum": ["FIVE_AND_UNDER", "SIX_TO_EIGHT", "NINE_TO_ELEVEN", null],
-          "description": "Only for apps in the Kids category."
+        "violenceCartoonOrFantasy": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "violenceRealistic": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
+        },
+        "violenceRealisticProlongedGraphicOrSadistic": {
+          "type": "string",
+          "enum": ["NONE", "INFREQUENT", "FREQUENT", "INFREQUENT_OR_MILD", "FREQUENT_OR_INTENSE"],
+          "description": "How much of this the app contains. Defaults to NONE. INFREQUENT_OR_MILD and FREQUENT_OR_INTENSE are the pre-2025 spellings, still accepted."
         }
       }
     },
@@ -244,6 +257,10 @@
           "maxLength": 4000,
           "description": "Free text for the reviewer."
         },
+        "privacyPublished": {
+          "type": "boolean",
+          "description": "Set to true once App Privacy is published in App Store Connect. Apple exposes no API to read it, so this is your word for it; until then `check` blocks submission."
+        },
         "releaseType": {
           "type": "string",
           "enum": ["MANUAL", "AFTER_APPROVAL", "SCHEDULED"],
@@ -276,11 +293,20 @@
     },
     "screenshots": {
       "type": "object",
-      "description": "Where the store screenshots live. Use `dir` alone for one device size, or `sets` for several. In either case a subdirectory named after a locale (./shots/tr/) overrides the base directory for that locale.",
+      "description": "Where the store screenshots live. Use `dir` alone for one device size, or `sets` for several. In either case a subdirectory named after a locale (./shots/tr/) overrides the base directory for that locale. PNG only, opaque (no alpha).",
       "additionalProperties": false,
       "properties": {
         "$comment": {
           "type": "string"
+        },
+        "api": {
+          "type": "string",
+          "enum": ["auto", "asset-library", "legacy"],
+          "description": "Which App Store Connect API uploads them. `auto` (default) uses the App Asset Library (API 4.5.1) when the app has one and falls back to the deprecated screenshot sets. iPhone Duo needs the asset library."
+        },
+        "dir": {
+          "type": "string",
+          "description": "Directory of exact-size PNGs, relative to this config file. Filename order is display order, and it must contain nothing but store screenshots."
         },
         "displayType": {
           "type": "string",
@@ -294,19 +320,19 @@
             "APP_IPAD_PRO_129",
             "APP_IPAD_PRO_3GEN_11"
           ],
-          "description": "The single device size, when `sets` is not used. APP_IPHONE_67 is 1290×2796 and covers both 6.7\" and 6.9\" — there is no APP_IPHONE_69."
+          "description": "The single device size, when `sets` is not used (legacy display type). APP_IPHONE_67 covers 6.7\" and 6.9\" (1320×2868, 1290×2796, 1260×2736) — there is no APP_IPHONE_69. Defaults to APP_IPHONE_67."
         },
-        "dir": {
+        "placementGroup": {
           "type": "string",
-          "description": "Directory of exact-size PNGs, relative to this config file. Filename order is display order, and it must contain nothing but store screenshots."
+          "pattern": "^[A-Z0-9_]+$",
+          "description": "App Asset Library placement group for the single set, e.g. IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE. Usually inferred from the PNG size; `appstore-release screenshots --list-groups` prints the current ones."
         },
         "sets": {
           "type": "array",
-          "description": "One entry per device size. Required when the app supports iPad: Apple will not accept a tablet-capable build with no iPad screenshots.",
+          "description": "One entry per device size. Required when the app supports iPad: Apple will not accept a tablet-capable build with no iPad screenshots. Add an iPhone Duo entry (placementGroup) for apps built with the iOS 27.1 SDK — required from April 2027.",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["displayType"],
             "properties": {
               "displayType": {
                 "type": "string",
@@ -319,13 +345,20 @@
                   "APP_IPAD_PRO_3GEN_129",
                   "APP_IPAD_PRO_129",
                   "APP_IPAD_PRO_3GEN_11"
-                ]
+                ],
+                "description": "Legacy display type. Omit when placementGroup is given."
               },
               "dir": {
                 "type": "string",
                 "description": "Directory for this device size. Defaults to screenshots.dir."
+              },
+              "placementGroup": {
+                "type": "string",
+                "pattern": "^[A-Z0-9_]+$",
+                "description": "App Asset Library placement group. Required for groups with no legacy display type (iPhone Duo); otherwise inferred from the PNG size."
               }
-            }
+            },
+            "description": "One device size: a displayType, a placementGroup, or both. With neither, the PNG size decides."
           }
         }
       }
@@ -379,6 +412,31 @@
         "reviewScreenshot": {
           "type": "string",
           "description": "Path to a paywall screenshot, relative to this config. Without it the subscription stays MISSING_METADATA."
+        },
+        "localizations": {
+          "type": "object",
+          "description": "Subscription texts for locales other than `locale`, keyed by locale code. Each entry overrides localeName / localeDescription / groupDisplayName for that locale and inherits what it omits.",
+          "propertyNames": {
+            "pattern": "^[a-z]{2}(-[A-Za-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name of the subscription in this locale."
+              },
+              "description": {
+                "type": "string",
+                "description": "Its description in this locale."
+              },
+              "groupName": {
+                "type": "string",
+                "description": "The subscription group's display name in this locale."
+              }
+            }
+          }
         }
       }
     }

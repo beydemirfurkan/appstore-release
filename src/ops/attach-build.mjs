@@ -18,10 +18,25 @@ export const meta = {
 
 /** @param {import("../core/context.mjs").Context} ctx */
 export async function run({ client, discovery }, args = {}) {
-  const build = args.build ? await discovery.latestBuild(args.build) : await discovery.latestValidBuild();
-  if (!build) return { status: Status.ERROR, message: "no VALID build found — run `eas build` + `eas submit` first" };
-
   const version = await discovery.editableVersion();
+  const versionString = version.attributes.versionString;
+
+  const build = args.build ? await discovery.latestBuild(args.build) : await discovery.latestValidBuild(versionString);
+  if (!build) {
+    return {
+      status: Status.ERROR,
+      message: args.build
+        ? `build ${args.build} not found`
+        : `no VALID build for version ${versionString} — upload one (e.g. \`eas build\` + \`eas submit\`) first`,
+    };
+  }
+  if (build.attributes.processingState && build.attributes.processingState !== "VALID") {
+    return {
+      status: Status.ERROR,
+      message: `build ${build.attributes.version} is ${build.attributes.processingState}, not VALID — wait for processing or pick another`,
+    };
+  }
+
   const current = await discovery.attachedBuild(version.id);
   if (current?.id === build.id)
     return { status: Status.OK, message: `build ${build.attributes.version} already attached` };

@@ -1,6 +1,44 @@
 # Changelog
 
-## Unreleased
+## 3.0.0
+
+Updated for iOS 27 and App Store Connect API 4.4.1–4.5.1, split into agent skills, and — most importantly — able to finish a submission end to end, which 2.1.0 could not.
+
+### Breaking
+
+- **App Privacy now needs your word for it.** The readiness report used to block on App Privacy unconditionally, which meant the verdict could never be `ready` and `submit --submit` always refused. Once the privacy label is published in App Store Connect, set `"review": { "privacyPublished": true }`. Without it, `check` still blocks with the exact clicks.
+- **A first subscription is submitted by API.** `submit` adds the subscription version — and its group's, for a new group — to the same review submission as the app version (API 4.4.1). The `subscription.first.ui-only` finding is gone; `subscription.ready-to-submit` (info) replaces it.
+- **Age-rating frequencies are `NONE` / `INFREQUENT` / `FREQUENT`.** The pre-2025 `INFREQUENT_OR_MILD` / `FREQUENT_OR_INTENSE` are still accepted in a config and mapped.
+- **`credentials` asks before issuing any certificate**, not only the last of Apple's three. Pass `--allow-new-cert`.
+- **Screenshots go through the App Asset Library by default** (`screenshots.api: "auto"`). Apps without a library fall back to the deprecated screenshot sets automatically; `"legacy"` forces them.
+
+### Fixed — the product could not complete a submission
+
+- Operation flags were rejected before the operation was known: `submit --submit`, `--allow-new-cert`, `--build`, `--no-prune` all exited 2. Flags are kebab-case as documented, positional arguments reach the operation (`new-version 1.2.0`), and `<command> --help` lists a command's own flags.
+- `asc_submit_for_review` dropped `force` and reported `submitted: true` whatever happened. `asc_apply_release` pruned screenshots by default, and its `only` argument could run `credentials` or `submit` past their own gates; it now accepts pipeline steps only.
+- `submit` no longer reuses a submission that is already with Apple, treats one in flight as a no-op instead of "not ready", and no longer swallows 409s when adding items.
+- One list of version states. A version removed from sale no longer counts as editable, discovery never falls back to a live version, and the editable App Info is preferred during an update.
+- `review-info`, `category`, `release-options`, `pricing` and no-prune `screenshots` no longer write on every run. `attach-build` only considers VALID, unexpired iOS builds of the version's marketing version. Subscription pricing reads every page of price points and touches only its own territory. `screenshots.sets` no longer requires a top-level `dir`.
+
+### Added — iOS 27 / API 4.5.1
+
+- **App Asset Library** screenshots: placement groups and exact specs from `appAssetLibraryRefData` (never hard-coded), a content hash in `referenceName` for idempotency, one upload reused across locales, ordering requests, placement-first deletes.
+- **iPhone Duo**: a set with `placementGroup`; `screenshots --list-groups`; a reminder before Apple's April 2027 requirement.
+- Every accepted 6.9" and 13" size and landscape; screenshots with alpha are refused before upload.
+- Age rating: `socialMedia`, `socialMediaAgeRestricted`, and `ageRating.override` → `ageRatingOverrideV2`.
+- `subscription.localizations` for other locales; existing localizations are updated, not only created.
+
+### Added — agent skills
+
+- A router skill (`appstore-release`) and five focused skills: `asc-screenshots`, `asc-age-rating`, `asc-subscriptions`, `asc-rejection`, `asc-credentials`. Installable with `npx skills add beydemirfurkan/appstore-release`, each with a launcher that finds the CLI even when only the skill folder was copied.
+- `AGENTS.md`, `skills.sh.json`, every skill served as an MCP resource.
+- `check-skills` and launcher-drift gates; CI runs them and the distribution gate on every PR.
+
+### Added — try it, see it
+
+- A stateful fake App Store Connect and an end-to-end test that drives the real CLI from blocked to `WAITING_FOR_REVIEW`, asserting a second `release` sends nothing.
+- `source scripts/demo/setup.sh` runs the whole flow locally with no Apple account. The README's GIFs are recorded from it (`npm run media`).
+- A shorter terminal report: each section names what is wrong, the plan names the command, nothing is printed twice.
 
 ### Changed — distribution
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // package.json is the only place a version or a product description is typed.
-// This writes it into the Claude Code manifests, and with --check fails instead
-// of writing — that is the CI gate that keeps them from drifting apart.
+// This writes it into the Claude Code manifests, every skill's frontmatter and
+// the skill launcher, and copies that launcher into each skill. With --check it
+// fails instead of writing — the CI gate that keeps them from drifting apart.
 //
 //   node scripts/sync-manifests.mjs           rewrite the manifests
 //   node scripts/sync-manifests.mjs --check   exit 1 if anything is stale
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -41,6 +42,43 @@ for (const { path, apply } of TARGETS) {
   if (before === after) continue;
   stale.push(path);
   if (!check) writeFileSync(join(ROOT, path), after + "\n");
+}
+
+/** Write `next` to `rel` if it differs; record it as stale either way. */
+const syncText = (/** @type {string} */ rel, /** @type {string} */ next) => {
+  const abs = join(ROOT, rel);
+  const current = existsSync(abs) ? readFileSync(abs, "utf8") : null;
+  if (current === next) return;
+  stale.push(rel);
+  if (check) return;
+  mkdirSync(dirname(abs), { recursive: true });
+  writeFileSync(abs, next);
+};
+
+// The launcher pins the CLI it fetches to this version, so the instructions a
+// skill gives and the commands it runs cannot disagree.
+const LAUNCHER = "scripts/skill-launcher.mjs";
+const launcher = readFileSync(join(ROOT, LAUNCHER), "utf8").replace(
+  /^export const VERSION = "[^"]*";$/m,
+  `export const VERSION = "${pkg.version}";`,
+);
+syncText(LAUNCHER, launcher);
+
+const skillDirs = readdirSync(join(ROOT, "skills")).filter((d) => statSync(join(ROOT, "skills", d)).isDirectory());
+for (const name of skillDirs) {
+  // Each skill is installed on its own, so each carries its own launcher copy.
+  syncText(`skills/${name}/scripts/asc.mjs`, launcher);
+
+  const rel = `skills/${name}/SKILL.md`;
+  const source = readFileSync(join(ROOT, rel), "utf8");
+  const fm = /^---\n[\s\S]*?\n---\n/.exec(source);
+  if (!fm || !/^ {2}version: .*$/m.test(fm[0])) {
+    console.error(`✗ ${rel} has no metadata.version line in its frontmatter`);
+    process.exitCode = 1;
+    continue;
+  }
+  const stamped = fm[0].replace(/^ {2}version: .*$/m, `  version: "${pkg.version}"`);
+  syncText(rel, stamped + source.slice(fm[0].length));
 }
 
 // SKILL.md carries a *trigger* description written for the agent, deliberately

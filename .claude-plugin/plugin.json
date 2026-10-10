@@ -1,12 +1,14 @@
 {
   "name": "appstore-release",
-  "description": "Ship an iOS app to App Store review end-to-end via the App Store Connect API — an opinionated, idempotent submission pipeline with a readiness report, for humans and AI agents.",
-  "version": "2.1.0",
+  "displayName": "App Store Release",
+  "description": "Ship an iOS app to App Store review end to end over the App Store Connect API — agent skills, an MCP server and a CLI around a readiness report and an idempotent pipeline. Updated for iOS 27.",
+  "version": "3.0.0",
   "author": {
     "name": "Furkan Beydemir",
     "url": "https://github.com/beydemirfurkan"
   },
   "homepage": "https://github.com/beydemirfurkan/appstore-release",
+  "repository": "https://github.com/beydemirfurkan/appstore-release",
   "license": "MIT",
   "keywords": ["app-store", "app-store-connect", "ios", "asc", "submission", "automation", "mcp", "expo", "eas"]
 }

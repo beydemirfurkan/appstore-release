@@ -14,39 +14,55 @@ const VERDICT_LINE = {
 };
 
 /**
+ * Terminal text. Each fact appears once: a section line names what is wrong
+ * there, the plan names the command that fixes it, and only what this tool
+ * cannot fix — the steps for a human, and warnings — gets its detail spelled out.
+ *
  * @param {import("./report.mjs").ReadinessReport} report
  * @returns {string}
  */
 export function renderReportText(report) {
   const lines = [];
   const rule = "─".repeat(58);
+  const byId = new Map(report.findings.map((f) => [f.id, f]));
+  const titles = (/** @type {string[]} */ ids) =>
+    ids
+      .map((id) => byId.get(id))
+      .filter((f) => f && f.severity !== Severity.INFO)
+      .map((f) => f?.title);
 
   const v = report.version ? `v${report.version.versionString} (${report.version.state})` : "no editable version";
   lines.push(`\nReadiness — ${report.app?.name ?? "app"} · ${v}`, rule);
   lines.push(VERDICT_LINE[report.verdict] ?? report.verdict);
 
   lines.push("");
+  const width = Math.max(...report.sections.map((s) => s.title.length));
   for (const s of report.sections) {
     const icon = s.state === "ok" ? "✓" : s.state === "incomplete" ? "·" : "✗";
-    lines.push(`${icon} ${s.title}`);
-  }
-
-  const shown = report.findings.filter((f) => f.severity !== Severity.INFO);
-  if (shown.length) {
-    lines.push("", `Findings (${report.summary.blockers} blocking, ${report.summary.warnings} warnings)`, rule);
-    for (const f of shown) {
-      const tag = f.severity === Severity.BLOCKER ? (f.uiOnly ? "[you]" : "[fix]") : "[warn]";
-      lines.push(`${tag} ${f.title}`);
-      if (f.detail) lines.push(`      ${f.detail}`);
-    }
+    const what = s.state === "ok" ? "" : clip(titles(s.findingIds).join(" · "), 64);
+    lines.push(`${icon} ${s.title.padEnd(width)}  ${what}`.trimEnd());
   }
 
   if (report.nextActions.length) {
     lines.push("", "Next, in order", rule);
     for (const a of report.nextActions) {
-      lines.push(`${a.order}. ${a.label}`);
-      if (a.command) lines.push(`   $ ${a.command}`);
-      if (a.clicks?.length) lines.push(`   ${a.clicks.join(" → ")}`);
+      if (a.kind === "run" && a.command) {
+        lines.push(`${a.order}. $ ${a.command}`, `     ${clip(titles(a.findingIds).join(" · "), 72)}`);
+      } else if (a.kind === "human") {
+        lines.push(`${a.order}. [you] ${a.label}`);
+        if (a.clicks?.length) lines.push(`     ${a.clicks.join(" → ")}`);
+      } else {
+        lines.push(`${a.order}. ${a.label}`);
+      }
+    }
+  }
+
+  const warnings = report.findings.filter((f) => f.severity === Severity.WARNING);
+  if (warnings.length) {
+    lines.push("", `Warnings (${warnings.length})`, rule);
+    for (const f of warnings) {
+      lines.push(`· ${f.title}`);
+      if (f.detail) lines.push(`  ${f.detail}`);
     }
   }
 
@@ -56,6 +72,9 @@ export function renderReportText(report) {
 
   return lines.join("\n");
 }
+
+/** @param {string} text @param {number} max */
+const clip = (text, max) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /**
  * Markdown for a model. Deliberately not raw JSON: language models follow a

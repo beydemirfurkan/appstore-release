@@ -15,7 +15,8 @@
  * @property {any} appInfo
  * @property {any[]} appInfoIncluded
  * @property {any[]} localizations
- * @property {any[]} screenshotSets
+ * @property {any[]} screenshotSets       legacy screenshot sets
+ * @property {any[]} placements           App Asset Library screenshot placements
  * @property {any} pricing
  * @property {any[]} subscriptions
  * @property {any} reviewDetail
@@ -26,17 +27,7 @@
  */
 
 import { localeCodes } from "../core/locales.mjs";
-
-/** Editable states, i.e. the version we are allowed to prepare. */
-export const EDITABLE_STATES = new Set([
-  "PREPARE_FOR_SUBMISSION",
-  "DEVELOPER_REJECTED",
-  "REJECTED",
-  "METADATA_REJECTED",
-  "INVALID_BINARY",
-  "WAITING_FOR_REVIEW",
-  "DEVELOPER_REMOVED_FROM_SALE",
-]);
+import { isCurrentVersionState, pickEditableAppInfo } from "../core/status.mjs";
 
 /**
  * Gather everything the readiness checks need.
@@ -82,7 +73,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
   );
   // Deliberately null rather than "whatever came back first": targeting a live
   // version because no editable one exists is worse than reporting that fact.
-  const version = versions.find((v) => EDITABLE_STATES.has(v.attributes.appStoreState)) ?? null;
+  const version = versions.find((v) => isCurrentVersionState(v.attributes.appStoreState)) ?? null;
 
   const build = version
     ? await section(
@@ -114,11 +105,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
       const r = await client.get(
         `/v1/apps/${appId}/appInfos?include=primaryCategory,secondaryCategory,ageRatingDeclaration`,
       );
-      const info =
-        r.data.find((i) => ["PREPARE_FOR_SUBMISSION", "READY_FOR_DISTRIBUTION"].includes(i.attributes.appStoreState)) ??
-        r.data[0] ??
-        null;
-      return { info, included: r.included ?? [] };
+      return { info: pickEditableAppInfo(r.data), included: r.included ?? [] };
     },
     { info: null, included: [] },
   );
@@ -174,6 +161,42 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
               sourceFileChecksum: s.attributes.sourceFileChecksum,
               state: s.attributes.assetDeliveryState?.state,
             })),
+          });
+        }
+      }
+      return out;
+    },
+    [],
+  );
+
+  // The App Asset Library's view of the same thing (API 4.5.1). An app moved to
+  // it may have no screenshot sets at all; reading only the sets would report
+  // every screenshot as missing.
+  const placements = await section(
+    "placements",
+    async () => {
+      const out = [];
+      for (const loc of localizations) {
+        if (!loc.detailed) continue;
+        const r = await client.get(
+          `/v1/appStoreVersionLocalizations/${loc.id}/placements?filter[placementType]=APP_SCREENSHOT` +
+            `&sort=placementGroupPosition&include=image` +
+            `&fields[appAssetLibraryImages]=fileName,referenceName,state,imageAsset&limit=200`,
+          { throwOnError: false },
+        );
+        if (r.error) return out; // no asset library for this app: not an error, just not there
+        const images = new Map((r.included ?? []).map((x) => [x.id, x]));
+        for (const p of r.data ?? []) {
+          const image = images.get(p.relationships?.image?.data?.id);
+          out.push({
+            id: p.id,
+            locale: loc.attributes.locale,
+            placementGroup: p.attributes?.placementGroup,
+            state: p.attributes?.state,
+            fileName: image?.attributes?.fileName,
+            assetState: image?.attributes?.state,
+            width: image?.attributes?.imageAsset?.width,
+            height: image?.attributes?.imageAsset?.height,
           });
         }
       }
@@ -254,6 +277,7 @@ export async function getAppSnapshot(ctx, { locale } = {}) {
     appInfoIncluded: appInfoResult.included,
     localizations,
     screenshotSets,
+    placements,
     pricing,
     subscriptions,
     reviewDetail,

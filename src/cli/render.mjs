@@ -40,7 +40,10 @@ export function createTextSink(stream, { verbose = false, quiet = false } = {}) 
         write(`  ⚠ ${event.message}`);
         break;
       case EventType.RESULT: {
-        const { status, title, message } = event.result;
+        const { id, status, title, message } = event.result;
+        // The readiness report has just printed itself, verdict first; a status
+        // line after it ("✓ … blocked") would only contradict it.
+        if (id === "check" && !quiet) break;
         write(`${ICON[status] ?? "•"} ${title}${message ? " — " + message : ""}`);
         break;
       }

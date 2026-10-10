@@ -28,6 +28,7 @@ import * as releaseOptions from "./release-options.mjs";
  * @property {boolean} [destructive]             can delete data that already exists in ASC
  * @property {boolean} [irreversible]            cannot be undone through the API
  * @property {Record<string, import("../cli/args.mjs").FlagSpec>} [args]
+ * @property {string} [positional]               the one arg the CLI may take positionally
  */
 
 /** @typedef {{ meta: OperationMeta, run: (ctx: any, args?: any) => Promise<any> }} Operation */

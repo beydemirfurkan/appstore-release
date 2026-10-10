@@ -19,7 +19,7 @@ import { Status, Exit } from "./core/status.mjs";
 import { Severity } from "./core/findings.mjs";
 import { runOperation, runPipeline } from "./index.mjs";
 import { OPERATIONS, PIPELINE, getOperation, operationIds } from "./ops/registry.mjs";
-import { parseArgs, splitFlags, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
+import { parseArgs, splitFlags, kebab, GLOBAL_FLAGS, UsageError } from "./cli/args.mjs";
 import { createTextSink, renderFindings } from "./cli/render.mjs";
 import { schemaCommand, initCommand, validateCommand } from "./cli/local.mjs";
 import { buildTools } from "./mcp/tools.mjs";
@@ -39,7 +39,7 @@ const messageOf = (e) => (e instanceof Error ? e.message : String(e));
  * dispatcher is importable from tests and reusable from other entrypoints.
  *
  * @param {string[]} [argv]
- * @param {{ stdout?: any, stderr?: any, env?: any, cwd?: string }} [io]
+ * @param {{ stdout?: any, stderr?: any, env?: any, cwd?: string, fetchImpl?: typeof fetch }} [io]
  * @returns {Promise<number>}
  */
 export async function main(argv = process.argv.slice(2), io = {}) {
@@ -48,13 +48,23 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   const env = io.env ?? process.env;
   const cwd = io.cwd ?? process.cwd();
 
-  // Parse twice: once to learn the command, once with that operation's own flags
-  // in the spec, so `--build 5` is accepted for attach-build and rejected elsewhere.
+  // Parse twice: a lenient pass to learn the command, then a strict one with that
+  // operation's own flags in the spec, so `--build 5` is accepted for attach-build
+  // and rejected elsewhere. The first pass must not reject what it cannot know yet.
   let parsed;
   try {
-    parsed = parseArgs(argv);
-    const op = parsed.command ? getOperation(parsed.command) : null;
-    if (op?.meta.args) parsed = parseArgs(argv, op.meta.args);
+    const command = parseArgs(argv, {}, { lenient: true }).command;
+    const op = command ? getOperation(command) : null;
+    parsed = parseArgs(argv, op?.meta.args ?? {});
+    if (op && parsed.positionals.length) {
+      // An operation may name one positional (`new-version 1.2.0`); anything else
+      // is a mistake worth stopping for rather than silently ignoring.
+      const slot = op.meta.positional;
+      if (!slot || parsed.positionals.length > 1) {
+        throw new UsageError(`Unexpected argument: ${parsed.positionals[slot ? 1 : 0]}`);
+      }
+      if (parsed.flags[slot] === undefined) parsed.flags[slot] = parsed.positionals[0];
+    }
   } catch (e) {
     if (e instanceof UsageError) {
       stderr.write(`${e.message}\n\n`);
@@ -65,12 +75,16 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   }
 
   const { command, flags } = parsed;
-  if (flags.version) {
+  // `true`, not truthy: new-version declares its own string `version` argument.
+  if (flags.version === true) {
     stdout.write(`${version}\n`);
     return Exit.OK;
   }
   if (flags.help || command === "help" || command === null) {
-    writeHelp(stdout);
+    const topic = command === "help" ? parsed.positionals[0] : command;
+    const op = topic ? getOperation(topic) : null;
+    if (op && topic) writeOperationHelp(stdout, topic, op);
+    else writeHelp(stdout);
     return Exit.OK;
   }
 
@@ -117,6 +131,7 @@ export async function main(argv = process.argv.slice(2), io = {}) {
       projectRoot: globals.projectRoot,
       dryRun: globals.dryRun,
       onEvent: sink,
+      fetchImpl: io.fetchImpl,
       runtime: { env, cwd },
     });
   } catch (e) {
@@ -146,12 +161,18 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   const results = ctx.log.results();
   const findings = [...ctx.findings, ...results.flatMap((r) => r.findings ?? [])];
 
-  const manual = results.filter((r) => r.status === Status.MANUAL);
+  // The readiness report already printed its findings and its plan; printing
+  // them again underneath is noise. Everything else an operation found still shows.
+  const reported = new Set(results.filter((r) => r.id === "check").flatMap((r) => (r.findings ?? []).map((f) => f.id)));
+  const manual = results.filter((r) => r.status === Status.MANUAL && r.id !== "check");
   if (manual.length) {
     ctx.log.section("Manual steps required (Apple has no API for these)");
     manual.forEach((m, i) => ctx.log.info(`${i + 1}. ${m.title} — ${m.message}`));
   }
-  renderFindings(humanStream, findings);
+  renderFindings(
+    humanStream,
+    findings.filter((f) => !reported.has(f.id)),
+  );
 
   const code = exitCodeFor(results, findings);
   if (globals.json) {
@@ -185,6 +206,33 @@ function writeJson(stream, payload) {
   stream.write(JSON.stringify(payload, null, 2) + "\n");
 }
 
+/**
+ * `appstore-release <command> --help`: the operation's own flags, which the
+ * general help cannot list without becoming a wall of text.
+ *
+ * @param {any} stream
+ * @param {string} id
+ * @param {import("./ops/registry.mjs").Operation} op
+ */
+function writeOperationHelp(stream, id, op) {
+  const usage = op.meta.positional ? `${id} [${op.meta.positional}]` : id;
+  const own = Object.entries(op.meta.args ?? {})
+    .map(([name, def]) => {
+      const label = def.type === "boolean" ? `--${kebab(name)}` : `--${kebab(name)} <${def.type}>`;
+      return `  ${label.padEnd(24)} ${def.description}`;
+    })
+    .join("\n");
+  const notes = [op.meta.mutates ? "changes App Store Connect (preview with --dry-run)" : "read-only"];
+  if (op.meta.destructive) notes.push("can delete existing data");
+  if (op.meta.irreversible) notes.push("cannot be undone");
+  stream.write(
+    `appstore-release ${usage} — ${op.meta.title}\n` +
+      `${notes.join(" · ")}\n\n` +
+      (own ? `Options\n${own}\n\n` : "") +
+      `Global options: appstore-release --help\n`,
+  );
+}
+
 function writeHelp(stream) {
   const ops = operationIds()
     .map((id) => `  ${id.padEnd(16)} ${OPERATIONS[id].meta.title}`)
@@ -208,6 +256,7 @@ function writeHelp(stream) {
       `  mcp              run the MCP server on stdio (${MCP_TOOL_COUNT} tools, ${RESOURCES.length} resources)\n` +
       `  release          the ${PIPELINE.length}-step listing pipeline, then a readiness check\n` +
       `${ops}\n\n` +
+      `Run \`appstore-release <command> --help\` for a command's own options.\n\n` +
       `Options\n${flags}\n\n` +
       `Exit codes\n` +
       `  0 ok · 2 usage · 3 config/credentials · 4 blocked (fixable) · 5 needs a human in App Store Connect\n`,

@@ -27,9 +27,17 @@ export async function run({ client, discovery, config }) {
   };
 
   const existing = await client.get(`/v1/appStoreVersions/${version.id}/appStoreReviewDetail`, { throwOnError: false });
+  const label = `${r.contactFirstName} ${r.contactLastName}`;
   if (!existing.error && existing.data) {
+    // Only what differs is sent, so an unchanged config is a true no-op. Apple
+    // returns null for an empty string, hence the normalisation.
+    const current = existing.data.attributes ?? {};
+    const diff = Object.fromEntries(
+      Object.entries(attributes).filter(([k, v]) => (current[k] ?? (typeof v === "boolean" ? false : "")) !== v),
+    );
+    if (!Object.keys(diff).length) return { status: Status.OK, message: label };
     await client.patch(`/v1/appStoreReviewDetails/${existing.data.id}`, {
-      data: { type: "appStoreReviewDetails", id: existing.data.id, attributes },
+      data: { type: "appStoreReviewDetails", id: existing.data.id, attributes: diff },
     });
   } else {
     await client.post(`/v1/appStoreReviewDetails`, {
@@ -40,5 +48,5 @@ export async function run({ client, discovery, config }) {
       },
     });
   }
-  return { status: Status.CHANGED, message: `${r.contactFirstName} ${r.contactLastName}` };
+  return { status: Status.CHANGED, message: label };
 }

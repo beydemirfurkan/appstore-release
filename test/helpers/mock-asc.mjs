@@ -176,6 +176,7 @@ export function readyToPrepareRoutes({ appId = APP_ID, locale = "en-US" } = {}) 
     ),
     [`GET /v1/builds`]: list([resource("builds", "build-1", { version: "7", processingState: "VALID" })]),
     [`GET /v1/bundleIds`]: list([resource("bundleIds", "bid-1", { identifier: "com.example.test" })]),
+    [`GET /v1/reviewSubmissions`]: list([]),
     [`GET /v1/certificates`]: list([]),
     [`GET /v1/profiles`]: list([]),
   };

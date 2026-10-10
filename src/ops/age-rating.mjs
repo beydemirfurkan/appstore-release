@@ -5,7 +5,7 @@
 // with a 409, and ageAssurance in particular is required.
 
 import { Status } from "../core/status.mjs";
-import { buildDeclaration, describeDeclaration } from "../core/age-rating.mjs";
+import { buildDeclaration, declarationMatches, describeDeclaration } from "../core/age-rating.mjs";
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -33,8 +33,8 @@ export async function run({ client, discovery, config }) {
 
   const current = await client.get(`/v1/ageRatingDeclarations/${declId}`, { throwOnError: false });
   const attributes = current.error ? {} : (current.data?.attributes ?? {});
-  const differs = Object.entries(wanted).some(([k, v]) => (attributes[k] ?? null) !== v);
-  if (!differs) return { status: Status.OK, message: `${describeDeclaration(wanted)} already declared` };
+  if (declarationMatches(wanted, attributes))
+    return { status: Status.OK, message: `${describeDeclaration(wanted)} already declared` };
 
   await client.patch(`/v1/ageRatingDeclarations/${declId}`, {
     data: { type: "ageRatingDeclarations", id: declId, attributes: wanted },

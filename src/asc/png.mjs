@@ -42,16 +42,65 @@ export function readPngHeader(filePath) {
 }
 
 /**
- * Exact pixel sizes App Store Connect accepts, by screenshot display type.
- * There is no APP_IPHONE_69 — 1290×2796 satisfies both 6.7" and 6.9".
+ * Pixel sizes App Store Connect accepts for each legacy screenshot display type,
+ * portrait; the landscape orientation (width and height swapped) is accepted too.
+ * There is no APP_IPHONE_69 — the 6.9" sizes belong to APP_IPHONE_67, and the
+ * 6.3" sizes to APP_IPHONE_61.
+ *
+ * This table is for the deprecated screenshot-set API only. The App Asset
+ * Library publishes its specifications at runtime (appAssetLibraryRefData) and
+ * that catalog, not this list, is what the asset-library path checks against —
+ * which is how iPhone Duo sizes work without a release of this tool.
  */
 export const DISPLAY_TYPE_SIZES = Object.freeze({
-  APP_IPHONE_67: { width: 1290, height: 2796 },
-  APP_IPHONE_65: { width: 1242, height: 2688 },
-  APP_IPHONE_61: { width: 1179, height: 2556 },
-  APP_IPHONE_58: { width: 1125, height: 2436 },
-  APP_IPHONE_55: { width: 1242, height: 2208 },
-  APP_IPAD_PRO_3GEN_129: { width: 2048, height: 2732 },
-  APP_IPAD_PRO_129: { width: 2048, height: 2732 },
-  APP_IPAD_PRO_3GEN_11: { width: 1668, height: 2388 },
+  APP_IPHONE_67: [size(1320, 2868), size(1290, 2796), size(1260, 2736)],
+  APP_IPHONE_65: [size(1284, 2778), size(1242, 2688)],
+  APP_IPHONE_61: [size(1206, 2622), size(1179, 2556)],
+  APP_IPHONE_58: [size(1170, 2532), size(1125, 2436), size(1080, 2340)],
+  APP_IPHONE_55: [size(1242, 2208)],
+  APP_IPAD_PRO_3GEN_129: [size(2064, 2752), size(2048, 2732)],
+  APP_IPAD_PRO_129: [size(2048, 2732)],
+  APP_IPAD_PRO_3GEN_11: [size(1668, 2420), size(1668, 2388), size(1640, 2360), size(1488, 2266)],
 });
+
+/** @param {number} width @param {number} height */
+function size(width, height) {
+  return Object.freeze({ width, height });
+}
+
+/**
+ * Whether a file of these dimensions is accepted for a display type, in either
+ * orientation. Unknown display types are not second-guessed.
+ *
+ * @param {string} displayType
+ * @param {number} width
+ * @param {number} height
+ */
+export function fitsDisplayType(displayType, width, height) {
+  const sizes = /** @type {Record<string, Array<{width:number,height:number}>>} */ (DISPLAY_TYPE_SIZES)[displayType];
+  if (!sizes) return true;
+  return sizes.some((s) => (s.width === width && s.height === height) || (s.width === height && s.height === width));
+}
+
+/** "1320×2868, 1290×2796 or 1260×2736" @param {string} displayType */
+export function describeSizes(displayType) {
+  const sizes =
+    /** @type {Record<string, Array<{width:number,height:number}>>} */ (DISPLAY_TYPE_SIZES)[displayType] ?? [];
+  const labels = sizes.map((s) => `${s.width}×${s.height}`);
+  return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} or ${labels.at(-1)}` : (labels[0] ?? "the exact size");
+}
+
+/**
+ * The legacy display type a processed image of this size counts towards — used
+ * to read Asset Library placements against a config written in display types.
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {string|null}
+ */
+export function displayTypeForSize(width, height) {
+  for (const displayType of Object.keys(DISPLAY_TYPE_SIZES)) {
+    if (fitsDisplayType(displayType, width, height)) return displayType;
+  }
+  return null;
+}

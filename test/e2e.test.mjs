@@ -476,3 +476,71 @@ test("testflight refuses to guess an export compliance answer", async () => {
   const res = await run("testflight");
   assert.match(res.json.results[0].message, /export compliance/);
 });
+
+test("reviews: newest first, filtered to what needs an answer, with Apple's summary — no config needed", async () => {
+  const fake = createFakeAsc();
+  const empty = mkdtempSync(join(tmpdir(), "asr-e2e-reviews-"));
+  const env = {
+    ASC_KEY_ID: "ABCDE12345",
+    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+    ASC_P8: testPrivateKey(),
+    ASC_APP_ID: "1234567890",
+  };
+  const run = async (/** @type {string[]} */ ...argv) => {
+    const out = [];
+    const io = {
+      stdout: { write: (s) => out.push(s) },
+      stderr: { write: () => {} },
+      env,
+      cwd: empty,
+      fetchImpl: fake.fetchImpl,
+    };
+    return { code: await main([...argv, "--json"], io), json: JSON.parse(out.join("")) };
+  };
+
+  const all = await run("reviews", "--summary");
+  assert.equal(all.code, Exit.OK);
+  const details = all.json.results[0].details;
+  assert.deepEqual(
+    details.reviews.map((r) => r.id),
+    ["rev-1", "rev-2", "rev-3", "rev-4"],
+    "newest first",
+  );
+  assert.equal(details.reviews.find((r) => r.id === "rev-4").response.body, "A widget is on the way!");
+  assert.match(details.summaries[0].text, /crashes in Insights/);
+
+  const needy = await run("reviews", "--rating", "1,2", "--unanswered");
+  assert.deepEqual(
+    needy.json.results[0].details.reviews.map((r) => r.id),
+    ["rev-2", "rev-3"],
+  );
+
+  // Replying: refused when empty or too long, before any request is sent.
+  const writes = fake.mutations().length;
+  assert.equal((await run("reply", "rev-2", "--text", "")).code, Exit.BLOCKED);
+  assert.equal((await run("reply", "rev-2", "--text", "x".repeat(5971))).code, Exit.BLOCKED);
+  assert.equal(fake.mutations().length, writes);
+
+  const text = "Sorry about that — 1.0.1 fixes the Insights crash on iPad. Thanks for telling us.";
+  assert.equal((await run("reply", "rev-2", "--text", text, "--dry-run")).code, Exit.OK);
+  assert.equal(fake.mutations().length, writes, "dry run sends nothing");
+
+  const posted = await run("reply", "rev-2", "--text", text);
+  assert.equal(posted.json.results[0].status, "changed");
+  const again = await run("reply", "rev-2", "--text", text);
+  assert.equal(again.json.results[0].status, "ok", "the same reply twice is a no-op");
+
+  await run("reply", "rev-2", "--text", "Fixed in 1.0.1 — thank you!");
+  assert.equal(
+    fake.all("customerReviewResponses").filter((r) => r.relationships?.review?.data?.id === "rev-2").length,
+    1,
+    "replaced, not added",
+  );
+
+  await run("reply", "rev-2", "--delete");
+  assert.equal(
+    fake.all("customerReviewResponses").some((r) => r.relationships?.review?.data?.id === "rev-2"),
+    false,
+  );
+  assert.deepEqual(fake.unhandled, []);
+});

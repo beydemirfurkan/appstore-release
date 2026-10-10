@@ -15,7 +15,8 @@
         "asc-subscriptions",
         "asc-rejection",
         "asc-credentials",
-        "asc-testflight"
+        "asc-testflight",
+        "asc-reviews"
       ]
     }
   ]

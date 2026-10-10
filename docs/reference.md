@@ -48,7 +48,7 @@ Several MCP servers expose the App Store Connect API, some with more than a thou
 - a screenshot that skips its commit step stays invisible forever, with nothing in the UI to say why,
 - the App Asset Library's placement groups come from runtime reference data, not an enum.
 
-Endpoint coverage hands the model these landmines. This tool defuses them with **11 outcome-shaped MCP tools**, and the most important one answers the question that matters: _can this version be submitted, and if not, what is next?_
+Endpoint coverage hands the model these landmines. This tool defuses them with **13 outcome-shaped MCP tools**, and the most important one answers the question that matters: _can this version be submitted, and if not, what is next?_
 
 ## Updated for iOS 27
 
@@ -126,6 +126,8 @@ Every key is in the [JSON Schema](../schemas/config.schema.json), and the [templ
 | `subscription`             | plans (created when missing), localizations, price, intro offer, review screenshot               |
 | `in-app-purchases`         | one-time purchases (created when missing): localizations, availability, price, review screenshot |
 | `submit --submit`          | submit the version with any plans and purchases that need review; `--resolved` after a rejection |
+| `reviews`                  | customer reviews, newest first; `--rating 1,2`, `--unanswered`, `--territory`, `--summary`       |
+| `reply <reviewId>`         | publish a reply (`--text`) or remove it (`--delete`); the same text twice is a no-op             |
 | `testflight`               | export compliance, What to Test, beta groups, testers, beta app review                           |
 | `credentials`              | distribution certificate and provisioning profile (fixes stale EAS credentials)                  |
 | `mcp`                      | run the MCP server on stdio                                                                      |
@@ -169,6 +171,8 @@ Pin a release with `github:beydemirfurkan/appstore-release#v3.0.0`. From a clone
 | `asc_upload_screenshots`     |           | diff, then upload                                                                        |
 | `asc_configure_subscription` |           | subscriptions and in-app purchases from the config                                       |
 | `asc_submit_for_review`      |           | irreversible; refuses unless ready; `resolved` after a rejection                         |
+| `asc_customer_reviews`       | ✓         | reviews and Apple's summary; filter to unanswered or low-rated                           |
+| `asc_reply_to_review`        |           | publish one approved reply; replaces any earlier one                                     |
 | `asc_generate_credentials`   |           | off unless the operator opts in                                                          |
 
 Every mutating tool requires `confirm: true`, which forces a two-turn handshake that the host shows the user. Every skill and reference is also served as a resource: `appstore-release://skills/<name>`, plus `://gotchas`, `://runbook`, `://config-schema` and `://config-template`.

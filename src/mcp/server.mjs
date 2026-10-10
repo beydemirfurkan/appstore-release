@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// MCP server. Eleven outcome-shaped tools, plus every skill and reference as a resource, over stdio.
+// MCP server. Thirteen outcome-shaped tools, plus every skill and reference as a resource, over stdio.
 //
 // No dependencies: the JSON-RPC layer is ./jsonrpc.mjs and the methods are
 // ./protocol.mjs. That is deliberate — a Claude Code plugin is a git clone with

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" width="960" height="660" role="img" aria-labelledby="t d">
 <title id="t">appstore-release architecture</title>
-<desc id="d">Four entry surfaces (six agent skills, an MCP server with 11 tools, a CLI and a library API) share one core: operations and the readiness report, which call one App Store Connect client.</desc>
+<desc id="d">Four entry surfaces (eight agent skills, an MCP server with 13 tools, a CLI and a library API) share one core: operations and the readiness report, which call one App Store Connect client.</desc>
 <defs>
   <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#59636e"/></marker>
   <style>
@@ -17,25 +17,29 @@
 <rect width="960" height="660" rx="16" fill="#ffffff"/>
 <text x="24" y="38" class="s k mu" text-anchor="start">ENTRY SURFACES — pick the one your tools speak</text>
 <rect x="24" y="52" width="452" height="176" rx="12" fill="#eef4fd" stroke="#0969da" stroke-width="1.25"/>
-<text x="44" y="82" class="s h" text-anchor="start">Agent skills · 6</text>
+<text x="44" y="82" class="s h" text-anchor="start">Agent skills · 8</text>
 <text x="44" y="102" class="s c mu" text-anchor="start">npx skills add · Claude Code plugin · Codex · Cursor</text>
-<rect x="44" y="116" width="180" height="34" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.25"/>
-<text x="134" y="138" class="m c ac" text-anchor="middle">appstore-release</text>
-<text x="236" y="138" class="s c mu" text-anchor="start">router: check → fix → submit</text>
-<rect x="44" y="166" width="130" height="26" rx="7" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
-<text x="109.0" y="183" class="m c" text-anchor="middle">asc-screenshots</text>
-<rect x="184" y="166" width="124" height="26" rx="7" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
-<text x="246.0" y="183" class="m c" text-anchor="middle">asc-age-rating</text>
-<rect x="318" y="166" width="148" height="26" rx="7" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
-<text x="392.0" y="183" class="m c" text-anchor="middle">asc-subscriptions</text>
-<rect x="44" y="198" width="124" height="26" rx="7" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
-<text x="106.0" y="215" class="m c" text-anchor="middle">asc-rejection</text>
-<rect x="184" y="198" width="130" height="26" rx="7" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
-<text x="249.0" y="215" class="m c" text-anchor="middle">asc-credentials</text>
+<rect x="44" y="114" width="180" height="32" rx="8" fill="#ffffff" stroke="#0969da" stroke-width="1.25"/>
+<text x="134" y="135" class="m c ac" text-anchor="middle">appstore-release</text>
+<text x="236" y="135" class="s c mu" text-anchor="start">router: check → fix → submit</text>
+<rect x="44" y="158" width="134" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="111.0" y="173" class="m c" text-anchor="middle">asc-screenshots</text>
+<rect x="188.0" y="158" width="126" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="251.2" y="173" class="m c" text-anchor="middle">asc-age-rating</text>
+<rect x="324.4" y="158" width="149" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="399.0" y="173" class="m c" text-anchor="middle">asc-subscriptions</text>
+<rect x="44" y="181" width="119" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="103.4" y="196" class="m c" text-anchor="middle">asc-rejection</text>
+<rect x="172.8" y="181" width="134" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="239.8" y="196" class="m c" text-anchor="middle">asc-credentials</text>
+<rect x="316.8" y="181" width="126" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="380.0" y="196" class="m c" text-anchor="middle">asc-testflight</text>
+<rect x="44" y="204" width="104" height="21" rx="6" fill="#ffffff" stroke="#d0d7de" stroke-width="1.25"/>
+<text x="95.8" y="219" class="m c" text-anchor="middle">asc-reviews</text>
 <rect x="492" y="52" width="140" height="176" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
 <text x="508" y="82" class="s h" text-anchor="start">MCP server</text>
-<text x="508" y="110" class="m c mu" text-anchor="start">11 tools</text>
-<text x="508" y="132" class="m c mu" text-anchor="start">skills as resources</text>
+<text x="508" y="110" class="m c mu" text-anchor="start">13 tools</text>
+<text x="508" y="132" class="m c mu" text-anchor="start">skill resources</text>
 <rect x="644" y="52" width="140" height="176" rx="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.25"/>
 <text x="660" y="82" class="s h" text-anchor="start">CLI</text>
 <text x="660" y="110" class="m c mu" text-anchor="start">src/cli.mjs</text>
@@ -78,5 +82,5 @@
 <text x="270" y="606" class="m c ac" text-anchor="start">App Asset Library · versioned subscriptions</text>
 <rect x="652" y="570" width="284" height="62" rx="12" fill="#fff8c5" stroke="#9a6700" stroke-width="1.25" stroke-dasharray="5 5"/>
 <text x="672" y="597" class="s b" text-anchor="start">Kept in Apple’s UI</text>
-<text x="672" y="620" class="s c mu" text-anchor="start">App Privacy · first subscription</text>
+<text x="672" y="620" class="s c mu" text-anchor="start">App Privacy · first subscription &amp; IAP</text>
 </svg>

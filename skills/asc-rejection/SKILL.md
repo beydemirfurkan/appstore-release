@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com with an App Store Connect API key (App Manager). Reading the rejection text needs the user, because Apple has no API for it.
 metadata:
   author: Furkan Beydemir
-  version: "3.1.0"
+  version: "3.2.0"
 ---
 
 # Rejection → fix → resubmit

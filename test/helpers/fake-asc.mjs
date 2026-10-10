@@ -222,6 +222,35 @@ export function createFakeAsc({
   /** @type {Array<{ method: string, path: string, body?: any }>} */
   const calls = [];
 
+  // Customer reviews: a mix of ratings and territories, one already answered.
+  for (const [id, rating, title, body, territory, date] of [
+    ["rev-1", 5, "Love it", "Exactly the gentle nudge I needed.", "USA", "2026-10-09T08:00:00Z"],
+    ["rev-2", 2, "Crashes", "It closes when I open Insights on my iPad.", "USA", "2026-10-08T20:00:00Z"],
+    ["rev-3", 1, "Çok kötü", "Bildirimler gelmiyor.", "TUR", "2026-10-07T12:00:00Z"],
+    ["rev-4", 4, "Nice", "Would love a widget.", "GBR", "2026-10-05T09:30:00Z"],
+  ]) {
+    put("customerReviews", /** @type {string} */ (id), {
+      rating,
+      title,
+      body,
+      reviewerNickname: `user-${id}`,
+      territory,
+      createdDate: date,
+    });
+  }
+  put(
+    "customerReviewResponses",
+    "resp-4",
+    { responseBody: "A widget is on the way!", state: "PUBLISHED", lastModifiedDate: "2026-10-06T10:00:00Z" },
+    { review: ref("customerReviews", "rev-4") },
+  );
+  put("customerReviewSummarizations", "sum-1", {
+    locale: "en-US",
+    text: "People like the gentle reminders; some report crashes in Insights on iPad.",
+    platform: "IOS",
+    createdDate: "2026-10-09T00:00:00Z",
+  });
+
   // ── Derived state: what Apple computes, not what anyone writes ────────────
   /** Apple's derived states: a product is READY_TO_SUBMIT once it has everything review needs. */
   function refreshSubscriptionState() {
@@ -653,6 +682,54 @@ export function createFakeAsc({
       ),
     );
   });
+
+  // Customer reviews and replies
+  const responseOf = (/** @type {string} */ reviewId) =>
+    all("customerReviewResponses").find((r) => rel(r, "review")?.id === reviewId);
+  on("GET", `/v1/apps/${appId}/customerReviews`, (_m, { url }) => {
+    const ratings = (url.searchParams.get("filter[rating]") ?? "").split(",").filter(Boolean).map(Number);
+    const territory = url.searchParams.get("filter[territory]");
+    const answered = url.searchParams.get("exists[publishedResponse]");
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    const reviews = all("customerReviews")
+      .filter((r) => !ratings.length || ratings.includes(r.attributes.rating))
+      .filter((r) => !territory || r.attributes.territory === territory)
+      .filter((r) => answered === null || (answered === "true") === Boolean(responseOf(r.id)))
+      .sort((a, b) => b.attributes.createdDate.localeCompare(a.attributes.createdDate))
+      .slice(0, limit)
+      .map((r) => {
+        const resp = responseOf(r.id);
+        return {
+          ...r,
+          relationships: { response: { data: resp ? { type: "customerReviewResponses", id: resp.id } : null } },
+        };
+      });
+    const included = reviews.map((r) => responseOf(r.id)).filter(Boolean);
+    return ok(reviews, included);
+  });
+  on("GET", `/v1/customerReviews/:id/response`, (m) => {
+    const resp = responseOf(m[1]);
+    return resp ? ok(resp) : notFound();
+  });
+  on("POST", `/v1/customerReviewResponses`, (_m, { body }) => {
+    const reviewId = body.data.relationships.review.data.id;
+    if (!get("customerReviews", reviewId)) return notFound();
+    const old = responseOf(reviewId);
+    if (old) table("customerReviewResponses").delete(old.id);
+    const r = put(
+      "customerReviewResponses",
+      nextId("resp"),
+      {
+        responseBody: body.data.attributes.responseBody,
+        state: "PENDING_PUBLISH",
+        lastModifiedDate: "2026-10-10T12:00:00Z",
+      },
+      body.data.relationships,
+    );
+    return created(r);
+  });
+  on("DELETE", `/v1/customerReviewResponses/:id`, remove("customerReviewResponses"));
+  on("GET", `/v1/apps/${appId}/customerReviewSummarizations`, () => ok(all("customerReviewSummarizations")));
 
   // Review submissions
   on("GET", `/v1/reviewSubmissions`, (_m, { url }) => {

@@ -42,6 +42,7 @@ const MUTATING = [
   "asc_configure_subscription",
   "asc_submit_for_review",
   "asc_generate_credentials",
+  "asc_reply_to_review",
 ];
 
 // ── the tool surface ──────────────────────────────────────────────────────────
@@ -51,16 +52,20 @@ test("the tool surface is exactly this, and grows only on purpose", async () => 
   // The count is a product decision, so it is pinned. asc_open_next_version was
   // the eleventh, added because without it an agent that hit version.none had no
   // way forward at all — every other tool needs an editable version to act on.
-  assert.equal(tools.length, 11, tools.map((t) => t.name).join(", "));
+  // The twelfth and thirteenth answer customer reviews: one reads, one writes,
+  // so a host can run the reading without asking and must ask before a reply.
+  assert.equal(tools.length, 13, tools.map((t) => t.name).join(", "));
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     "asc_app_overview",
     "asc_apply_release",
     "asc_configure_subscription",
+    "asc_customer_reviews",
     "asc_generate_credentials",
     "asc_list_apps",
     "asc_open_next_version",
     "asc_plan_release",
     "asc_readiness_report",
+    "asc_reply_to_review",
     "asc_submit_for_review",
     "asc_upload_screenshots",
     "asc_validate_config",
@@ -85,6 +90,7 @@ test("every tool ships a usable JSON Schema and honest annotations", async () =>
   const readOnly = tools.filter((t) => t.annotations.readOnlyHint).map((t) => t.name);
   assert.deepEqual(readOnly.sort(), [
     "asc_app_overview",
+    "asc_customer_reviews",
     "asc_list_apps",
     "asc_plan_release",
     "asc_readiness_report",
@@ -274,7 +280,7 @@ test("a spawned server speaks the protocol over stdio", async () => {
     "a notification must produce no response",
   );
   assert.equal(got[0].result.protocolVersion, "2025-06-18");
-  assert.equal(got[1].result.tools.length, 11);
+  assert.equal(got[1].result.tools.length, 13);
   assert.deepEqual(got[2].result, {});
 });
 

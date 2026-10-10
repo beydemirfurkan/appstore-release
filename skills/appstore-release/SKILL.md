@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com. Needs an App Store Connect API key with the App Manager role. git is used once to fetch the CLI when the skill runs outside a checkout.
 metadata:
   author: Furkan Beydemir
-  version: "3.1.0"
+  version: "3.2.0"
 ---
 
 # App Store Release
@@ -70,6 +70,7 @@ Work through `nextActions` in order. When a finding belongs to a focused area, l
 | `rating.*`, "what age rating", social media / loot box answers         | **asc-age-rating**                                                       |
 | `subscription.*`, `iap.*`, plans, free trials, lifetime unlock         | **asc-subscriptions**                                                    |
 | "send it to TestFlight", testers, beta groups, What to Test            | **asc-testflight**                                                       |
+| "reply to reviews", bad reviews, "what are people saying"              | **asc-reviews**                                                          |
 | verdict `rejected`, `submission.rejected`, "Apple rejected it"         | **asc-rejection**                                                        |
 | `version.build.*` with an EAS signing error, expired profile           | **asc-credentials**                                                      |
 | `metadata.*`, `config.*.emoji`, `.too-long`, `.placeholder`, `.wasted` | [references/metadata.md](references/metadata.md)                         |
@@ -137,7 +138,7 @@ On rejection, switch to **asc-rejection**: the fix, then `asc submit --submit --
 
 ## MCP
 
-The same core is an MCP server (`asc mcp`, 11 tools). Start with `asc_readiness_report`; every mutating tool needs `confirm: true`, and `asc_submit_for_review` refuses unless the report is `ready`.
+The same core is an MCP server (`asc mcp`, 13 tools). Start with `asc_readiness_report`; every mutating tool needs `confirm: true`, and `asc_submit_for_review` refuses unless the report is `ready`.
 
 ## References
 

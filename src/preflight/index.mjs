@@ -71,7 +71,7 @@ export function runPreflight({ projectDir, config = null, expoConfig }) {
           appFinding({
             id: "app.expo-config.dynamic",
             severity: Severity.INFO,
-            title: "app.config.js was not evaluated",
+            title: `${project.dynamicConfigFile} was not evaluated`,
             detail:
               "A dynamic Expo config is code; it is only run when asked. Permissions and plugins set there were not seen.",
             fix: "Run preflight with --expo-config to evaluate it (runs `npx expo config`).",

@@ -48,6 +48,7 @@ const MAX_WALK = 100000;
  * @property {Set<string>} deps
  * @property {any} expoConfig         the `expo` object, when readable
  * @property {boolean} dynamicConfig  app.config.js/ts exists and was not evaluated
+ * @property {string|null} dynamicConfigFile  its name, when there is one
  * @property {Map<string, PlistEntry>} infoPlist
  * @property {Set<string>} disabledKeys  keys an Expo plugin option turned off with `false`
  * @property {Array<{ source: string, types: Array<{ type: string, reasons: string[] }> }>} privacyManifests
@@ -94,6 +95,7 @@ export function loadProject(dir, { expoConfig } = {}) {
       deps,
       expoConfig: null,
       dynamicConfig: false,
+      dynamicConfigFile: null,
       infoPlist: new Map(),
       disabledKeys: new Set(),
       privacyManifests: [],
@@ -194,6 +196,7 @@ export function loadProject(dir, { expoConfig } = {}) {
     deps,
     expoConfig: expo,
     dynamicConfig,
+    dynamicConfigFile: dynamicFile ?? null,
     infoPlist,
     disabledKeys,
     privacyManifests,

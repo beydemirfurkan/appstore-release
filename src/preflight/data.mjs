@@ -200,6 +200,8 @@ export const AUTH_PACKAGES = [
   "@clerk/clerk-expo",
   "@supabase/supabase-js",
   "aws-amplify",
+  "better-auth",
+  "@better-auth/expo",
 ];
 
 /** Payment SDKs that are not In-App Purchase. Guideline 3.1.1 for digital goods. */

@@ -156,11 +156,16 @@ export function screenshotLimit(ref, placementGroupId) {
  * The most assets of a placement type a group may hold on an App Store version.
  * @param {RefData} ref @param {string} placementGroupId @param {string} placementType @param {number} fallback
  */
-export function placementLimit(ref, placementGroupId, placementType, fallback) {
-  const feature = (ref.features ?? []).find((f) => f.featureId === "APP_STORE_VERSIONS");
-  const policy = feature?.placementPolicies?.find((p) => p.placementType === placementType);
-  const limit = policy?.groupLimits?.find((g) => g.groupIds.includes(placementGroupId));
-  return limit?.maxCount ?? fallback;
+export function placementLimit(ref, placementGroupId, placementType, fallback, featureId = "APP_STORE_VERSIONS") {
+  // The feature's own policy first (custom product pages have theirs), then the
+  // product page's, then the fallback.
+  for (const id of [featureId, "APP_STORE_VERSIONS"]) {
+    const feature = (ref.features ?? []).find((f) => f.featureId === id);
+    const policy = feature?.placementPolicies?.find((p) => p.placementType === placementType);
+    const limit = policy?.groupLimits?.find((g) => g.groupIds.includes(placementGroupId));
+    if (limit?.maxCount != null) return limit.maxCount;
+  }
+  return fallback;
 }
 
 /**
@@ -273,7 +278,7 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
     : await client.get(
         `/v1/${parent.type}/${parent.id}/placements` +
           `?filter[placementType]=${placementType}&filter[placementGroup]=${encodeURIComponent(placementGroup)}` +
-          `&sort=placementGroupPosition&include=${media}&fields[${assetType}]=referenceName,fileName,state` +
+          `&sort=placementGroupPosition&include=${media}&fields[${assetType}]=referenceName,fileName,state${media === "video" ? ",previewFrameTimeCode" : ""}` +
           `&limit=50`,
       );
   const images = new Map((current.included ?? []).filter((x) => x.type === assetType).map((x) => [x.id, x]));
@@ -281,17 +286,22 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
     const image = images.get(p.relationships?.[media]?.data?.id);
     return {
       id: p.id,
+      assetId: image?.id,
       tag: tagOf(image?.attributes?.referenceName),
       imageState: image?.attributes?.state,
       fileName: image?.attributes?.fileName,
+      frame: image?.attributes?.previewFrameTimeCode ?? null,
     };
   });
+
+  /** A placed video whose poster frame is not the configured one. @param {{ frame: string|null }} p */
+  const wrongFrame = (p) => media === "video" && Boolean(previewFrameTimeCode) && p.frame !== previewFrameTimeCode;
 
   if (params.checkOnly) {
     const live = placed.filter((p) => !DEAD_ASSET_STATES.includes(p.imageState ?? ""));
     const want = local.map((item) => contentTag(readFileSync(item.path)));
     const differs =
-      want.some((tag, i) => live[i]?.tag !== tag) ||
+      want.some((tag, i) => live[i]?.tag !== tag || (live[i] && wrongFrame(live[i]))) ||
       (params.prune ? live.length !== want.length : live.length < want.length);
     return {
       uploaded: [],
@@ -308,6 +318,7 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
   const claimed = new Set();
   /** @type {string[]} */
   const ordered = [];
+  let reframed = 0;
   /** @type {string[]} */
   const uploaded = [];
   /** @type {string[]} */
@@ -323,13 +334,26 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
     if (existing) {
       claimed.add(existing.id);
       ordered.push(existing.id);
+      // Same video, new poster frame: the asset is updated, not uploaded again.
+      if (wrongFrame(existing) && existing.assetId) {
+        await client.patch(`/v1/appAssetLibraryVideos/${existing.assetId}`, {
+          data: { type: "appAssetLibraryVideos", id: existing.assetId, attributes: { previewFrameTimeCode } },
+        });
+        reframed += 1;
+      }
       continue;
     }
 
     const referenceName = `${basename(item.file)} [asr:${tag}]`;
-    let imageId = isPlanned(library.id) ? null : await findLibraryAsset(client, library.id, referenceName, media);
-    if (imageId) {
+    const found = isPlanned(library.id) ? null : await findLibraryAsset(client, library.id, referenceName, media);
+    let imageId = found?.id ?? null;
+    if (found && imageId) {
       reused.push(item.file);
+      if (wrongFrame(found)) {
+        await client.patch(`/v1/appAssetLibraryVideos/${imageId}`, {
+          data: { type: "appAssetLibraryVideos", id: imageId, attributes: { previewFrameTimeCode } },
+        });
+      }
     } else {
       imageId = await uploader.upload({
         reservePath: `/v1/${assetType}`,
@@ -396,7 +420,7 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
     keptOrphans: prune ? [] : orphans.map((p) => p.fileName ?? p.id),
     unchanged: local.length - created,
     reordered: reordered && desired.length > 1,
-    changed: Boolean(created || toDelete.length || (reordered && desired.length > 1)),
+    changed: Boolean(created || toDelete.length || reframed || (reordered && desired.length > 1)),
     planned: dryRun,
   };
 }
@@ -415,12 +439,32 @@ async function findLibraryAsset(client, libraryId, referenceName, media) {
   const fields = media === "video" ? "appAssetLibraryVideos" : "appAssetLibraryImages";
   const r = await client.get(
     `/v1/appAssetLibraries/${libraryId}/${kind}?filter[referenceName]=${encodeURIComponent(referenceName)}` +
-      `&fields[${fields}]=referenceName,state&limit=5`,
+      `&fields[${fields}]=referenceName,state${media === "video" ? ",previewFrameTimeCode" : ""}&limit=5`,
     { throwOnError: false },
   );
   if (r.error) return null;
   const hit = (r.data ?? []).find(
     (img) => img.attributes?.referenceName === referenceName && !DEAD_ASSET_STATES.includes(img.attributes?.state),
   );
-  return hit?.id ?? null;
+  return hit ? { id: hit.id, frame: hit.attributes?.previewFrameTimeCode ?? null } : null;
+}
+/**
+ * Placements of one media kind on a parent, in device groups the local folder no
+ * longer has any file for: deleted, or only counted with `checkOnly`. Without
+ * this, removing every iPad file would leave the iPad placements live, since
+ * the per-group sync only visits groups that still have files.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {{ parent: { type: string, id: string }, media: "image"|"video", keep: string[], checkOnly?: boolean }} params
+ * @returns {Promise<number>}
+ */
+export async function pruneOtherGroups({ client }, { parent, media, keep, checkOnly = false }) {
+  if (String(parent.id).startsWith("dry:")) return 0;
+  const placementType = media === "video" ? "APP_PREVIEW" : "APP_SCREENSHOT";
+  const placed = await client.all(`/v1/${parent.type}/${parent.id}/placements?filter[placementType]=${placementType}`, {
+    limit: 50,
+  });
+  const stray = placed.filter((p) => !keep.includes(p.attributes?.placementGroup));
+  if (!checkOnly) for (const p of stray) await client.delete(`/v1/appAssetLibraryPlacements/${p.id}`);
+  return stray.length;
 }

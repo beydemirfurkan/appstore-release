@@ -25,4 +25,5 @@ asc submit --submit          # sends an editable page version with the app
 - A page is matched by `name`. Screenshots and previews are grouped by pixel size, exactly as on the product page.
 - An approved page version cannot change. When the config differs from it — text, deep link, locales or any screenshot — a new version is created and the approved one keeps serving until the new one is approved. With nothing different, nothing is written.
 - `visible: true` makes the page's URL live; the URL is in App Store Connect and in the page's `url`.
-- Pages go to App Review: `submit` adds an editable page version to the same submission as the app version.
+- While a version is in review, nothing is changed and no new version is started.
+- Pages go to App Review: `submit` adds an editable page version to the same submission as the app version. If App Store Connect refuses a page, its items come back out and nothing is submitted; `asc submit --submit --skip-pages` sends the app without the pages.

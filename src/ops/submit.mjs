@@ -21,6 +21,9 @@ import { EDITABLE_PAGE_STATES, pageConfigs } from "./custom-product-pages.mjs";
 /** Review submission item relationships that carry a product rather than the app. */
 const PRODUCT_RELATIONSHIPS = ["subscriptionGroupVersion", "subscriptionVersion", "inAppPurchaseVersion"];
 
+/** The review submission item relationship of a custom product page version. */
+const PAGE_RELATIONSHIP = "appCustomProductPageVersion";
+
 /** What to run after a submission, to follow it to Apple's answer. */
 export const FOLLOW_COMMAND = "appstore-release check --wait 30";
 
@@ -54,6 +57,11 @@ export const meta = {
       type: "boolean",
       default: false,
       description: "after a rejection: you have addressed what App Review asked for — resubmit",
+    },
+    skipPages: {
+      type: "boolean",
+      default: false,
+      description: "leave custom product pages out of this submission",
     },
     skipProducts: {
       type: "boolean",
@@ -108,6 +116,7 @@ export function submitGate(report, { resolved = false, skipProducts = false } = 
  * @property {string} id         the related resource's id
  * @property {string} label
  * @property {"subscription"|"iap"} [product]
+ * @property {boolean} [page]    a custom product page version
  * @property {boolean} [first]   part of the app's first product of its kind
  * @property {string} [productId]
  */
@@ -181,9 +190,10 @@ export async function run(ctx, args = {}) {
       )),
     );
   }
-  // Custom product pages with an editable version go with the app; they are not
-  // products, so a refusal of theirs is reported, never rolled back.
-  wanted.push(...(await pageItems(ctx)));
+  // Custom product pages with an editable version go with the app, unless left
+  // out. A refused page is taken back out like a product, so it never holds the
+  // app hostage.
+  if (!args.skipPages) wanted.push(...(await pageItems(ctx)));
   const products = wanted.filter((i) => i.product);
 
   /** related id → its reviewSubmissionItem, for everything the submission already holds */
@@ -208,6 +218,7 @@ export async function run(ctx, args = {}) {
       // No 409 is swallowed: a duplicate was already filtered out above, so a
       // conflict here means Apple will not review this item, and it says why.
       if (item.product) return refuseProducts(ctx, { submission, products, present, error: res.error, item, version });
+      if (item.page) return refusePages(ctx, { submission, present, error: res.error, label: item.label });
       const { findings } = explainRefusal(res.error);
       return {
         status: Status.ERROR,
@@ -221,6 +232,17 @@ export async function run(ctx, args = {}) {
 
   // The app alone means the app alone: product items an earlier run left in the
   // draft come out too, or they would go to review with it.
+  if (args.skipPages) {
+    const { removed, stuck } = await removeProductItems(client, present, [PAGE_RELATIONSHIP]);
+    if (stuck.length) {
+      return {
+        status: Status.ERROR,
+        message: `could not take ${stuck.length} page item(s) out of submission ${submission.id}; remove them in App Store Connect`,
+        details: { submissionId: submission.id, removed, stuck },
+      };
+    }
+    if (removed.length) added.push(...removed.map((id) => `−${id}`));
+  }
   if (args.skipProducts) {
     const { removed, stuck } = await removeProductItems(client, present);
     if (stuck.length) {
@@ -280,6 +302,12 @@ export async function run(ctx, args = {}) {
     // About a product: take the products out so the app is not held hostage to them.
     if (explained.productRelated && [...present.values()].some((v) => PRODUCT_RELATIONSHIPS.includes(v.relationship))) {
       return refuseProducts(ctx, { submission, products, present, error: done.error, version });
+    }
+    if (
+      explained.lines.some((l) => /custom product page|appCustomProductPage/i.test(l)) &&
+      [...present.values()].some((v) => v.relationship === PAGE_RELATIONSHIP)
+    ) {
+      return refusePages(ctx, { submission, present, error: done.error, label: "custom product pages" });
     }
     // About the app (App Privacy, price, screenshots…): the draft stays as it is —
     // the next submit reuses it — and each reason says what to do.
@@ -391,18 +419,43 @@ async function refuseProducts(
 }
 
 /**
+ * App Store Connect would not take a custom product page with this submission:
+ * every page item comes back out, nothing is submitted, and the way on is said —
+ * fix the page, or send the rest with --skip-pages.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {{ submission: any, present: Map<string, { itemId: string, relationship: string }>, error: any, label: string }} input
+ */
+async function refusePages({ client }, { submission, present, error, label }) {
+  const { removed, stuck } = await removeProductItems(client, present, [PAGE_RELATIONSHIP]);
+  const { lines, findings } = explainRefusal(error);
+  const said = lines.length ? `"${lines.join(" · ")}"` : error.message;
+  return {
+    status: Status.ERROR,
+    message:
+      `App Store Connect would not take ${label} with ${submission.id}: ${said}. Nothing was submitted` +
+      `${removed.length ? `; ${removed.length} page item(s) taken back out` : ""}` +
+      `${stuck.length ? `; could not remove ${stuck.length} — remove in App Store Connect` : ""}. ` +
+      "Fix the page and submit again, or send the rest with submit --submit --skip-pages.",
+    details: { submissionId: submission.id, refused: lines, removed, stuck },
+    findings,
+  };
+}
+
+/**
  * Delete every product item the submission holds, and forget them.
  *
  * @param {import("../asc/client.mjs").AscClient} client
  * @param {Map<string, { itemId: string, relationship: string }>} present
+ * @param {string[]} [relationships]   which kinds of item: products by default
  */
-async function removeProductItems(client, present) {
+async function removeProductItems(client, present, relationships = PRODUCT_RELATIONSHIPS) {
   /** @type {string[]} */
   const removed = [];
   /** @type {string[]} */
   const stuck = [];
   for (const [relatedId, { itemId, relationship }] of [...present]) {
-    if (!PRODUCT_RELATIONSHIPS.includes(relationship)) continue;
+    if (!relationships.includes(relationship)) continue;
     const res = await client.delete(`/v1/reviewSubmissionItems/${itemId}`, { throwOnError: false });
     if (res?.error) stuck.push(itemId);
     else {
@@ -432,14 +485,19 @@ async function pageItems({ client, discovery, config }) {
       limit: 50,
     });
     const editable = versions.find((v) => EDITABLE_PAGE_STATES.includes(v.attributes?.state));
-    if (editable) {
-      items.push({
-        relationship: "appCustomProductPageVersion",
-        type: "appCustomProductPageVersions",
-        id: editable.id,
-        label: `page "${page.name}"`,
-      });
-    }
+    if (!editable) continue;
+    // A version with no localization is half-built: it is not sent.
+    const locs = await client.all(`/v1/appCustomProductPageVersions/${editable.id}/appCustomProductPageLocalizations`, {
+      limit: 1,
+    });
+    if (!locs.length) continue;
+    items.push({
+      relationship: PAGE_RELATIONSHIP,
+      type: "appCustomProductPageVersions",
+      id: editable.id,
+      label: `page "${page.name}"`,
+      page: true,
+    });
   }
   return items;
 }

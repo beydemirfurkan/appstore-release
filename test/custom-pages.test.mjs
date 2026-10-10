@@ -119,3 +119,116 @@ test("--dry-run creates no page", async () => {
   assert.notEqual(res.code, Exit.INTERNAL);
   assert.equal(fake.all("appCustomProductPages").length, 0);
 });
+
+test("a page in review is left alone: no new version on any re-run", async () => {
+  const { fake, run, write } = project();
+  await run("release");
+  await run("submit", "--submit");
+  const again = await run("custom-product-pages");
+  assert.match(again.json.results[0].message, /in review/);
+  assert.equal(fake.all("appCustomProductPageVersions").length, 1);
+
+  // Approved v1, v2 in review: still nothing, whatever the config says.
+  approveCustomPages(fake);
+  write((c) => ({ ...c, customProductPages: [{ ...ramadan, deepLink: "wellness://ramadan2" }] }));
+  await run("custom-product-pages");
+  await run("submit", "--submit");
+  write((c) => ({ ...c, customProductPages: [{ ...ramadan, deepLink: "wellness://ramadan3" }] }));
+  await run("custom-product-pages");
+  assert.equal(fake.all("appCustomProductPageVersions").length, 2);
+});
+
+test("a page App Store Connect refuses is taken back out; --skip-pages sends the rest", async () => {
+  const root = project();
+  const { fake } = root;
+  // Same project, against a fake that refuses page items.
+  const refusing = createFakeAsc({ refusePages: true });
+  Object.assign(fake, refusing);
+  const { run } = {
+    run: async (/** @type {string[]} */ ...argv) => {
+      const out = [];
+      const io = {
+        stdout: { write: (s) => out.push(s) },
+        stderr: { write: () => {} },
+        env: {
+          ASC_KEY_ID: "ABCDE12345",
+          ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+          ASC_P8: testPrivateKey(),
+          ASC_APP_ID: "1234567890",
+          APPSTORE_RELEASE_STATE_DIR: mkdtempSync(join(tmpdir(), "asr-state-")),
+        },
+        cwd: root.root,
+        fetchImpl: refusing.fetchImpl,
+      };
+      return { code: await main([...argv, "--json"], io), json: JSON.parse(out.join("")) };
+    },
+  };
+  await run("release");
+  const refused = await run("submit", "--submit");
+  assert.equal(refused.json.results[0].status, "error");
+  assert.match(refused.json.results[0].message, /--skip-pages/);
+  assert.equal(
+    refusing.all("reviewSubmissionItems").filter((i) => i.relationships?.appCustomProductPageVersion).length,
+    0,
+  );
+  assert.equal(refusing.all("reviewSubmissions")[0].attributes.state, "READY_FOR_REVIEW", "nothing submitted");
+
+  const alone = await run("submit", "--submit", "--skip-pages");
+  assert.equal(alone.code, Exit.OK, JSON.stringify(alone.json.results, null, 2));
+  assert.equal(refusing.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
+});
+
+test("a locale removed from the config is removed from the page", async () => {
+  const twoLocales = {
+    ...ramadan,
+    locales: { ...ramadan.locales, "de-DE": { promotionalText: "Ein ruhiger Ramadan." } },
+  };
+  const { fake, run, write } = project([twoLocales]);
+  await run("custom-product-pages");
+  write((c) => ({ ...c, customProductPages: [ramadan] }));
+  await run("custom-product-pages");
+  assert.deepEqual(
+    fake.all("appCustomProductPageLocalizations").map((l) => l.attributes.locale),
+    ["en-US"],
+  );
+  // On an approved version, a removed locale is a difference: a new version.
+  for (const v of fake.all("appCustomProductPageVersions")) v.attributes.state = "APPROVED";
+  write((c) => ({ ...c, customProductPages: [twoLocales] }));
+  await run("custom-product-pages");
+  for (const v of fake.all("appCustomProductPageVersions"))
+    if (v.attributes.state !== "APPROVED") v.attributes.state = "APPROVED";
+  write((c) => ({ ...c, customProductPages: [ramadan] }));
+  const res = await run("custom-product-pages");
+  assert.match(res.json.results[0].message, /new version/);
+});
+
+test("a device group with no file left loses its placements", async () => {
+  const { root, fake, run } = project();
+  writeFileSync(join(root, "cpp/ramadan/03-ipad.png"), headerOnlyPng(2064, 2752, "ipad"));
+  await run("custom-product-pages");
+  const ipad = () => cppPlacements(fake).filter((p) => p.attributes.placementGroup === "IPAD_13_PROFILE").length;
+  assert.equal(ipad(), 1);
+  const { rmSync } = await import("node:fs");
+  rmSync(join(root, "cpp/ramadan/03-ipad.png"));
+  await run("custom-product-pages");
+  assert.equal(ipad(), 0);
+});
+
+test("visible waits for an approved version", async () => {
+  const { fake, run } = project([{ ...ramadan, visible: true }]);
+  const first = await run("custom-product-pages");
+  assert.match(first.json.results[0].message, /visible once a version is approved/);
+  assert.equal(fake.all("appCustomProductPages")[0].attributes.visible, false);
+  await run("release");
+  await run("submit", "--submit");
+  approveCustomPages(fake);
+  await run("custom-product-pages");
+  assert.equal(fake.all("appCustomProductPages")[0].attributes.visible, true);
+});
+
+test("--dry-run describes a new page without a phantom second version", async () => {
+  const { run } = project();
+  const res = await run("custom-product-pages", "--dry-run");
+  assert.match(res.json.results[0].message, /"Ramadan" created/);
+  assert.doesNotMatch(res.json.results[0].message, /new version/);
+});

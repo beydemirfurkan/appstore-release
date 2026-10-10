@@ -15,8 +15,9 @@ const CONTAINERS = new Set(["moov", "trak", "mdia"]);
 
 /**
  * @param {string} filePath
- * @returns {{ width: number, height: number, durationSeconds: number } | null}
- *          null when the file is unreadable or has no video track
+ * @returns {{ width: number, height: number, durationSeconds: number | null } | null}
+ *          null when the file is unreadable or has no video track; durationSeconds
+ *          null when the file does not say (a fragmented file without mehd)
  */
 export function readVideoHeader(filePath) {
   let fd;
@@ -87,6 +88,8 @@ function* boxes(buf) {
 /** @param {Buffer} moov */
 function parseMoov(moov) {
   let durationSeconds = 0;
+  let timescaleOf = 0;
+  let fragmentDuration = 0;
   /** @type {{ width: number, height: number } | null} */
   let video = null;
 
@@ -95,13 +98,22 @@ function parseMoov(moov) {
       const version = box.body.readUInt8(0);
       const timescale = version === 1 ? box.body.readUInt32BE(20) : box.body.readUInt32BE(12);
       const duration = version === 1 ? Number(box.body.readBigUInt64BE(24)) : box.body.readUInt32BE(16);
+      timescaleOf = timescale;
       if (timescale) durationSeconds = duration / timescale;
+    } else if (box.type === "mvex") {
+      // A fragmented file's movie header says 0; its length is in mvex/mehd.
+      for (const inner of boxes(box.body)) {
+        if (inner.type !== "mehd") continue;
+        const version = inner.body.readUInt8(0);
+        fragmentDuration = version === 1 ? Number(inner.body.readBigUInt64BE(4)) : inner.body.readUInt32BE(4);
+      }
     } else if (box.type === "trak" && !video) {
       video = videoTrack(box.body);
     }
   }
+  if (!durationSeconds && fragmentDuration && timescaleOf) durationSeconds = fragmentDuration / timescaleOf;
   const found = /** @type {{ width: number, height: number } | null} */ (video);
-  return found ? { width: found.width, height: found.height, durationSeconds } : null;
+  return found ? { width: found.width, height: found.height, durationSeconds: durationSeconds || null } : null;
 }
 
 /**
@@ -115,9 +127,16 @@ function videoTrack(trak) {
   const walk = (/** @type {Buffer} */ buf) => {
     for (const box of boxes(buf)) {
       if (box.type === "tkhd") {
-        // width and height are the last 8 bytes, 16.16 fixed point
+        // The last 44 bytes: a 3×3 matrix {a, b, u, c, d, v, x, y, w}, then width
+        // and height in 16.16 fixed point. The size is before the matrix: a
+        // portrait recording is often stored landscape with a quarter turn
+        // (a = d = 0), so the displayed size is the other way round.
         const end = box.body.length;
-        size = { width: box.body.readUInt32BE(end - 8) >>> 16, height: box.body.readUInt32BE(end - 4) >>> 16 };
+        const width = box.body.readUInt32BE(end - 8) >>> 16;
+        const height = box.body.readUInt32BE(end - 4) >>> 16;
+        const a = box.body.readInt32BE(end - 44);
+        const d = box.body.readInt32BE(end - 28);
+        size = a === 0 && d === 0 ? { width: height, height: width } : { width, height };
       } else if (box.type === "hdlr") {
         isVideo = box.body.toString("latin1", 8, 12) === "vide";
       } else if (CONTAINERS.has(box.type)) {
@@ -133,10 +152,10 @@ function videoTrack(trak) {
  * A minimal, valid-enough MP4 of a given size and length, for tests and demos:
  * ftyp, an empty mdat, and a moov with mvhd and one video trak (tkhd, mdia/hdlr).
  *
- * @param {{ width: number, height: number, durationSeconds: number, padding?: number }} spec
+ * @param {{ width: number, height: number, durationSeconds: number, padding?: number, quarterTurn?: boolean }} spec
  * @returns {Buffer}
  */
-export function minimalMp4({ width, height, durationSeconds, padding = 0 }) {
+export function minimalMp4({ width, height, durationSeconds, padding = 0, quarterTurn = false }) {
   const box = (/** @type {string} */ type, /** @type {Buffer[]} */ ...parts) => {
     const body = Buffer.concat(parts);
     const head = Buffer.alloc(8);
@@ -149,6 +168,12 @@ export function minimalMp4({ width, height, durationSeconds, padding = 0 }) {
   mvhd.writeUInt32BE(timescale, 12);
   mvhd.writeUInt32BE(Math.round(durationSeconds * timescale), 16);
   const tkhd = Buffer.alloc(84);
+  // identity matrix, or a quarter turn (a = d = 0, b = 1, c = -1)
+  tkhd.writeInt32BE(quarterTurn ? 0 : 0x10000, 40);
+  tkhd.writeInt32BE(quarterTurn ? 0x10000 : 0, 44);
+  tkhd.writeInt32BE(quarterTurn ? -0x10000 : 0, 52);
+  tkhd.writeInt32BE(quarterTurn ? 0 : 0x10000, 56);
+  tkhd.writeInt32BE(0x40000000, 72);
   tkhd.writeUInt32BE(width << 16, 76);
   tkhd.writeUInt32BE(height << 16, 80);
   const hdlr = Buffer.alloc(24);

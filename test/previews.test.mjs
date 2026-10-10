@@ -13,7 +13,7 @@ import { testPrivateKey } from "./helpers/mock-asc.mjs";
 import { minimalMp4, readVideoHeader } from "../src/asc/video.mjs";
 import { durationSeconds } from "../src/asc/asset-library.mjs";
 
-/** @param {Record<string, { width: number, height: number, durationSeconds: number }>} videos */
+/** @param {Record<string, { width: number, height: number, durationSeconds: number, quarterTurn?: boolean }>} videos */
 function project(videos, previews = { dir: "./previews" }) {
   const root = mkdtempSync(join(tmpdir(), "asr-previews-"));
   writeWellnessProject(root);
@@ -131,4 +131,63 @@ test("previews are a release step, skipped when the config has none", async () =
   });
   const json = JSON.parse(out.join(""));
   assert.equal(json.results.find((r) => r.id === "previews")?.status, "skipped");
+});
+
+test("a new poster frame updates the video, never uploads it again", async () => {
+  const root = mkdtempSync(join(tmpdir(), "asr-poster-"));
+  writeWellnessProject(root);
+  const path = join(root, "appstore.config.json");
+  const set = (/** @type {string} */ posterFrame) =>
+    writeFileSync(
+      path,
+      JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), previews: { dir: "./previews", posterFrame } }),
+    );
+  mkdirSync(join(root, "previews"));
+  writeFileSync(join(root, "previews/1.mp4"), minimalMp4(iphone));
+  const fake = createFakeAsc();
+  const env = {
+    ASC_KEY_ID: "ABCDE12345",
+    ASC_ISSUER_ID: "69a6de00-0000-0000-0000-000000000000",
+    ASC_P8: testPrivateKey(),
+    ASC_APP_ID: "1234567890",
+    APPSTORE_RELEASE_STATE_DIR: mkdtempSync(join(tmpdir(), "asr-state-")),
+  };
+  const run = async (/** @type {string[]} */ ...argv) =>
+    main([...argv, "--json"], {
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      env,
+      cwd: root,
+      fetchImpl: fake.fetchImpl,
+    });
+  set("00:00:01:00");
+  await run("previews");
+  set("00:00:09:00");
+  await run("previews");
+  assert.equal(fake.all("appAssetLibraryVideos").length, 1, "not uploaded again");
+  assert.equal(fake.all("appAssetLibraryVideos")[0].attributes.previewFrameTimeCode, "00:00:09:00");
+});
+
+test("placementGroup settles a tie; a size with one answer keeps it", async () => {
+  const { fake, run } = project(
+    { "1.mp4": iphone, "2.mp4": { width: 1200, height: 1600, durationSeconds: 20 } },
+    { dir: "./previews", placementGroup: "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE" },
+  );
+  const res = await run("previews");
+  assert.equal(res.json.results[0].status, "changed", res.json.results[0].message);
+  const groups = fake
+    .all("appAssetLibraryPlacements")
+    .map((p) => p.attributes.placementGroup)
+    .sort();
+  assert.deepEqual(groups, ["IPAD_13_PROFILE", "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE"]);
+});
+
+test("a portrait preview stored landscape with a quarter turn reads as portrait; an unknown length is not a rejection", async () => {
+  const { fake, run } = project({ "1.mp4": { width: 1920, height: 886, durationSeconds: 20, quarterTurn: true } });
+  const res = await run("previews");
+  assert.equal(res.json.results[0].status, "changed", res.json.results[0].message);
+  assert.equal(
+    fake.all("appAssetLibraryPlacements")[0].attributes.placementGroup,
+    "IPHONE_DYNAMIC_ISLAND_LARGE_PROFILE",
+  );
 });

@@ -117,7 +117,7 @@ function spec(shortName, width, height) {
  * many downloads of a one-time-code batch fail before its CSV is ready, as
  * Apple generates batches in the background.
  *
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number, offerCodeValuesStatus?: number }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number, offerCodeValuesStatus?: number, refusePages?: boolean }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
@@ -131,6 +131,7 @@ export function createFakeAsc({
   refuseProductIds = [],
   offerCodeValuesAfter = 0,
   offerCodeValuesStatus = 0,
+  refusePages = false,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -837,7 +838,13 @@ export function createFakeAsc({
   on("POST", `/v1/appCustomProductPageVersions`, (_m, { body }) => {
     const pageId = body.data.relationships.appCustomProductPage.data.id;
     const versions = all("appCustomProductPageVersions").filter((v) => rel(v, "appCustomProductPage")?.id === pageId);
-    if (versions.some((v) => PAGE_EDITABLE.includes(v.attributes.state))) {
+    if (
+      versions.some((v) =>
+        [...PAGE_EDITABLE, "READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "ACCEPTED"].includes(
+          v.attributes.state,
+        ),
+      )
+    ) {
       return conflict("STATE_ERROR", "This page already has a version in progress.");
     }
     return created(
@@ -875,6 +882,13 @@ export function createFakeAsc({
     return created(
       put("appCustomProductPageLocalizations", nextId("cppl"), body.data.attributes, body.data.relationships),
     );
+  });
+  on("DELETE", `/v1/appCustomProductPageLocalizations/:id`, (m) => {
+    if (!get("appCustomProductPageLocalizations", m[1])) return notFound();
+    if (!PAGE_EDITABLE.includes(pageVersionOf(m[1])?.attributes.state))
+      return conflict("STATE_ERROR", "An approved version cannot change.");
+    table("appCustomProductPageLocalizations").delete(m[1]);
+    return noContent();
   });
   on("PATCH", `/v1/appCustomProductPageLocalizations/:id`, (m, { body }) => {
     const l = get("appCustomProductPageLocalizations", m[1]);
@@ -1169,6 +1183,12 @@ export function createFakeAsc({
         `The in-app purchase ${productOf.attributes.productId} is missing its review screenshot.`,
       );
     }
+    if (refusePages && rels.appCustomProductPageVersion) {
+      return conflict(
+        "STATE_ERROR.ENTITY_STATE_INVALID",
+        "The custom product page is missing screenshots for a required device.",
+      );
+    }
     if (firstProductPolicy === "refuse" && firstProductItem(rels)) {
       return conflict("STATE_ERROR.ENTITY_STATE_INVALID", FIRST_PRODUCT_REFUSAL);
     }
@@ -1302,6 +1322,14 @@ export function rejectSubmission(fake) {
  */
 export function approveCustomPages(fake) {
   for (const v of fake.all("appCustomProductPageVersions")) {
-    if (["WAITING_FOR_REVIEW", "IN_REVIEW"].includes(v.attributes.state)) v.attributes.state = "APPROVED";
+    if (!["WAITING_FOR_REVIEW", "IN_REVIEW"].includes(v.attributes.state)) continue;
+    // As Apple does: the version it replaces stops being the approved one.
+    const page = v.relationships?.appCustomProductPage?.data?.id;
+    for (const old of fake.all("appCustomProductPageVersions")) {
+      if (old.relationships?.appCustomProductPage?.data?.id === page && old.attributes.state === "APPROVED") {
+        old.attributes.state = "REPLACED_WITH_NEW_VERSION";
+      }
+    }
+    v.attributes.state = "APPROVED";
   }
 }

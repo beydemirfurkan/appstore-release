@@ -9,17 +9,18 @@
 // approved one keeps serving until the new one is approved. `submit` sends an
 // editable page version in the same review submission as the app.
 
-import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
-
 import { Status } from "../core/status.mjs";
-import { finding, Category, FixOwner } from "../core/findings.mjs";
-import { AssetLibrary, groupsForImage, groupsForVideo, syncPlacements } from "../asc/asset-library.mjs";
-import { readPngHeader } from "../asc/png.mjs";
-import { readVideoHeader } from "../asc/video.mjs";
+import { AssetLibrary, pruneOtherGroups, syncPlacements } from "../asc/asset-library.mjs";
+import { planMedia } from "../asc/media-check.mjs";
 
 /** Page version states that can still be edited. */
 export const EDITABLE_PAGE_STATES = ["PREPARE_FOR_SUBMISSION", "REJECTED"];
+/** With Apple: nothing can change, and no new version can be started. */
+const REVIEW_PAGE_STATES = ["READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "ACCEPTED"];
+
+/** The newest of some versions, by their version number. @param {any[]} versions */
+const newest = (versions) =>
+  [...versions].sort((a, b) => Number(b.attributes?.version ?? 0) - Number(a.attributes?.version ?? 0))[0];
 
 /** @type {import("./registry.mjs").OperationMeta} */
 export const meta = {
@@ -58,89 +59,97 @@ export async function run(ctx) {
     };
   }
 
-  // Every file is checked before any request.
+  // Every file is checked before any request, with the checks the product page
+  // gets and the custom product page limits.
   /** @type {import("../core/findings.mjs").Finding[]} */
   const findings = [];
-  /** @type {Map<string, Array<{ media: "image"|"video", group: string, local: any[] }>>} */
+  /** @type {Map<string, MediaPlan>} */
   const media = new Map();
   for (const page of pages) {
     for (const [locale, l] of Object.entries(page.locales ?? {})) {
-      const sets = [];
+      /** @type {MediaPlan} */
+      const plan = [];
       for (const [kind, dir] of /** @type {const} */ ([
         ["image", l.screenshots],
         ["video", l.previews],
       ])) {
         if (!dir) continue;
-        const res = groupFiles(
-          resolvePath(dir, `customProductPages.${page.name}.${locale}`),
-          kind,
-          /** @type {any} */ (ref),
-        );
-        findings.push(...res.findings.map((f) => ({ ...f, detail: `${page.name} · ${locale}: ${f.detail}` })));
-        sets.push(...res.sets.map((s) => ({ media: kind, ...s })));
+        const res = planMedia({
+          dir: resolvePath(dir, `customProductPages.${page.name}.${locale}`),
+          media: kind,
+          ref: /** @type {any} */ (ref),
+          feature: "CUSTOM_PRODUCT_PAGES",
+          idPrefix: `custom-product-pages.${page.name}.${locale}.${kind}`,
+          where: `Custom product page "${page.name}", ${locale}`,
+        });
+        findings.push(...res.findings);
+        plan.push({ media: kind, sets: res.sets });
       }
-      media.set(`${page.name}\u0000${locale}`, sets);
+      media.set(`${page.name}\u0000${locale}`, plan);
     }
   }
-  if (findings.length)
+  if (findings.length) {
     return { status: Status.ERROR, message: `${findings.length} custom product page file problem(s)`, findings };
+  }
 
   const existing = await client.all(`/v1/apps/${discovery.appId}/appCustomProductPages`, { limit: 200 });
   const changes = [];
+  const notes = [];
   for (const page of pages) {
     const label = `"${page.name}"`;
     let remote = existing.find((p) => p.attributes?.name === page.name);
+    /** @type {any} */
+    let version = null;
     if (!remote) {
-      remote = (
-        await client.post(`/v1/appCustomProductPages`, {
-          data: {
-            type: "appCustomProductPages",
-            attributes: { name: page.name },
-            relationships: {
-              app: { data: { type: "apps", id: discovery.appId } },
-              appCustomProductPageVersions: { data: [{ type: "appCustomProductPageVersions", id: "${version}" }] },
-            },
+      const created = await client.post(`/v1/appCustomProductPages`, {
+        data: {
+          type: "appCustomProductPages",
+          attributes: { name: page.name },
+          relationships: {
+            app: { data: { type: "apps", id: discovery.appId } },
+            appCustomProductPageVersions: { data: [{ type: "appCustomProductPageVersions", id: "${version}" }] },
           },
-          included: [
-            {
-              type: "appCustomProductPageVersions",
-              id: "${version}",
-              attributes: page.deepLink ? { deepLink: page.deepLink } : {},
-            },
-          ],
-        })
-      ).data;
-      changes.push(`${label} created`);
-    }
-    const planned = String(remote.id).startsWith("dry:");
-
-    if (page.visible !== undefined && !planned && remote.attributes?.visible !== page.visible) {
-      await client.patch(`/v1/appCustomProductPages/${remote.id}`, {
-        data: { type: "appCustomProductPages", id: remote.id, attributes: { visible: page.visible } },
-      });
-      changes.push(`${label} ${page.visible ? "visible" : "hidden"}`);
-    }
-
-    const versions = planned
-      ? []
-      : await client.all(`/v1/appCustomProductPages/${remote.id}/appCustomProductPageVersions`, { limit: 50 });
-    let version = versions.find((v) => EDITABLE_PAGE_STATES.includes(v.attributes?.state));
-    const live = versions.find((v) => v.attributes?.state === "APPROVED");
-
-    if (!version) {
-      // Only an approved version: a new one only if the config differs from it.
-      const differs = !live || (await pageDiffers(ctx, page, live, media, /** @type {any} */ (library)));
-      if (!differs) continue;
-      version = (
-        await client.post(`/v1/appCustomProductPageVersions`, {
-          data: {
+        },
+        included: [
+          {
             type: "appCustomProductPageVersions",
+            id: "${version}",
             attributes: page.deepLink ? { deepLink: page.deepLink } : {},
-            relationships: { appCustomProductPage: { data: { type: "appCustomProductPages", id: remote.id } } },
           },
-        })
-      ).data;
-      changes.push(`${label} new version`);
+        ],
+      });
+      remote = created.data;
+      changes.push(`${label} created`);
+      // Under --dry-run the inline version only exists on paper; stand in for it.
+      if (String(remote.id).startsWith("dry:"))
+        version = { id: `dry:appCustomProductPageVersions:${page.name}`, attributes: {} };
+    }
+
+    const versions =
+      version || String(remote.id).startsWith("dry:")
+        ? []
+        : await client.all(`/v1/appCustomProductPages/${remote.id}/appCustomProductPageVersions`, { limit: 50 });
+    version ??= newest(versions.filter((v) => EDITABLE_PAGE_STATES.includes(v.attributes?.state))) ?? null;
+    const inReview = versions.find((v) => REVIEW_PAGE_STATES.includes(v.attributes?.state));
+    const live = newest(versions.filter((v) => v.attributes?.state === "APPROVED"));
+
+    if (!version && inReview) {
+      notes.push(`${label} is in review — nothing changes until Apple answers`);
+    } else if (!version) {
+      // Only an approved version: a new one only if the config differs from it.
+      const differs = !live || (await pageDiffers(ctx, page, live, media));
+      if (differs) {
+        version = (
+          await client.post(`/v1/appCustomProductPageVersions`, {
+            data: {
+              type: "appCustomProductPageVersions",
+              attributes: page.deepLink ? { deepLink: page.deepLink } : {},
+              relationships: { appCustomProductPage: { data: { type: "appCustomProductPages", id: remote.id } } },
+            },
+          })
+        ).data;
+        changes.push(`${label} new version`);
+      }
     } else if (page.deepLink !== undefined && (version.attributes?.deepLink ?? "") !== page.deepLink) {
       await client.patch(`/v1/appCustomProductPageVersions/${version.id}`, {
         data: { type: "appCustomProductPageVersions", id: version.id, attributes: { deepLink: page.deepLink } },
@@ -148,149 +157,145 @@ export async function run(ctx) {
       changes.push(`${label} deep link`);
     }
 
-    // Localizations: a new version may or may not start with the previous one's,
-    // so they are read back rather than assumed.
-    const versionPlanned = String(version.id).startsWith("dry:");
-    const locs = versionPlanned
-      ? []
-      : await client.all(`/v1/appCustomProductPageVersions/${version.id}/appCustomProductPageLocalizations`, {
-          limit: 50,
+    if (version) await completeVersion(ctx, page, version, media, /** @type {any} */ (library), changes);
+
+    // A page's URL can only go live once a version of it is approved.
+    if (page.visible !== undefined && remote.attributes?.visible !== page.visible) {
+      if (live) {
+        await client.patch(`/v1/appCustomProductPages/${remote.id}`, {
+          data: { type: "appCustomProductPages", id: remote.id, attributes: { visible: page.visible } },
         });
-    for (const [locale, l] of Object.entries(page.locales ?? {})) {
-      let loc = locs.find((x) => x.attributes?.locale === locale);
-      if (!loc) {
-        loc = (
-          await client.post(`/v1/appCustomProductPageLocalizations`, {
-            data: {
-              type: "appCustomProductPageLocalizations",
-              attributes: { locale, ...(l.promotionalText ? { promotionalText: l.promotionalText } : {}) },
-              relationships: {
-                appCustomProductPageVersion: { data: { type: "appCustomProductPageVersions", id: version.id } },
-              },
-            },
-          })
-        ).data;
-        changes.push(`${label} ${locale}`);
-      } else if (l.promotionalText !== undefined && (loc.attributes?.promotionalText ?? "") !== l.promotionalText) {
-        await client.patch(`/v1/appCustomProductPageLocalizations/${loc.id}`, {
+        changes.push(`${label} ${page.visible ? "visible" : "hidden"}`);
+      } else if (page.visible) {
+        notes.push(`${label} becomes visible once a version is approved — run again then`);
+      }
+    }
+  }
+
+  const tail = notes.length ? ` (${notes.join("; ")})` : "";
+  return changes.length
+    ? { status: Status.CHANGED, message: changes.join(" · ") + tail, findings }
+    : { status: Status.OK, message: `${pages.length} page(s) match the config${tail}`, findings };
+}
+
+/** @typedef {Array<{ media: "image"|"video", sets: Array<{ group: string, local: Array<{ file: string, path: string, size: number }> }> }>} MediaPlan */
+
+/**
+ * Bring an editable page version in line with the config: localizations (a
+ * removed locale goes), promotional text, and each locale's media — every
+ * configured kind reconciled per device group, and groups with no file left
+ * removed.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @param {PageConfig} page
+ * @param {any} version
+ * @param {Map<string, MediaPlan>} media
+ * @param {{ id: string }} library
+ * @param {string[]} changes
+ */
+async function completeVersion(ctx, page, version, media, library, changes) {
+  const { client } = ctx;
+  const label = `"${page.name}"`;
+  // A new version may or may not start with the previous one's localizations,
+  // so they are read back rather than assumed.
+  const locs = String(version.id).startsWith("dry:")
+    ? []
+    : await client.all(`/v1/appCustomProductPageVersions/${version.id}/appCustomProductPageLocalizations`, {
+        limit: 50,
+      });
+  const wanted = Object.keys(page.locales ?? {});
+  for (const gone of locs.filter((x) => !wanted.includes(x.attributes?.locale))) {
+    await client.delete(`/v1/appCustomProductPageLocalizations/${gone.id}`);
+    changes.push(`${label} ${gone.attributes?.locale} removed`);
+  }
+  for (const [locale, l] of Object.entries(page.locales ?? {})) {
+    let loc = locs.find((x) => x.attributes?.locale === locale);
+    if (!loc) {
+      loc = (
+        await client.post(`/v1/appCustomProductPageLocalizations`, {
           data: {
             type: "appCustomProductPageLocalizations",
-            id: loc.id,
-            attributes: { promotionalText: l.promotionalText },
+            attributes: { locale, ...(l.promotionalText ? { promotionalText: l.promotionalText } : {}) },
+            relationships: {
+              appCustomProductPageVersion: { data: { type: "appCustomProductPageVersions", id: version.id } },
+            },
           },
-        });
-        changes.push(`${label} ${locale} text`);
-      }
-      for (const set of media.get(`${page.name}\u0000${locale}`) ?? []) {
+        })
+      ).data;
+      changes.push(`${label} ${locale}`);
+    } else if (l.promotionalText !== undefined && (loc.attributes?.promotionalText ?? "") !== l.promotionalText) {
+      await client.patch(`/v1/appCustomProductPageLocalizations/${loc.id}`, {
+        data: {
+          type: "appCustomProductPageLocalizations",
+          id: loc.id,
+          attributes: { promotionalText: l.promotionalText },
+        },
+      });
+      changes.push(`${label} ${locale} text`);
+    }
+    const parent = { type: /** @type {const} */ ("appCustomProductPageLocalizations"), id: loc.id };
+    for (const kind of media.get(`${page.name}\u0000${locale}`) ?? []) {
+      let touched = false;
+      for (const set of kind.sets) {
         const res = await syncPlacements(ctx, {
-          library: /** @type {any} */ (library),
-          parent: { type: "appCustomProductPageLocalizations", id: loc.id },
-          media: set.media,
+          library,
+          parent,
+          media: kind.media,
           placementGroup: set.group,
           local: set.local,
           prune: true,
         });
-        if (res.changed) changes.push(`${label} ${locale} ${set.media === "video" ? "previews" : "screenshots"}`);
+        touched ||= res.changed;
       }
+      const stray = await pruneOtherGroups(ctx, { parent, media: kind.media, keep: kind.sets.map((x) => x.group) });
+      if (touched || stray) changes.push(`${label} ${locale} ${kind.media === "video" ? "previews" : "screenshots"}`);
     }
   }
-
-  return changes.length
-    ? { status: Status.CHANGED, message: changes.join(" · "), findings }
-    : { status: Status.OK, message: `${pages.length} page(s) match the config`, findings };
 }
 
 /**
- * Whether an approved page version differs from the config: deep link, locales,
- * promotional text, or the media placed on each locale.
+ * Whether an approved page version differs from the config: deep link, the set
+ * of locales, promotional text, or the media placed on each locale.
  *
  * @param {import("../core/context.mjs").Context} ctx
  * @param {PageConfig} page
  * @param {any} live
- * @param {Map<string, any[]>} media
- * @param {{ id: string }} library
+ * @param {Map<string, MediaPlan>} media
  */
-async function pageDiffers(ctx, page, live, media, library) {
+async function pageDiffers(ctx, page, live, media) {
   if (page.deepLink !== undefined && (live.attributes?.deepLink ?? "") !== page.deepLink) return true;
   const locs = await ctx.client.all(`/v1/appCustomProductPageVersions/${live.id}/appCustomProductPageLocalizations`, {
     limit: 50,
   });
+  const wanted = Object.keys(page.locales ?? {});
+  if (locs.some((x) => !wanted.includes(x.attributes?.locale))) return true;
+  const library = { id: "check-only" };
   for (const [locale, l] of Object.entries(page.locales ?? {})) {
     const loc = locs.find((x) => x.attributes?.locale === locale);
     if (!loc) return true;
     if (l.promotionalText !== undefined && (loc.attributes?.promotionalText ?? "") !== l.promotionalText) return true;
-    for (const set of media.get(`${page.name}\u0000${locale}`) ?? []) {
-      const res = await syncPlacements(ctx, {
-        library,
-        parent: { type: "appCustomProductPageLocalizations", id: loc.id },
-        media: set.media,
-        placementGroup: set.group,
-        local: set.local,
-        prune: true,
+    const parent = { type: /** @type {const} */ ("appCustomProductPageLocalizations"), id: loc.id };
+    for (const kind of media.get(`${page.name}\u0000${locale}`) ?? []) {
+      for (const set of kind.sets) {
+        const res = await syncPlacements(ctx, {
+          library,
+          parent,
+          media: kind.media,
+          placementGroup: set.group,
+          local: set.local,
+          prune: true,
+          checkOnly: true,
+        });
+        if (res.changed) return true;
+      }
+      const stray = await pruneOtherGroups(ctx, {
+        parent,
+        media: kind.media,
+        keep: kind.sets.map((x) => x.group),
         checkOnly: true,
       });
-      if (res.changed) return true;
+      if (stray) return true;
     }
   }
   return false;
-}
-
-/**
- * The files of one folder, grouped by placement group (screenshots by PNG size,
- * previews by video size), with any file that fits no group reported.
- *
- * @param {string} dir
- * @param {"image"|"video"} media
- * @param {import("../asc/asset-library.mjs").RefData} ref
- */
-function groupFiles(dir, media, ref) {
-  /** @type {import("../core/findings.mjs").Finding[]} */
-  const findings = [];
-  /** @type {Map<string, Array<{ file: string, path: string, size: number }>>} */
-  const byGroup = new Map();
-  const exts = media === "image" ? [".png"] : [".mov", ".mp4", ".m4v"];
-  const files = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((f) => exts.some((e) => f.toLowerCase().endsWith(e)))
-        .sort()
-    : [];
-  if (!files.length) {
-    findings.push(problem(`No ${media === "image" ? "PNG screenshots" : "previews"} in ${dir}`, dir));
-  }
-  for (const file of files) {
-    const path = join(dir, file);
-    const header = media === "image" ? readPngHeader(path) : readVideoHeader(path);
-    const candidates = header
-      ? (media === "image" ? groupsForImage(ref, header) : groupsForVideo(ref, header)).filter(
-          (c) => !c.placementGroupId.startsWith("IMESSAGE_"),
-        )
-      : [];
-    if (candidates.length !== 1) {
-      findings.push(
-        problem(
-          header
-            ? `${file} (${header.width}×${header.height}) fits ${candidates.length ? "several groups" : "no device size"}`
-            : `${file} cannot be read`,
-          file,
-        ),
-      );
-      continue;
-    }
-    const list = byGroup.get(candidates[0].placementGroupId) ?? [];
-    list.push({ file, path, size: statSync(path).size });
-    byGroup.set(candidates[0].placementGroupId, list);
-  }
-  return { findings, sets: [...byGroup].map(([group, local]) => ({ group, local })) };
-}
-
-/** @param {string} title @param {string} what */
-function problem(title, what) {
-  return finding({
-    id: `custom-product-pages.file.${what}`,
-    category: Category.ASSET,
-    title,
-    detail: what,
-    fixOwner: FixOwner.EXTERNAL,
-    fix: "Use exact App Store sizes: `appstore-release screenshots --list-groups`.",
-  });
 }

@@ -8,7 +8,7 @@
 
 <img src="docs/media/hero.gif" alt="appstore-release: check finds twelve blockers, release fixes them, submit sends the app and its first subscription to App Review" width="860">
 
-<sub>Real output. [▶ 40-second overview](https://github.com/beydemirfurkan/appstore-release/releases/latest/download/appstore-release-promo.mp4)</sub>
+<sub>Real output, recorded against the demo below.</sub>
 
 </div>
 

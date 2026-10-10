@@ -25,7 +25,7 @@ export const meta = {
 
 /** @param {import("../core/context.mjs").Context} ctx */
 export async function run(ctx) {
-  const { client, discovery, config, resolvePath, projectRoot } = ctx;
+  const { client, discovery, config, resolvePath, projectRoot, dryRun } = ctx;
   const wanted = subscriptionConfigs(config).flatMap((product) =>
     /** @type {any[]} */ (/** @type {any} */ (product).offerCodes ?? []).flatMap((offer) =>
       (offer.oneTimeCodes ?? []).map((/** @type {any} */ batch) => ({ product, offer, batch })),
@@ -41,6 +41,9 @@ export async function run(ctx) {
   const changes = [];
   /** @type {Map<string, any[]>} */
   const codesBySub = new Map();
+  // Two entries with the same count and expiry are two batches (one per partner,
+  // say): a batch matched once is not matched again.
+  const claimed = new Set();
 
   for (const { product, offer, batch } of wanted) {
     const label = `"${offer.name}" (${batch.count}, until ${batch.expires})`;
@@ -63,6 +66,7 @@ export async function run(ctx) {
     const batches = await client.all(`/v1/subscriptionOfferCodes/${code.id}/oneTimeUseCodes`, { limit: 200 });
     let made = batches.find(
       (b) =>
+        !claimed.has(b.id) &&
         b.attributes?.numberOfCodes === batch.count &&
         b.attributes?.expirationDate === batch.expires &&
         (b.attributes?.environment ?? "PRODUCTION") === environment,
@@ -79,10 +83,13 @@ export async function run(ctx) {
       ).data;
       changes.push(`generated ${label}`);
     }
+    claimed.add(made.id);
 
     const out = resolvePath(batch.output, `offerCodes.${offer.name}.oneTimeCodes.output`);
     if (!existsSync(out)) {
-      if (String(made.id).startsWith("dry:")) {
+      // A dry run writes nothing — local files included, which the client's own
+      // dry-run guard cannot see.
+      if (dryRun || String(made.id).startsWith("dry:")) {
         changes.push(`would write ${batch.output}`);
       } else {
         // Apple generates a batch in the background; its values may not be ready yet.
@@ -90,6 +97,23 @@ export async function run(ctx) {
           text: true,
           throwOnError: false,
         });
+        // Apple generates a batch in the background. Which status it answers with
+        // meanwhile is not documented: an empty body, 404 or 409 is read as
+        // "not yet"; anything else (a role, a server error) is an error.
+        const status = "error" in values ? values.error?.status : 200;
+        if ("error" in values && ![404, 409].includes(status)) {
+          findings.push(
+            finding({
+              id: `offer-codes.download-failed.${offer.name}`,
+              category: Category.ASC_STATE,
+              title: `The codes for ${label} could not be downloaded`,
+              detail: String(values.error?.message ?? status),
+              fixOwner: FixOwner.EXTERNAL,
+              fix: "Check the API key's role (App Manager or Admin), then run offer-codes again.",
+            }),
+          );
+          continue;
+        }
         if ("error" in values || !values.text) {
           findings.push(
             finding({
@@ -97,7 +121,9 @@ export async function run(ctx) {
               severity: Severity.INFO,
               category: Category.ASC_STATE,
               title: `The codes for ${label} are not ready to download yet`,
-              detail: "App Store Connect generates a batch in the background. It exists; only the file is missing.",
+              detail:
+                "App Store Connect generates a batch in the background. It exists; only the file is missing." +
+                ("error" in values ? ` (${values.error?.message})` : ""),
               fixOwner: FixOwner.CLI,
               fix: "Run offer-codes again in a few minutes.",
               fixCommand: "appstore-release offer-codes",

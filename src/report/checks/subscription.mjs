@@ -162,7 +162,10 @@ export function check({ snapshot, config }) {
               "or send the app alone with submit --submit --skip-products.",
             fixOwner: FixOwner.UI,
             uiOnly: true,
-            fix: "Attach it to the version and submit both, in App Store Connect — or submit --submit --skip-products.",
+            fix:
+              "Attach it to the version and submit both, in App Store Connect — or submit --submit --skip-products. " +
+              "If the refusal named something to fix in the product, fix it in the config and run release: " +
+              "a changed product is tried by API again.",
             fixClicks: FIRST_PRODUCT_CLICKS(productId),
             docs: "references/gotchas.md#subscriptions--iaps",
           }),

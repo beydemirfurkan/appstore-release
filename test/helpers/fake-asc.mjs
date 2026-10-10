@@ -92,7 +92,7 @@ function spec(shortName, width, height) {
  * many downloads of a one-time-code batch fail before its CSV is ready, as
  * Apple generates batches in the background.
  *
- * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number }} [options]
+ * @param {{ appId?: string, appName?: string, baseUrl?: string, assetLibrary?: boolean, firstSubscription?: boolean, approvedPurchase?: boolean, firstProductPolicy?: "accept"|"refuse"|"refuse-on-submit", appPrivacyPublished?: boolean, refuseProductIds?: string[], offerCodeValuesAfter?: number, offerCodeValuesStatus?: number }} [options]
  */
 export function createFakeAsc({
   appId = "1234567890",
@@ -105,6 +105,7 @@ export function createFakeAsc({
   appPrivacyPublished = true,
   refuseProductIds = [],
   offerCodeValuesAfter = 0,
+  offerCodeValuesStatus = 0,
 } = {}) {
   let seq = 0;
   const nextId = (/** @type {string} */ prefix) => `${prefix}-${++seq}`;
@@ -599,16 +600,45 @@ export function createFakeAsc({
       (o) => rel(o, "subscription")?.id === subId && o.attributes.offerCode === a.offerCode,
     );
     if (clash) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE", `offerCode ${a.offerCode} is already used`);
-    return created(
-      put(
-        "subscriptionPromotionalOffers",
-        nextId("promo"),
-        { ...a, priceCount: body.included.length },
-        {
-          subscription: ref("subscriptions", subId),
-        },
-      ),
+    const offer = put(
+      "subscriptionPromotionalOffers",
+      nextId("promo"),
+      { ...a },
+      { subscription: ref("subscriptions", subId) },
     );
+    storeOfferPrices(offer.id, body.included);
+    return created(offer);
+  });
+  /** Inline prices become price resources of the offer, replacing any it had. @param {string} offerId @param {any[]} included */
+  const storeOfferPrices = (offerId, included) => {
+    for (const old of all("subscriptionPromotionalOfferPrices").filter((x) => rel(x, "offer")?.id === offerId)) {
+      table("subscriptionPromotionalOfferPrices").delete(old.id);
+    }
+    for (const item of included ?? []) {
+      put(
+        "subscriptionPromotionalOfferPrices",
+        nextId("pprice"),
+        {},
+        {
+          ...item.relationships,
+          offer: ref("subscriptionPromotionalOffers", offerId),
+        },
+      );
+    }
+  };
+  on("GET", `/v1/subscriptionPromotionalOffers/:id/prices`, (m) =>
+    ok(all("subscriptionPromotionalOfferPrices").filter((x) => rel(x, "offer")?.id === m[1])),
+  );
+  on("PATCH", `/v1/subscriptionPromotionalOffers/:id`, (m, { body }) => {
+    const offer = get("subscriptionPromotionalOffers", m[1]);
+    if (!offer) return notFound();
+    if (Object.keys(body.data.attributes ?? {}).length) {
+      return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", "attributes cannot change");
+    }
+    const problem = inlinePrices(body, "subscriptionPromotionalOfferPrices", offer.attributes.offerMode);
+    if (problem) return conflict("ENTITY_ERROR.ATTRIBUTE.INVALID", problem);
+    storeOfferPrices(offer.id, body.included);
+    return ok(offer);
   });
   on("GET", `/v1/subscriptions/:id/offerCodes`, (m) =>
     ok(all("subscriptionOfferCodes").filter((o) => rel(o, "subscription")?.id === m[1])),
@@ -683,6 +713,20 @@ export function createFakeAsc({
     const batch = get("subscriptionOfferCodeOneTimeUseCodes", m[1]);
     if (!batch) return notFound();
     batch.attributes.downloads += 1;
+    if (offerCodeValuesStatus) {
+      return {
+        status: offerCodeValuesStatus,
+        body: {
+          errors: [
+            {
+              status: String(offerCodeValuesStatus),
+              code: "FORBIDDEN_ERROR",
+              title: "This request is forbidden for security reasons",
+            },
+          ],
+        },
+      };
+    }
     if (batch.attributes.downloads <= offerCodeValuesAfter)
       return conflict("STATE_ERROR", "The codes are being generated.");
     const rows = Array.from(

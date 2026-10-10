@@ -62,6 +62,44 @@ export const meta = {
   },
 };
 
+/** A finding about a subscription or in-app purchase rather than the app. @param {string} id */
+const isProductFinding = (id) => /^(subscription|iap|product)\./.test(id);
+
+/**
+ * Whether the readiness report lets a submission through, and if not, what to
+ * say. One rule for the CLI and the MCP tool:
+ *
+ *   - `ready` goes;
+ *   - a rejected version goes again once the user says it is fixed (`resolved`)
+ *     and nothing else blocks it — the API cannot read Resolution Center;
+ *   - with `skipProducts`, the products' own findings are not in the way, and a
+ *     version that is blocked only by them goes alone. Never one that is in
+ *     review, approved or live.
+ *
+ * @param {import("../report/report.mjs").ReadinessReport} report
+ * @param {{ resolved?: boolean, skipProducts?: boolean }} [args]
+ * @returns {{ ok: true } | { ok: false, message: string }}
+ */
+export function submitGate(report, { resolved = false, skipProducts = false } = {}) {
+  const blocking = report.findings.filter((f) => f.severity === "blocker" && !(skipProducts && isProductFinding(f.id)));
+  const others = blocking.filter((f) => !REJECTION_FINDINGS.includes(f.id));
+  const onlyProducts = !skipProducts && others.length > 0 && others.every((f) => isProductFinding(f.id));
+  const alone = onlyProducts ? " — or send the app alone with --skip-products" : "";
+
+  if (report.verdict === "ready") return { ok: true };
+  if (report.verdict === "rejected") {
+    if (resolved && !others.length) return { ok: true };
+    return {
+      ok: false,
+      message: others.length
+        ? `rejected, and ${others.length} other blocker(s) remain — run release, then submit --submit --resolved${alone}`
+        : "Apple rejected this version: read Resolution Center, fix it, then submit --submit --resolved",
+    };
+  }
+  if (skipProducts && ["blocked", "needs-human"].includes(report.verdict) && !blocking.length) return { ok: true };
+  return { ok: false, message: `not ready to submit (${report.verdict}); pass --force to submit anyway${alone}` };
+}
+
 /**
  * @typedef {Object} Item
  * @property {"appStoreVersion"|"subscriptionGroupVersion"|"subscriptionVersion"|"inAppPurchaseVersion"} relationship
@@ -98,30 +136,9 @@ export async function run(ctx, args = {}) {
   // Only checked when actually finalizing — preparing is harmless.
   if (args.submit && !args.force) {
     const report = await getReadinessReport(ctx);
-    // A rejected version is resubmittable once the user says the reviewer's
-    // points are addressed — the API cannot read Resolution Center to check —
-    // and nothing else is still in the way.
-    // Sending the app alone: what is wrong with the products is not in its way.
-    const productFinding = (/** @type {string} */ id) => /^(subscription|iap|product)\./.test(id);
-    const blocking = report.findings.filter(
-      (f) => f.severity === "blocker" && !(args.skipProducts && productFinding(f.id)),
-    );
-    const othersBlocking = blocking.filter((f) => !REJECTION_FINDINGS.includes(f.id));
-    const ready =
-      report.verdict === "ready" || (args.skipProducts && report.verdict !== "rejected" && !blocking.length);
-    const resubmit = report.verdict === "rejected" && args.resolved && !othersBlocking.length;
-    if (!ready && !resubmit) {
-      return {
-        status: Status.ERROR,
-        message:
-          report.verdict === "rejected"
-            ? othersBlocking.length
-              ? `rejected, and ${othersBlocking.length} other blocker(s) remain — run release, then submit --submit --resolved`
-              : "Apple rejected this version: read Resolution Center, fix it, then submit --submit --resolved"
-            : `not ready to submit (${report.verdict}); pass --force to submit anyway`,
-        details: report,
-        findings: report.findings,
-      };
+    const gate = submitGate(report, { resolved: args.resolved, skipProducts: args.skipProducts });
+    if (!gate.ok) {
+      return { status: Status.ERROR, message: gate.message, details: report, findings: report.findings };
     }
   }
 

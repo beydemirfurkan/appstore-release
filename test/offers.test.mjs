@@ -246,3 +246,110 @@ test("accessibility is part of release, and skipped when the config says nothing
   assert.equal(res.json.results.find((r) => r.id === "accessibility")?.status, "skipped");
   assert.equal(fake.all("accessibilityDeclarations").length, 0);
 });
+
+const launch = (/** @type {any} */ extra = {}) =>
+  withOffers({
+    offerCodes: [
+      {
+        name: "Launch",
+        type: "FREE_TRIAL",
+        duration: "ONE_MONTH",
+        eligibility: ["NEW"],
+        oneTimeCodes: [{ count: 3, expires: "2027-01-31", output: "./codes/a.csv" }],
+        ...extra,
+      },
+    ],
+  });
+
+test("offer-codes --dry-run writes no file, even for a batch that already exists", async () => {
+  const { root, run } = project(launch(), { offerCodeValuesAfter: 1 });
+  await run("subscription");
+  await run("offer-codes"); // generates; not ready yet
+  const planned = await run("offer-codes", "--dry-run");
+  assert.match(planned.json.results[0].message, /would write \.\/codes\/a\.csv/);
+  assert.equal(existsSync(join(root, "codes/a.csv")), false);
+});
+
+test("two batches with the same count and expiry are two batches", async () => {
+  const { root, fake, run } = project(
+    launch({
+      oneTimeCodes: [
+        { count: 3, expires: "2027-01-31", output: "./codes/a.csv" },
+        { count: 3, expires: "2027-01-31", output: "./codes/b.csv" },
+      ],
+    }),
+  );
+  await run("subscription");
+  await run("offer-codes");
+  assert.equal(fake.all("subscriptionOfferCodeOneTimeUseCodes").length, 2);
+  assert.ok(existsSync(join(root, "codes/a.csv")) && existsSync(join(root, "codes/b.csv")));
+  await run("offer-codes");
+  assert.equal(fake.all("subscriptionOfferCodeOneTimeUseCodes").length, 2, "and still two on a re-run");
+});
+
+test("a download App Store Connect forbids is an error, not 'not ready yet' forever", async () => {
+  const { run } = project(launch(), { offerCodeValuesStatus: 403 });
+  await run("subscription");
+  const res = await run("offer-codes");
+  assert.equal(res.json.results[0].status, "error");
+  assert.ok(res.json.findings.some((f) => f.id === "offer-codes.download-failed.Launch"));
+});
+
+test("no new custom codes on an offer code that is turned off", async () => {
+  const { fake, run } = project(
+    launch({ active: false, oneTimeCodes: undefined, customCodes: [{ code: "LATE", count: 5 }] }),
+  );
+  await run("subscription");
+  assert.equal(fake.all("subscriptionOfferCodes").length, 0, "nothing created just to be off");
+  assert.equal(fake.all("subscriptionOfferCodeCustomCodes").length, 0);
+});
+
+test("a promotional offer's prices follow the config; its terms do not", async () => {
+  const offer = {
+    offerCode: "COMEBACK",
+    name: "Come back",
+    type: "PAY_UP_FRONT",
+    duration: "SIX_MONTHS",
+    priceAmount: 2.99,
+  };
+  const { fake, run, write } = project(withOffers({ promotionalOffers: [offer] }));
+  await run("subscription");
+  write((c) => ({ ...c, subscription: { ...c.subscription, promotionalOffers: [{ ...offer, priceAmount: 9.99 }] } }));
+  const changed = await run("subscription");
+  assert.match(changed.json.results[0].message, /prices|updated|COMEBACK/);
+  const prices = fake.all("subscriptionPromotionalOfferPrices");
+  assert.deepEqual(
+    prices.map((p) => p.relationships?.subscriptionPricePoint?.data?.id),
+    ["spp-999"],
+  );
+  assert.equal((await run("subscription")).json.results[0].status, "ok", "the same prices are not sent again");
+});
+
+test("an impossible date is a finding, not a crash", async () => {
+  const { validateConfig } = await import("../src/core/requirements.mjs");
+  for (const expires of ["2027-13-01", "2027-02-32", "2027-00-10", "2027-02-30"]) {
+    const { valid, findings } = validateConfig({
+      bundleId: "a.b",
+      locale: "en-US",
+      subscriptions: [
+        {
+          productId: "p",
+          offerCodes: [
+            {
+              name: "L",
+              type: "FREE_TRIAL",
+              duration: "ONE_MONTH",
+              eligibility: ["NEW"],
+              oneTimeCodes: [{ count: 1, expires, output: "a.csv" }],
+            },
+          ],
+        },
+      ],
+    });
+    assert.equal(valid, false, expires);
+    assert.ok(
+      findings.some((f) => /not a valid date/.test(f.title)),
+      expires,
+    );
+  }
+});

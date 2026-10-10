@@ -63,6 +63,30 @@ async function promotionalOffers({ client }, product, sub, planned, changes) {
             drift,
           ),
         );
+        continue;
+      }
+      // The one thing Apple lets change: the price list, replaced as a whole.
+      const wanted = await offerPrices(client, product, want, sub, false, "subscriptionPromotionalOfferPrices");
+      if (!wanted.ok) {
+        findings.push(wanted.finding);
+        continue;
+      }
+      const current = await client.get(
+        `/v1/subscriptionPromotionalOffers/${found.id}/prices?include=territory,subscriptionPricePoint&limit=200`,
+      );
+      const key = (/** @type {any} */ p) =>
+        `${p.relationships?.territory?.data?.id}:${p.relationships?.subscriptionPricePoint?.data?.id ?? "free"}`;
+      const same = (current.data ?? []).map(key).sort().join(",") === wanted.included.map(key).sort().join(",");
+      if (!same) {
+        await client.patch(`/v1/subscriptionPromotionalOffers/${found.id}`, {
+          data: {
+            type: "subscriptionPromotionalOffers",
+            id: found.id,
+            relationships: { prices: { data: wanted.refs } },
+          },
+          included: wanted.included,
+        });
+        changes.push(`promotional offer ${want.offerCode} prices`);
       }
       continue;
     }
@@ -163,7 +187,9 @@ async function offerCodes({ client }, product, sub, planned, changes) {
       changes.push(`offer code ${want.name}`);
     }
 
-    if (want.customCodes?.length) await customCodes(client, code, want, changes);
+    // No new codes on an offer that is, or is about to be, off; turning codes off is still fine.
+    const live = active && code.attributes?.active !== false;
+    if (want.customCodes?.length) await customCodes(client, code, want, changes, live);
   }
   return findings;
 }
@@ -177,15 +203,16 @@ async function offerCodes({ client }, product, sub, planned, changes) {
  * @param {any} code   the offer code resource (possibly planned)
  * @param {any} want
  * @param {string[]} changes
+ * @param {boolean} live   the offer code takes new codes
  */
-async function customCodes(client, code, want, changes) {
+async function customCodes(client, code, want, changes, live) {
   const planned = String(code.id).startsWith("dry:");
   const existing = planned ? [] : await client.all(`/v1/subscriptionOfferCodes/${code.id}/customCodes`, { limit: 200 });
   for (const c of want.customCodes) {
     const found = existing.find((e) => String(e.attributes?.customCode).toUpperCase() === c.code.toUpperCase());
     const active = c.active ?? true;
     if (!found) {
-      if (!active) continue;
+      if (!active || !live) continue;
       await client.post(`/v1/subscriptionOfferCodeCustomCodes`, {
         data: {
           type: "subscriptionOfferCodeCustomCodes",

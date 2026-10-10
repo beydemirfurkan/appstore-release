@@ -276,6 +276,28 @@ test("a refused first product is remembered: check stops saying ready, the app a
   assert.equal(fake.get("appStoreVersions", "ver-1")?.attributes.appStoreState, "WAITING_FOR_REVIEW");
 });
 
+test("a changed product is tried by API again: the remembered refusal is forgotten", async () => {
+  const { readFileSync, writeFileSync } = await import("node:fs");
+  const { run, root } = await firstSubscriptionProject({ firstProductPolicy: "refuse" });
+  await run("release");
+  await run("submit", "--submit");
+  assert.ok((await run("check")).json.findings.some((f) => f.id === "subscription.first.refused"));
+
+  // The user fixes what the refusal named, in the config, and release writes it.
+  const path = join(root, "appstore.config.json");
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  config.subscription.localeDescription = "Every insight, every month, explained.";
+  writeFileSync(path, JSON.stringify(config));
+  await run("subscription");
+
+  const after = await run("check");
+  assert.equal(
+    after.json.findings.some((f) => f.id === "subscription.first.refused"),
+    false,
+  );
+  assert.ok(after.json.findings.some((f) => f.id === "subscription.first.with-version"));
+});
+
 test("a refusal about the app itself keeps the draft and says what to do", async () => {
   const { fake, run } = await firstSubscriptionProject({ appPrivacyPublished: false });
   await run("release");
@@ -471,7 +493,7 @@ async function productsProject(fakeOptions, extra) {
     };
     return { code: await main([...argv, "--json"], io), json: JSON.parse(out.join("")) };
   };
-  return { fake, run };
+  return { fake, run, root };
 }
 
 test("several plans, a free trial and a lifetime purchase: created, completed, submitted together", async () => {

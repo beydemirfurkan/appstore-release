@@ -24,7 +24,7 @@ import { getReadinessReport } from "../report/report.mjs";
 import { waitForReview } from "../report/wait.mjs";
 import { listReviews, summarize as summarizeReviews, formatReview } from "../ops/reviews.mjs";
 import { MAX_REPLY_LENGTH } from "../ops/reply.mjs";
-import { REJECTION_FINDINGS } from "../report/checks/review.mjs";
+import { submitGate } from "../ops/submit.mjs";
 import { renderReportMarkdown } from "../report/render.mjs";
 import { validateConfig } from "../core/requirements.mjs";
 import { loadConfig, findConfigPath } from "../core/config.mjs";
@@ -493,19 +493,11 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
         // The guardrail a generic API wrapper structurally cannot offer: we know
         // what "ready" means, so we can decline to waste a review cycle.
         const report = await getReadinessReport(ctx);
-        const resubmit =
-          report.verdict === "rejected" &&
-          args.resolved &&
-          !report.findings.some((f) => f.severity === "blocker" && !REJECTION_FINDINGS.includes(f.id));
-        // Sending the app alone: what is wrong with the products is not in its way.
-        const appAlone =
-          Boolean(args.skipProducts) &&
-          report.verdict !== "rejected" &&
-          !report.findings.some((f) => f.severity === "blocker" && !/^(subscription|iap|product)\./.test(f.id));
-        if (report.verdict !== "ready" && !args.force && !resubmit && !appAlone) {
+        const gate = submitGate(report, { resolved: Boolean(args.resolved), skipProducts: Boolean(args.skipProducts) });
+        if (!gate.ok && !args.force) {
           return structured(
             [
-              `Refusing to submit: the readiness verdict is **${report.verdict}**.`,
+              `Refusing to submit: the readiness verdict is **${report.verdict}** (${gate.ok ? "" : gate.message}).`,
               "",
               renderReportMarkdown(report),
               "",

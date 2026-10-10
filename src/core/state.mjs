@@ -44,6 +44,28 @@ export function readState(dir, appId) {
 }
 
 /**
+ * Forget the refusals of products that have just been changed: App Store
+ * Connect may take a fixed product, so the next submit tries the API again.
+ *
+ * @param {string} dir
+ * @param {string} appId
+ * @param {string[]} productIds
+ */
+export function forgetRefusals(dir, appId, productIds) {
+  const state = readState(dir, appId);
+  const keep = state.refusals.filter((r) => !productIds.includes(r.productId));
+  if (keep.length === state.refusals.length) return false;
+  try {
+    const file = fileFor(dir, appId);
+    writeFileSync(`${file}.tmp`, JSON.stringify({ refusals: keep }, null, 2));
+    renameSync(`${file}.tmp`, file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Record refusals, replacing any earlier one for the same product and version.
  * Best effort: a read-only home directory must not turn a refusal into a crash.
  *

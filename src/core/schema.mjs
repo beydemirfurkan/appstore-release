@@ -141,6 +141,9 @@ function walk(value, rawSchema, path, ctx) {
   if (Array.isArray(value) && schema.minItems != null && value.length < schema.minItems) {
     push(ctx, path, "minItems", `needs at least ${schema.minItems} item(s)`, schema.description ?? "Add an item.");
   }
+  if (Array.isArray(value) && schema.maxItems != null && value.length > schema.maxItems) {
+    push(ctx, path, "maxItems", `allows at most ${schema.maxItems} item(s)`, schema.description ?? "Remove some.");
+  }
   if (
     Array.isArray(value) &&
     schema.uniqueItems &&

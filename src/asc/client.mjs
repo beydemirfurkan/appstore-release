@@ -76,12 +76,16 @@ export class AscClient {
   /**
    * @param {"GET"|"POST"|"PATCH"|"DELETE"} method
    * @param {string} path
-   * @param {{ body?: object, throwOnError?: boolean, dryRunResult?: () => any, timeoutMs?: number, text?: boolean }} [opts]
+   * @param {{ body?: object, throwOnError?: boolean, dryRunResult?: () => any, timeoutMs?: number, text?: boolean, binary?: boolean }} [opts]
    *
    * When throwOnError is false, API errors resolve to `{ error: AscApiError }`
    * instead of throwing — callers must then check `.error` before `.data`.
    */
-  async request(method, path, { body, throwOnError = true, dryRunResult, timeoutMs, text = false } = {}) {
+  async request(
+    method,
+    path,
+    { body, throwOnError = true, dryRunResult, timeoutMs, text = false, binary = false } = {},
+  ) {
     if (this.dryRun && method !== "GET") return this._planned(method, path, body, dryRunResult);
 
     const url = `${this._baseUrl}${path}`;
@@ -119,6 +123,8 @@ export class AscClient {
       // A few endpoints answer with a file rather than JSON (offer code values
       // are text/csv). The caller asks for the body as text; errors stay JSON.
       if (text && res.ok) return { text: await res.text() };
+      // Reports come back gzipped (application/a-gzip): the bytes, untouched.
+      if (binary && res.ok) return { bytes: Buffer.from(await res.arrayBuffer()) };
       return this._parse(res, method, path, throwOnError);
     }
   }
@@ -164,6 +170,21 @@ export class AscClient {
 
   get(path, opts) {
     return this.request("GET", path, opts);
+  }
+
+  /**
+   * Download a file App Store Connect hands out by URL (an analytics report
+   * segment). The URL is already signed: our token is never sent with it, and
+   * only an https URL is fetched.
+   *
+   * @param {string} url
+   * @returns {Promise<Buffer>}
+   */
+  async download(url) {
+    if (!/^https:\/\//i.test(url)) throw new Error(`refusing to download a non-https URL: ${url}`);
+    const res = await this._fetch(url, { method: "GET", signal: AbortSignal.timeout(this._timeoutMs) });
+    if (!res.ok) throw new Error(`download failed: HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
   }
   post(path, body, opts) {
     return this.request("POST", path, { ...opts, body });

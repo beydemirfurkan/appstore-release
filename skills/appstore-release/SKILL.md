@@ -5,7 +5,7 @@ license: MIT
 compatibility: Node.js 20.11+ and network access to api.appstoreconnect.apple.com. Needs an App Store Connect API key with the App Manager role. git is used once to fetch the CLI when the skill runs outside a checkout.
 metadata:
   author: Furkan Beydemir
-  version: "4.2.0"
+  version: "4.3.0"
   guidelines: "2026-06-08"
 ---
 
@@ -94,6 +94,8 @@ Work through `nextActions` in order. When a finding belongs to a focused area, l
 | promotional offers, offer codes, "discount for lapsed subscribers"     | **app-store-subscriptions**                                              |
 | app preview videos                                                     | **app-store-screenshot-upload**                                          |
 | custom product pages, "a landing page for our campaign"                | [references/custom-product-pages.md](references/custom-product-pages.md) |
+| sales, downloads, analytics, "A/B test the screenshots"                | [references/reports-and-tests.md](references/reports-and-tests.md)       |
+| TestFlight feedback, tester crashes                                    | **app-store-testflight**                                                 |
 | `account.credentials.*`, `config.missing`                              | [references/setup.md](references/setup.md)                               |
 | any 409 you do not recognise                                           | [references/gotchas.md](references/gotchas.md) — read it before guessing |
 
@@ -127,7 +129,7 @@ asc release --dry-run    # show the user exactly what would change
 asc release              # apply it, then a fresh check
 ```
 
-`release` runs attach-build, metadata, pricing, content-rights, age-rating, category, accessibility, review-info, release-options, screenshots, previews, custom-product-pages, subscription and in-app-purchases — each one idempotent, each skipped when the config says nothing about it. Run any of them alone by name.
+`release` runs attach-build, metadata, pricing, content-rights, age-rating, category, accessibility, review-info, release-options, screenshots, previews, custom-product-pages, experiments, subscription and in-app-purchases — each one idempotent, each skipped when the config says nothing about it. Run any of them alone by name.
 
 **Notes for the reviewer.** `asc review-info --draft-notes` drafts them — sign-in, how to reach the main feature, the permissions and what they are for, the products — from the config and the app. It writes nothing. Show the draft to the user, fill in what it leaves in parentheses, put the result in `review.notes`, then `asc review-info`. `check` warns `review.demo.likely-needed` when the app has sign-in and App Review has no way in.
 
@@ -169,6 +171,7 @@ The same core is an MCP server (`asc mcp`, 13 tools). Start with `asc_readiness_
 - [references/gotchas.md](references/gotchas.md) — every pitfall hit in practice, with exact error text.
 - [references/accessibility.md](references/accessibility.md) — Accessibility Nutrition Labels, per device.
 - [references/custom-product-pages.md](references/custom-product-pages.md) — campaign pages with their own text, media and deep link.
+- [references/reports-and-tests.md](references/reports-and-tests.md) — sales, analytics reports and product page tests.
 - [references/config-template.json](references/config-template.json) — a complete config, validated against the published schema.
 - [references/screenshots.md](references/screenshots.md) — screenshot essentials (full guide in **app-store-screenshot-upload**).
 

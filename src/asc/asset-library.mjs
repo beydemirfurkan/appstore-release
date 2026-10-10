@@ -248,7 +248,7 @@ export const tagOf = (referenceName) => HASH_TAG.exec(referenceName ?? "")?.[1] 
  * @param {{
  *   library: { id: string },
  *   localizationId?: string,
- *   parent?: { type: "appStoreVersionLocalizations" | "appCustomProductPageLocalizations", id: string },
+ *   parent?: { type: "appStoreVersionLocalizations" | "appCustomProductPageLocalizations" | "appStoreVersionExperimentTreatmentLocalizations", id: string },
  *   media?: "image" | "video",
  *   previewFrameTimeCode?: string,
  *   placementGroup: string,
@@ -265,10 +265,11 @@ export async function syncPlacements({ client, uploader, dryRun }, params) {
     type: "appStoreVersionLocalizations",
     id: /** @type {string} */ (params.localizationId),
   };
-  const parentKey =
-    parent.type === "appCustomProductPageLocalizations"
-      ? "appCustomProductPageLocalization"
-      : "appStoreVersionLocalization";
+  const parentKey = /** @type {Record<string, string>} */ ({
+    appStoreVersionLocalizations: "appStoreVersionLocalization",
+    appCustomProductPageLocalizations: "appCustomProductPageLocalization",
+    appStoreVersionExperimentTreatmentLocalizations: "appStoreVersionExperimentTreatmentLocalization",
+  })[parent.type];
   const assetType = media === "video" ? "appAssetLibraryVideos" : "appAssetLibraryImages";
   const placementType = media === "video" ? "APP_PREVIEW" : "APP_SCREENSHOT";
   const isPlanned = (/** @type {string} */ id) => String(id).startsWith("dry:");

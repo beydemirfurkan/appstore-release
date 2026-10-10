@@ -483,6 +483,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
             false,
           ),
           skipPages: bool("Leave custom product pages out of this submission.", false),
+          skipExperiments: bool("Leave product page tests out of this submission.", false),
           confirm,
         },
         ["confirm"],
@@ -514,6 +515,7 @@ export function buildTools({ env = process.env, allowLocalWrites = false } = {})
           resolved: Boolean(args.resolved),
           skipProducts: Boolean(args.skipProducts),
           skipPages: Boolean(args.skipPages),
+          skipExperiments: Boolean(args.skipExperiments),
         });
         // Only a CHANGED result means the PATCH went through; an OK can be "already
         // in review" and an ERROR is a refusal — neither is a submission.

@@ -17,12 +17,31 @@ import { FIRST_PRODUCT_CLICKS, isFirstProduct, purchaseConfigs, subscriptionConf
 import { explainRefusal, isProductLine, refusedKinds } from "../asc/refusals.mjs";
 import { recordRefusals } from "../core/state.mjs";
 import { EDITABLE_PAGE_STATES, pageConfigs } from "./custom-product-pages.mjs";
+import { EDITABLE_EXPERIMENT_STATES, experimentConfigs } from "./experiments.mjs";
 
 /** Review submission item relationships that carry a product rather than the app. */
 const PRODUCT_RELATIONSHIPS = ["subscriptionGroupVersion", "subscriptionVersion", "inAppPurchaseVersion"];
 
 /** The review submission item relationship of a custom product page version. */
 const PAGE_RELATIONSHIP = "appCustomProductPageVersion";
+/** …and of a product page test (v2). */
+const EXPERIMENT_RELATIONSHIP = "appStoreVersionExperimentV2";
+
+/** What else rides along with the app, and how each is left out or recognised in a refusal. */
+const EXTRAS = Object.freeze({
+  page: {
+    relationship: PAGE_RELATIONSHIP,
+    flag: "--skip-pages",
+    what: "custom product page",
+    mention: /custom product page|appCustomProductPage/i,
+  },
+  experiment: {
+    relationship: EXPERIMENT_RELATIONSHIP,
+    flag: "--skip-experiments",
+    what: "product page test",
+    mention: /experiment|product page optimi[sz]ation|treatment/i,
+  },
+});
 
 /** What to run after a submission, to follow it to Apple's answer. */
 export const FOLLOW_COMMAND = "appstore-release check --wait 30";
@@ -62,6 +81,11 @@ export const meta = {
       type: "boolean",
       default: false,
       description: "leave custom product pages out of this submission",
+    },
+    skipExperiments: {
+      type: "boolean",
+      default: false,
+      description: "leave product page tests out of this submission",
     },
     skipProducts: {
       type: "boolean",
@@ -111,12 +135,12 @@ export function submitGate(report, { resolved = false, skipProducts = false } = 
 
 /**
  * @typedef {Object} Item
- * @property {"appStoreVersion"|"subscriptionGroupVersion"|"subscriptionVersion"|"inAppPurchaseVersion"|"appCustomProductPageVersion"} relationship
+ * @property {"appStoreVersion"|"subscriptionGroupVersion"|"subscriptionVersion"|"inAppPurchaseVersion"|"appCustomProductPageVersion"|"appStoreVersionExperimentV2"} relationship
  * @property {string} type
  * @property {string} id         the related resource's id
  * @property {string} label
  * @property {"subscription"|"iap"} [product]
- * @property {boolean} [page]    a custom product page version
+ * @property {"page"|"experiment"} [extra]   a custom product page version or a product page test
  * @property {boolean} [first]   part of the app's first product of its kind
  * @property {string} [productId]
  */
@@ -194,6 +218,7 @@ export async function run(ctx, args = {}) {
   // out. A refused page is taken back out like a product, so it never holds the
   // app hostage.
   if (!args.skipPages) wanted.push(...(await pageItems(ctx)));
+  if (!args.skipExperiments) wanted.push(...(await experimentItems(ctx)));
   const products = wanted.filter((i) => i.product);
 
   /** related id → its reviewSubmissionItem, for everything the submission already holds */
@@ -218,7 +243,9 @@ export async function run(ctx, args = {}) {
       // No 409 is swallowed: a duplicate was already filtered out above, so a
       // conflict here means Apple will not review this item, and it says why.
       if (item.product) return refuseProducts(ctx, { submission, products, present, error: res.error, item, version });
-      if (item.page) return refusePages(ctx, { submission, present, error: res.error, label: item.label });
+      if (item.extra) {
+        return refuseExtras(ctx, { submission, present, error: res.error, label: item.label, extra: item.extra });
+      }
       const { findings } = explainRefusal(res.error);
       return {
         status: Status.ERROR,
@@ -232,12 +259,16 @@ export async function run(ctx, args = {}) {
 
   // The app alone means the app alone: product items an earlier run left in the
   // draft come out too, or they would go to review with it.
-  if (args.skipPages) {
-    const { removed, stuck } = await removeProductItems(client, present, [PAGE_RELATIONSHIP]);
+  for (const [extra, skip] of /** @type {const} */ ([
+    ["page", args.skipPages],
+    ["experiment", args.skipExperiments],
+  ])) {
+    if (!skip) continue;
+    const { removed, stuck } = await removeProductItems(client, present, [EXTRAS[extra].relationship]);
     if (stuck.length) {
       return {
         status: Status.ERROR,
-        message: `could not take ${stuck.length} page item(s) out of submission ${submission.id}; remove them in App Store Connect`,
+        message: `could not take ${stuck.length} ${EXTRAS[extra].what} item(s) out of submission ${submission.id}; remove them in App Store Connect`,
         details: { submissionId: submission.id, removed, stuck },
       };
     }
@@ -303,11 +334,13 @@ export async function run(ctx, args = {}) {
     if (explained.productRelated && [...present.values()].some((v) => PRODUCT_RELATIONSHIPS.includes(v.relationship))) {
       return refuseProducts(ctx, { submission, products, present, error: done.error, version });
     }
-    if (
-      explained.lines.some((l) => /custom product page|appCustomProductPage/i.test(l)) &&
-      [...present.values()].some((v) => v.relationship === PAGE_RELATIONSHIP)
-    ) {
-      return refusePages(ctx, { submission, present, error: done.error, label: "custom product pages" });
+    for (const extra of /** @type {const} */ (["page", "experiment"])) {
+      if (
+        explained.lines.some((l) => EXTRAS[extra].mention.test(l)) &&
+        [...present.values()].some((v) => v.relationship === EXTRAS[extra].relationship)
+      ) {
+        return refuseExtras(ctx, { submission, present, error: done.error, label: `${EXTRAS[extra].what}s`, extra });
+      }
     }
     // About the app (App Privacy, price, screenshots…): the draft stays as it is —
     // the next submit reuses it — and each reason says what to do.
@@ -419,24 +452,25 @@ async function refuseProducts(
 }
 
 /**
- * App Store Connect would not take a custom product page with this submission:
- * every page item comes back out, nothing is submitted, and the way on is said —
- * fix the page, or send the rest with --skip-pages.
+ * App Store Connect would not take a custom product page or a product page test
+ * with this submission: every item of that kind comes back out, nothing is
+ * submitted, and the way on is said — fix it, or send the rest without it.
  *
  * @param {import("../core/context.mjs").Context} ctx
- * @param {{ submission: any, present: Map<string, { itemId: string, relationship: string }>, error: any, label: string }} input
+ * @param {{ submission: any, present: Map<string, { itemId: string, relationship: string }>, error: any, label: string, extra: "page"|"experiment" }} input
  */
-async function refusePages({ client }, { submission, present, error, label }) {
-  const { removed, stuck } = await removeProductItems(client, present, [PAGE_RELATIONSHIP]);
+async function refuseExtras({ client }, { submission, present, error, label, extra }) {
+  const kind = EXTRAS[extra];
+  const { removed, stuck } = await removeProductItems(client, present, [kind.relationship]);
   const { lines, findings } = explainRefusal(error);
   const said = lines.length ? `"${lines.join(" · ")}"` : error.message;
   return {
     status: Status.ERROR,
     message:
       `App Store Connect would not take ${label} with ${submission.id}: ${said}. Nothing was submitted` +
-      `${removed.length ? `; ${removed.length} page item(s) taken back out` : ""}` +
+      `${removed.length ? `; ${removed.length} ${kind.what} item(s) taken back out` : ""}` +
       `${stuck.length ? `; could not remove ${stuck.length} — remove in App Store Connect` : ""}. ` +
-      "Fix the page and submit again, or send the rest with submit --submit --skip-pages.",
+      `Fix it and submit again, or send the rest with submit --submit ${kind.flag}.`,
     details: { submissionId: submission.id, refused: lines, removed, stuck },
     findings,
   };
@@ -464,6 +498,41 @@ async function removeProductItems(client, present, relationships = PRODUCT_RELAT
     }
   }
   return { removed, stuck };
+}
+
+/**
+ * Configured product page tests that are prepared, with at least one treatment, as items.
+ *
+ * @param {import("../core/context.mjs").Context} ctx
+ * @returns {Promise<Item[]>}
+ */
+async function experimentItems({ client, discovery, config }) {
+  const experiments = experimentConfigs(config);
+  if (!experiments.length) return [];
+  const remote = await client.all(`/v1/apps/${discovery.appId}/appStoreVersionExperimentsV2`, { limit: 200 });
+  /** @type {Item[]} */
+  const items = [];
+  for (const e of experiments) {
+    const found = remote.find(
+      (x) => x.attributes?.name === e.name && EDITABLE_EXPERIMENT_STATES.includes(x.attributes?.state),
+    );
+    if (!found) continue;
+    const treatments = await client.all(
+      `/v2/appStoreVersionExperiments/${found.id}/appStoreVersionExperimentTreatments`,
+      {
+        limit: 1,
+      },
+    );
+    if (!treatments.length) continue;
+    items.push({
+      relationship: EXPERIMENT_RELATIONSHIP,
+      type: "appStoreVersionExperiments",
+      id: found.id,
+      label: `test "${e.name}"`,
+      extra: "experiment",
+    });
+  }
+  return items;
 }
 
 /**
@@ -496,7 +565,7 @@ async function pageItems({ client, discovery, config }) {
       type: "appCustomProductPageVersions",
       id: editable.id,
       label: `page "${page.name}"`,
-      page: true,
+      extra: "page",
     });
   }
   return items;
@@ -629,7 +698,7 @@ async function existingItems(client, submissionId) {
   // item looks empty, and a re-run adds the same version again (409).
   const items = await client.all(
     `/v1/reviewSubmissions/${submissionId}/items` +
-      `?include=appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion,appCustomProductPageVersion`,
+      `?include=appStoreVersion,subscriptionVersion,subscriptionGroupVersion,inAppPurchaseVersion,appCustomProductPageVersion,appStoreVersionExperimentV2`,
     { limit: 50 },
   );
   for (const item of items) {

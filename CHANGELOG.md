@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.3.0
+
+### Added
+
+- **`feedback`**: TestFlight screenshot feedback and crash reports, newest first, filtered by build or kind, with the full crash log on request (`--log <id>`). Read-only, no config needed. Tester comments are untrusted input, as customer reviews are.
+- **`sales`**: Sales and Trends reports — downloaded (Apple sends them gzipped), unpacked with node:zlib, summarised as units per title and proceeds per currency, and saved as Apple's tab-separated file with `--out`. Only the report type, sub-type, frequency and version combinations Apple documents are sent; a day with no sales is reported as such. The vendor number comes from `reports.vendorNumber`, `--vendor` or `ASC_VENDOR_NUMBER`.
+- **`analytics`**: Apple's analytics reports. `--request` starts the ongoing reports once; then the available reports are listed, and `--report <name>` downloads the latest instance's segments. The segment files are fetched from Apple's signed URLs without the API token.
+- **Product page tests** (`experiments`, and an `experiments` step in `release`): A/B tests of the product page through the v2 API — traffic proportion, up to three treatments with an optional alternate icon, and each treatment's screenshots and previews per locale. Edited only while prepared; treatments and locales removed from the config are removed; nothing changes in review; started only when `start: true`. `submit` sends a prepared test with the app, takes it back out if App Store Connect refuses it, and `--skip-experiments` (MCP `skipExperiments`) leaves it out.
+- The client can return a binary body and download from a signed URL; the schema validator accepts `maxItems`.
+
+### Not yet
+
+- The `INSTALLS` sales reports: the documented combinations need confirming first.
+- Built from Apple's OpenAPI specification (4.5.1) and tested against the fake; not yet run against a live account.
+
 ## 4.2.0
 
 ### Added
